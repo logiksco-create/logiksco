@@ -1,0 +1,169 @@
+@import "tailwindcss";
+
+/* ------------------------------------------------------------------ */
+/* Tokens de diseño LOGIKS                                              */
+/* Colores semánticos en variables para tema claro y oscuro.            */
+/* ------------------------------------------------------------------ */
+
+:root {
+  --bg: #f5f6fa;
+  --surface: #ffffff;
+  --surface-2: #f8f9fc;
+  --border: #e4e7ef;
+  --border-strong: #cfd5e3;
+  --fg: #0d1326;
+  --fg-muted: #5b6478;
+  --fg-subtle: #8a92a6;
+
+  --brand: #3b5bfd;
+  --brand-hover: #2f4be0;
+  --brand-soft: #eef1ff;
+  --brand-fg: #2a44d4;
+
+  --accent: #0fb5a6;
+  --success: #0f9d6b;
+  --success-soft: #e7f7f0;
+  --warning: #c27a06;
+  --warning-soft: #fdf4e3;
+  --danger: #dc3545;
+  --danger-soft: #fdecee;
+  --info: #2f80ed;
+  --info-soft: #eaf2fe;
+
+  --ring: color-mix(in oklab, var(--brand) 40%, transparent);
+  --shadow-card: 0 1px 2px rgb(13 19 38 / 0.04), 0 1px 1px rgb(13 19 38 / 0.02);
+  --shadow-pop: 0 12px 32px -8px rgb(13 19 38 / 0.18), 0 2px 6px rgb(13 19 38 / 0.06);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #080b14;
+    --surface: #0f1420;
+    --surface-2: #131a29;
+    --border: #1e2636;
+    --border-strong: #2b3549;
+    --fg: #e8ebf3;
+    --fg-muted: #9aa3b8;
+    --fg-subtle: #6b748a;
+    --brand: #6a83ff;
+    --brand-hover: #839aff;
+    --brand-soft: #18203f;
+    --brand-fg: #9fb0ff;
+    --success-soft: #0c2a20;
+    --warning-soft: #2c2210;
+    --danger-soft: #2f1418;
+    --info-soft: #0f2340;
+    --shadow-card: 0 0 0 1px rgb(255 255 255 / 0.02);
+    --shadow-pop: 0 16px 40px -8px rgb(0 0 0 / 0.6);
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #080b14;
+  --surface: #0f1420;
+  --surface-2: #131a29;
+  --border: #1e2636;
+  --border-strong: #2b3549;
+  --fg: #e8ebf3;
+  --fg-muted: #9aa3b8;
+  --fg-subtle: #6b748a;
+  --brand: #6a83ff;
+  --brand-hover: #839aff;
+  --brand-soft: #18203f;
+  --brand-fg: #9fb0ff;
+  --success-soft: #0c2a20;
+  --warning-soft: #2c2210;
+  --danger-soft: #2f1418;
+  --info-soft: #0f2340;
+  --shadow-card: 0 0 0 1px rgb(255 255 255 / 0.02);
+  --shadow-pop: 0 16px 40px -8px rgb(0 0 0 / 0.6);
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-fg: var(--fg);
+  --color-muted: var(--fg-muted);
+  --color-subtle: var(--fg-subtle);
+  --color-brand: var(--brand);
+  --color-brand-hover: var(--brand-hover);
+  --color-brand-soft: var(--brand-soft);
+  --color-brand-fg: var(--brand-fg);
+  --color-accent: var(--accent);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-ink: #0a0f1f;
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  --shadow-card: var(--shadow-card);
+  --shadow-pop: var(--shadow-pop);
+  --radius-xl: 0.875rem;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-feature-settings: "cv11", "ss01";
+  }
+  ::selection {
+    background: color-mix(in oklab, var(--brand) 25%, transparent);
+  }
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+  input[type="date"]::-webkit-calendar-picker-indicator {
+    opacity: 0.55;
+    cursor: pointer;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) input[type="date"]::-webkit-calendar-picker-indicator {
+      filter: invert(1);
+    }
+  }
+}
+
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+@utility bg-grid {
+  background-image:
+    linear-gradient(to right, rgb(255 255 255 / 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(255 255 255 / 0.05) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+@keyframes entrar {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@utility animate-entrar {
+  animation: entrar 0.35s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
+}

@@ -1,0 +1,474 @@
+"use client";
+
+import { useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import {
+  CircleAlert,
+  Copy,
+  LoaderCircle,
+  Plus,
+  Save,
+  Trash2,
+  TriangleAlert,
+} from "lucide-react";
+import {
+  BLOQUES,
+  INCOTERMS,
+  TIPOS_SERVICIO,
+  UNIDADES,
+  type Bloque,
+  type Concepto,
+  type Moneda,
+  type Tercero,
+} from "@/domain/types";
+import { tarifasVencidas, totalesConcepto, totalesConceptos, totalesPorBloque } from "@/domain/cotizacion";
+import { guardarCotizacion, type EntradaCotizacion } from "@/server/acciones/app";
+import { AreaTexto, Boton, Campo, Entrada, Selector, Tarjeta } from "@/components/ui";
+import { cn, dinero, porcentaje } from "@/lib/formato";
+
+type ConceptoEditable = Omit<Concepto, "id"> & { clave: string };
+
+export interface PropsEditor {
+  id?: string;
+  inicial: Omit<EntradaCotizacion, "conceptos"> & { conceptos: Omit<Concepto, "id">[] };
+  clientes: Tercero[];
+  proveedores: { id: string; nombre: string }[];
+  hoy: string;
+  aviso?: { duplicada: boolean; vencidas: number; origen?: string };
+}
+
+let secuencia = 0;
+const clave = () => `k${++secuencia}`;
+
+const num = (v: string) => (v === "" ? 0 : Number(v.replace(",", ".")));
+
+function SeccionTitulo({ n, titulo, descripcion }: { n: number; titulo: string; descripcion?: string }) {
+  return (
+    <div className="flex items-start gap-3 border-b border-border px-5 py-4">
+      <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-brand-soft text-xs font-semibold text-brand-fg">
+        {n}
+      </span>
+      <div>
+        <h2 className="text-[15px] font-semibold tracking-tight">{titulo}</h2>
+        {descripcion && <p className="text-[13px] text-muted">{descripcion}</p>}
+      </div>
+    </div>
+  );
+}
+
+export function EditorCotizacion({ id, inicial, clientes, proveedores, hoy, aviso }: PropsEditor) {
+  const router = useRouter();
+  const [pendiente, iniciar] = useTransition();
+  const [error, setError] = useState<string>();
+
+  const [f, setF] = useState(() => {
+    const { conceptos: _ignorar, ...resto } = inicial;
+    return resto;
+  });
+  const [conceptos, setConceptos] = useState<ConceptoEditable[]>(() =>
+    inicial.conceptos.map((c) => ({ ...c, clave: clave() })),
+  );
+
+  const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => setF((p) => ({ ...p, [k]: v }));
+  const setMercancia = (k: keyof typeof f.mercancia, v: unknown) =>
+    setF((p) => ({ ...p, mercancia: { ...p.mercancia, [k]: v } }));
+
+  const cliente = clientes.find((c) => c.id === f.clienteId);
+
+  const cambiarCliente = (clienteId: string) => {
+    const c = clientes.find((x) => x.id === clienteId);
+    setF((p) => ({
+      ...p,
+      clienteId,
+      contactoId: c?.contactos[0]?.id,
+      // RF-10: al cambiar de cliente se aplican sus condiciones comerciales.
+      monedaPresentacion: c?.acuerdo?.moneda ?? p.monedaPresentacion,
+    }));
+  };
+
+  const actualizar = (k: string, cambio: Partial<ConceptoEditable>) =>
+    setConceptos((cs) => cs.map((c) => (c.clave === k ? { ...c, ...cambio } : c)));
+
+  const agregar = (bloque: Bloque) =>
+    setConceptos((cs) => [
+      ...cs,
+      {
+        clave: clave(),
+        bloque,
+        descripcion: "",
+        moneda: bloque === "flete" || bloque === "origen" ? "USD" : "COP",
+        unidad: "embarque",
+        cantidad: 1,
+        costoUnitario: 0,
+        ventaUnitaria: 0,
+      },
+    ]);
+
+  const quitar = (k: string) => setConceptos((cs) => cs.filter((c) => c.clave !== k));
+  const duplicarFila = (k: string) =>
+    setConceptos((cs) => {
+      const i = cs.findIndex((c) => c.clave === k);
+      return [...cs.slice(0, i + 1), { ...cs[i], clave: clave() }, ...cs.slice(i + 1)];
+    });
+
+  const comoConceptos = conceptos.map((c) => ({ ...c, id: c.clave }));
+  const totales = useMemo(
+    () => totalesConceptos(comoConceptos, f.monedaPresentacion as Moneda, f.trm || 1),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [conceptos, f.monedaPresentacion, f.trm],
+  );
+  const porBloque = totalesPorBloque(comoConceptos, f.monedaPresentacion as Moneda, f.trm || 1);
+  const vencidas = tarifasVencidas(comoConceptos, hoy);
+  const vencenAntesQueCotizacion = tarifasVencidas(comoConceptos, f.vigenteHasta).filter(
+    (c) => !vencidas.includes(c),
+  );
+
+  const bloquesUsados = (Object.keys(BLOQUES) as Bloque[]).filter((b) => conceptos.some((c) => c.bloque === b));
+  const bloquesLibres = (Object.keys(BLOQUES) as Bloque[]).filter((b) => !bloquesUsados.includes(b));
+
+  const guardar = () => {
+    setError(undefined);
+    iniciar(async () => {
+      const r = await guardarCotizacion(
+        {
+          ...f,
+          conceptos: conceptos.map(({ clave: _clave, ...c }) => ({
+            ...c,
+            vigenciaTarifa: c.vigenciaTarifa || undefined,
+            proveedorId: c.proveedorId || undefined,
+          })),
+        } as EntradaCotizacion,
+        id,
+      );
+      if (r.ok) router.push(`/app/cotizaciones/${r.datos.id}`);
+      else setError(r.error);
+    });
+  };
+
+  const mon = f.monedaPresentacion as Moneda;
+
+  return (
+    <div className="grid gap-6 xl:grid-cols-[1fr_340px]">
+      <div className="min-w-0 space-y-6">
+        {aviso?.duplicada && (
+          <div className="flex gap-3 rounded-xl border border-brand/20 bg-brand-soft p-4 text-[13.5px] text-brand-fg">
+            <Copy className="mt-0.5 size-4 shrink-0" />
+            <div>
+              <p className="font-medium">Cotización duplicada{aviso.origen ? ` de ${aviso.origen}` : ""}.</p>
+              <p className="opacity-80">
+                Puedes cambiar cualquier dato, incluido el cliente.
+                {aviso.vencidas > 0 &&
+                  ` Ojo: ${aviso.vencidas} tarifa${aviso.vencidas > 1 ? "s" : ""} copiada${aviso.vencidas > 1 ? "s" : ""} ya ${aviso.vencidas > 1 ? "están vencidas" : "está vencida"}.`}
+              </p>
+            </div>
+          </div>
+        )}
+
+        <Tarjeta>
+          <SeccionTitulo n={1} titulo="Cliente y servicio" />
+          <div className="grid gap-4 p-5 sm:grid-cols-2">
+            <Campo etiqueta="Cliente o prospecto">
+              <Selector value={f.clienteId} onChange={(e) => cambiarCliente(e.target.value)}>
+                <option value="">Selecciona…</option>
+                {clientes.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.razonSocial}
+                    {c.tipo === "prospecto" ? " (prospecto)" : ""}
+                  </option>
+                ))}
+              </Selector>
+            </Campo>
+            <Campo etiqueta="Contacto">
+              <Selector
+                value={f.contactoId ?? ""}
+                onChange={(e) => set("contactoId", e.target.value || undefined)}
+                disabled={!cliente?.contactos.length}
+              >
+                {(cliente?.contactos ?? []).map((k) => (
+                  <option key={k.id} value={k.id}>
+                    {k.nombre} · {k.cargo}
+                  </option>
+                ))}
+              </Selector>
+            </Campo>
+            <Campo etiqueta="Tipo de servicio">
+              <Selector value={f.tipoServicio} onChange={(e) => set("tipoServicio", e.target.value as typeof f.tipoServicio)}>
+                {Object.entries(TIPOS_SERVICIO).map(([v, l]) => (
+                  <option key={v} value={v}>
+                    {l}
+                  </option>
+                ))}
+              </Selector>
+            </Campo>
+            <Campo etiqueta="Incoterm">
+              <Selector value={f.incoterm} onChange={(e) => set("incoterm", e.target.value as typeof f.incoterm)}>
+                {INCOTERMS.map((i) => (
+                  <option key={i}>{i}</option>
+                ))}
+              </Selector>
+            </Campo>
+            <Campo etiqueta="Origen" ayuda="Puerto, aeropuerto o ciudad">
+              <Entrada value={f.origen} onChange={(e) => set("origen", e.target.value)} placeholder="Ningbo, China" />
+            </Campo>
+            <Campo etiqueta="Destino">
+              <Entrada value={f.destino} onChange={(e) => set("destino", e.target.value)} placeholder="Rionegro, Antioquia" />
+            </Campo>
+          </div>
+        </Tarjeta>
+
+        <Tarjeta>
+          <SeccionTitulo n={2} titulo="Mercancía" />
+          <div className="grid gap-4 p-5 sm:grid-cols-6">
+            <Campo etiqueta="Descripción" className="sm:col-span-6">
+              <Entrada
+                value={f.mercancia.descripcion}
+                onChange={(e) => setMercancia("descripcion", e.target.value)}
+                placeholder="Maquinaria agrícola"
+              />
+            </Campo>
+            <Campo etiqueta="Piezas" className="sm:col-span-2">
+              <Entrada type="number" min={0} inputMode="numeric" value={f.mercancia.piezas} onChange={(e) => setMercancia("piezas", num(e.target.value))} />
+            </Campo>
+            <Campo etiqueta="Peso (kg)" className="sm:col-span-2">
+              <Entrada type="number" min={0} step="any" value={f.mercancia.pesoKg} onChange={(e) => setMercancia("pesoKg", num(e.target.value))} />
+            </Campo>
+            <Campo etiqueta="Volumen (m³)" className="sm:col-span-2">
+              <Entrada type="number" min={0} step="any" value={f.mercancia.volumenM3} onChange={(e) => setMercancia("volumenM3", num(e.target.value))} />
+            </Campo>
+          </div>
+        </Tarjeta>
+
+        <Tarjeta>
+          <SeccionTitulo
+            n={3}
+            titulo="Conceptos"
+            descripcion="Costo y venta por concepto. El cliente nunca ve costos ni utilidad."
+          />
+          <div className="divide-y divide-border">
+            {bloquesUsados.map((b) => (
+              <div key={b} className="px-5 py-4">
+                <div className="mb-3 flex items-center justify-between">
+                  <h3 className="text-[13px] font-semibold tracking-wide text-muted uppercase">{BLOQUES[b]}</h3>
+                  {porBloque[b] && (
+                    <p className="text-[13px] text-muted tabular">
+                      {dinero(porBloque[b]!.venta, mon)} ·{" "}
+                      <span className={porBloque[b]!.utilidad < 0 ? "text-danger" : "text-success"}>
+                        +{dinero(porBloque[b]!.utilidad, mon)}
+                      </span>
+                    </p>
+                  )}
+                </div>
+                <div className="space-y-3">
+                  {conceptos
+                    .filter((c) => c.bloque === b)
+                    .map((c) => {
+                      const t = totalesConcepto({ ...c, id: c.clave });
+                      const vencida = vencidas.some((v) => v.id === c.clave);
+                      return (
+                        <div
+                          key={c.clave}
+                          className={cn(
+                            "rounded-lg border bg-surface-2 p-3",
+                            vencida ? "border-danger/40" : "border-border",
+                          )}
+                        >
+                          <div className="grid gap-2.5 sm:grid-cols-12">
+                            <Entrada
+                              className="sm:col-span-7"
+                              value={c.descripcion}
+                              placeholder="Descripción del concepto"
+                              aria-label="Descripción"
+                              onChange={(e) => actualizar(c.clave, { descripcion: e.target.value })}
+                            />
+                            <Selector
+                              className="sm:col-span-5"
+                              aria-label="Proveedor"
+                              value={c.proveedorId ?? ""}
+                              onChange={(e) =>
+                                actualizar(c.clave, {
+                                  proveedorId: e.target.value || undefined,
+                                  proveedorNombre: proveedores.find((p) => p.id === e.target.value)?.nombre,
+                                })
+                              }
+                            >
+                              <option value="">Sin proveedor</option>
+                              {proveedores.map((p) => (
+                                <option key={p.id} value={p.id}>
+                                  {p.nombre}
+                                </option>
+                              ))}
+                            </Selector>
+                          </div>
+                          <div className="mt-2.5 grid grid-cols-2 gap-2.5 sm:grid-cols-3 2xl:grid-cols-[88px_120px_1fr_1fr_1fr_150px]">
+                            <label>
+                              <span className="mb-1 block text-[11px] text-subtle">Moneda</span>
+                              <Selector value={c.moneda} onChange={(e) => actualizar(c.clave, { moneda: e.target.value as Moneda })}>
+                                <option>COP</option>
+                                <option>USD</option>
+                              </Selector>
+                            </label>
+                            <label>
+                              <span className="mb-1 block text-[11px] text-subtle">Unidad</span>
+                              <Selector value={c.unidad} onChange={(e) => actualizar(c.clave, { unidad: e.target.value as Concepto["unidad"] })}>
+                                {Object.entries(UNIDADES).map(([v, l]) => (
+                                  <option key={v} value={v}>
+                                    {l.replace("Por ", "")}
+                                  </option>
+                                ))}
+                              </Selector>
+                            </label>
+                            <label>
+                              <span className="mb-1 block text-[11px] text-subtle">Cantidad</span>
+                              <Entrada type="number" min={0} step="any" className="tabular" value={c.cantidad} onChange={(e) => actualizar(c.clave, { cantidad: num(e.target.value) })} />
+                            </label>
+                            <label>
+                              <span className="mb-1 block text-[11px] text-subtle">Costo unit.</span>
+                              <Entrada type="number" min={0} step="any" className="tabular" value={c.costoUnitario} onChange={(e) => actualizar(c.clave, { costoUnitario: num(e.target.value) })} />
+                            </label>
+                            <label>
+                              <span className="mb-1 block text-[11px] text-subtle">Venta unit.</span>
+                              <Entrada type="number" min={0} step="any" className="tabular" value={c.ventaUnitaria} onChange={(e) => actualizar(c.clave, { ventaUnitaria: num(e.target.value) })} />
+                            </label>
+                            <label>
+                              <span className={cn("mb-1 block text-[11px]", vencida ? "text-danger" : "text-subtle")}>
+                                {vencida ? "Tarifa vencida" : "Vigencia tarifa"}
+                              </span>
+                              <Entrada
+                                type="date"
+                                className={cn(vencida && "border-danger/50 text-danger")}
+                                value={c.vigenciaTarifa ?? ""}
+                                onChange={(e) => actualizar(c.clave, { vigenciaTarifa: e.target.value || undefined })}
+                              />
+                            </label>
+                          </div>
+                          <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 text-[13px]">
+                            <label className="flex items-center gap-2 text-muted">
+                              <input
+                                type="checkbox"
+                                className="size-4 accent-[var(--brand)]"
+                                checked={!!c.paraTerceros}
+                                onChange={(e) => actualizar(c.clave, { paraTerceros: e.target.checked })}
+                              />
+                              Ingreso para terceros
+                            </label>
+                            <div className="flex items-center gap-3">
+                              <span className="text-muted tabular">
+                                Venta <strong className="font-medium text-fg">{dinero(t.venta, c.moneda)}</strong>
+                              </span>
+                              <span className={cn("tabular", t.utilidad < 0 ? "text-danger" : "text-success")}>
+                                Utilidad {dinero(t.utilidad, c.moneda)}
+                              </span>
+                              <button type="button" onClick={() => duplicarFila(c.clave)} className="rounded-md p-1.5 text-subtle hover:bg-surface hover:text-fg" aria-label="Duplicar concepto">
+                                <Copy className="size-3.5" />
+                              </button>
+                              <button type="button" onClick={() => quitar(c.clave)} className="rounded-md p-1.5 text-subtle hover:bg-danger-soft hover:text-danger" aria-label="Eliminar concepto">
+                                <Trash2 className="size-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  <button
+                    type="button"
+                    onClick={() => agregar(b)}
+                    className="inline-flex items-center gap-1.5 text-[13px] font-medium text-brand-fg hover:underline"
+                  >
+                    <Plus className="size-3.5" /> Agregar en {BLOQUES[b].toLowerCase()}
+                  </button>
+                </div>
+              </div>
+            ))}
+            <div className="flex flex-wrap items-center gap-2 px-5 py-4">
+              <span className="text-[13px] text-muted">Agregar bloque:</span>
+              {bloquesLibres.map((b) => (
+                <button
+                  key={b}
+                  type="button"
+                  onClick={() => agregar(b)}
+                  className="inline-flex h-7 items-center gap-1 rounded-full border border-dashed border-border-strong px-3 text-xs font-medium text-muted transition-colors hover:border-brand hover:text-brand-fg"
+                >
+                  <Plus className="size-3" /> {BLOQUES[b]}
+                </button>
+              ))}
+            </div>
+          </div>
+        </Tarjeta>
+
+        <Tarjeta>
+          <SeccionTitulo n={4} titulo="Términos y condiciones" />
+          <div className="p-5">
+            <AreaTexto rows={4} value={f.terminos} onChange={(e) => set("terminos", e.target.value)} />
+          </div>
+        </Tarjeta>
+      </div>
+
+      {/* Resumen fijo */}
+      <aside className="xl:sticky xl:top-20 xl:self-start">
+        <Tarjeta className="overflow-hidden">
+          <div className="bg-gradient-to-br from-[#0a0f1f] to-[#1a2550] p-5 text-white">
+            <p className="text-[13px] text-white/60">Total al cliente</p>
+            <p className="mt-1 text-3xl font-semibold tracking-tight tabular">{dinero(totales.venta, mon)}</p>
+            <div className="mt-4 grid grid-cols-2 gap-3 text-[13px]">
+              <div className="rounded-lg bg-white/[0.06] p-2.5">
+                <p className="text-white/50">Utilidad</p>
+                <p className={cn("font-semibold tabular", totales.utilidad < 0 ? "text-[#ff8a95]" : "text-[#5eead4]")}>
+                  {dinero(totales.utilidad, mon)}
+                </p>
+              </div>
+              <div className="rounded-lg bg-white/[0.06] p-2.5">
+                <p className="text-white/50">Margen</p>
+                <p className="font-semibold tabular">{porcentaje(totales.margen)}</p>
+              </div>
+            </div>
+            <p className="mt-3 text-xs text-white/50 tabular">Costo total {dinero(totales.costo, mon)}</p>
+          </div>
+
+          <div className="space-y-4 p-5">
+            <div className="grid grid-cols-2 gap-3">
+              <Campo etiqueta="Moneda">
+                <Selector value={f.monedaPresentacion} onChange={(e) => set("monedaPresentacion", e.target.value as Moneda)}>
+                  <option>COP</option>
+                  <option>USD</option>
+                </Selector>
+              </Campo>
+              <Campo etiqueta="TRM">
+                <Entrada type="number" min={1} step="any" className="tabular" value={f.trm} onChange={(e) => set("trm", num(e.target.value))} />
+              </Campo>
+            </div>
+            <Campo etiqueta="Válida hasta">
+              <Entrada type="date" value={f.vigenteHasta} min={hoy} onChange={(e) => set("vigenteHasta", e.target.value)} />
+            </Campo>
+
+            {vencidas.length > 0 && (
+              <div className="flex gap-2.5 rounded-lg bg-danger-soft p-3 text-[13px] text-danger">
+                <TriangleAlert className="mt-0.5 size-4 shrink-0" />
+                <p>
+                  {vencidas.length} tarifa{vencidas.length > 1 ? "s" : ""} del proveedor {vencidas.length > 1 ? "están vencidas" : "está vencida"}. Pide actualización antes de enviar.
+                </p>
+              </div>
+            )}
+            {vencenAntesQueCotizacion.length > 0 && (
+              <div className="flex gap-2.5 rounded-lg bg-warning-soft p-3 text-[13px] text-warning">
+                <CircleAlert className="mt-0.5 size-4 shrink-0" />
+                <p>
+                  {vencenAntesQueCotizacion.length} tarifa{vencenAntesQueCotizacion.length > 1 ? "s vencen" : " vence"} antes que la cotización. Considera acortar la vigencia.
+                </p>
+              </div>
+            )}
+
+            {error && <p className="rounded-lg bg-danger-soft px-3 py-2 text-[13px] text-danger">{error}</p>}
+
+            <Boton className="w-full" tamano="lg" onClick={guardar} disabled={pendiente}>
+              {pendiente ? <LoaderCircle className="animate-spin" /> : <Save />}
+              {id ? "Guardar cambios" : "Crear cotización"}
+            </Boton>
+            <p className="text-center text-xs text-subtle">
+              {id ? "Si ya fue enviada, se guardará como una versión nueva." : "Se guarda como borrador; luego la envías."}
+            </p>
+          </div>
+        </Tarjeta>
+      </aside>
+    </div>
+  );
+}
