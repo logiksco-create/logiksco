@@ -239,15 +239,6 @@ export class DemoRepositorio implements Repositorio {
       generarId: id,
     });
     s.operaciones.push(op);
-    const cliente = await this.tercero(q.clienteId);
-    await this.registrarComunicacion({
-      entidad: "operacion",
-      entidadId: op.id,
-      direccion: "saliente",
-      asunto: `Bienvenido a su operación ${op.consecutivo}`,
-      para: cliente?.contactos.map((c) => c.correo) ?? [],
-      resumen: "Correo automático de bienvenida con número de DO y responsable operativo.",
-    });
     return op;
   }
 

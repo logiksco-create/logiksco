@@ -4,6 +4,9 @@ import { cn, fechaHora } from "@/lib/formato";
 
 export function Historial({ eventos }: { eventos: EventoHistorial[] }) {
   const lista = [...eventos].reverse();
+  if (lista.length === 0) {
+    return <p className="text-[13px] text-muted">El historial detallado lo ven Administración y Cumplimiento.</p>;
+  }
   return (
     <ol className="relative space-y-4 pl-5 before:absolute before:top-1.5 before:bottom-1.5 before:left-[5px] before:w-px before:bg-border">
       {lista.map((e, i) => (

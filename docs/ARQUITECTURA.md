@@ -44,7 +44,7 @@ Navegador ──► Server Components (lectura) ─┐
 - Dominio: 15 pruebas unitarias (`npm test`).
 - SQL: migraciones, RLS y RPC contra Postgres 16 (`npm run test:sql`). Supabase se simula con un stub mínimo de `auth`.
 - Flujo completo en modo demo con Playwright (`npm run e2e`).
-- `SupabaseRepositorio` compila y sigue el esquema probado, pero **todavía no se ha ejecutado contra un proyecto Supabase real**: es lo primero a validar al conectar.
+- `SupabaseRepositorio`: flujo completo probado contra el proyecto Supabase real con un usuario y una empresa de prueba (luego borrados): registro de empresa en el primer ingreso, terceros, cotización, edición, envío, enlace público, aceptación, 170, aprobación, DO, hitos, novedad y duplicado.
 
 ## Estado frente al PRD (MVP)
 

@@ -15,7 +15,12 @@ npm run dev
 
 Abre http://localhost:3000. La landing está en `/` y la aplicación en `/app`.
 
-## Con Supabase (producción)
+## En producción
+
+- App: https://logiksco.vercel.app (Vercel, despliegue automático en cada push a `main`).
+- Base de datos: proyecto Supabase `nicwbwpymmakdtclmynx`, con las migraciones de `supabase/migrations/` aplicadas.
+
+## Con Supabase (otro entorno)
 
 1. Crea un proyecto en Supabase y aplica las migraciones de `supabase/migrations/` (`supabase db push` o el editor SQL, en orden).
 2. Copia `.env.example` a `.env.local` y completa las llaves.

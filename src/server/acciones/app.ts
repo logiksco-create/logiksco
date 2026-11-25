@@ -171,7 +171,18 @@ export async function abrirDO(cotizacionId: string) {
   const r = await ejecutar(async () => {
     const repo = await contexto();
     exigirRol(tieneRol(repo, "comercial", "operaciones"));
-    return (await repo.abrirOperacion(cotizacionId)).id;
+    const op = await repo.abrirOperacion(cotizacionId);
+    // RF-24: correo automático de bienvenida al cliente con su número de DO.
+    const cliente = await repo.tercero(op.clienteId);
+    await repo.registrarComunicacion({
+      entidad: "operacion",
+      entidadId: op.id,
+      direccion: "saliente",
+      asunto: `Bienvenido a su operación ${op.consecutivo}`,
+      para: cliente?.contactos.map((c) => c.correo).filter(Boolean) ?? [],
+      resumen: "Correo automático de bienvenida con número de DO y responsable operativo.",
+    });
+    return op.id;
   });
   if (!r.ok) return r;
   revalidatePath("/app", "layout");

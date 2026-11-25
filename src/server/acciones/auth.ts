@@ -50,7 +50,7 @@ export async function registrar(_: R, formData: FormData): Promise<R> {
     email: d.correo,
     password: d.clave,
     options: {
-      emailRedirectTo: `${env.appUrl}/app`,
+      emailRedirectTo: `${env.appUrl}/auth/confirmar`,
       data: { nombre: d.nombre, nit: d.nit, razon_social: d.razonSocial },
     },
   });

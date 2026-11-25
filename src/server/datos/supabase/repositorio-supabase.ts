@@ -274,14 +274,42 @@ export class SupabaseRepositorio implements Repositorio {
     return q;
   }
 
+  /**
+   * Historial legible a partir de la auditoría (solo visible para Admin y
+   * Cumplimiento por RLS; para otros roles queda vacío).
+   */
   private async historial(tabla: string, id: string) {
-    const { data } = await this.db
-      .from("auditoria")
-      .select("accion, creado_el, usuario_id")
-      .eq("tabla", tabla)
-      .eq("registro_id", id)
-      .order("creado_el");
-    return (data ?? []).map((r) => ({ fecha: r.creado_el, usuario: r.usuario_id ?? "Sistema", accion: r.accion }));
+    const [{ data }, usuarios] = await Promise.all([
+      this.db
+        .from("auditoria")
+        .select("accion, creado_el, usuario_id, antes, despues")
+        .eq("tabla", tabla)
+        .eq("registro_id", id)
+        .order("creado_el"),
+      this.usuarios(),
+    ]);
+    const nombre = (uid: string | null) =>
+      uid ? (usuarios.find((u) => u.id === uid)?.nombre ?? "Usuario") : "Cliente o sistema";
+    const etiquetas: Record<string, string> = {
+      enviada: "Enviada al cliente",
+      vista: "Abierta por el cliente",
+      aceptada: "Aceptada",
+      rechazada: "Rechazada",
+      vencida: "Vencida",
+      borrador: "Vuelve a borrador",
+    };
+    const eventos = [];
+    for (const r of data ?? []) {
+      const a = (r.antes ?? {}) as Fila;
+      const d = (r.despues ?? {}) as Fila;
+      let accion: string | null = null;
+      if (r.accion === "insert") accion = d.origen_id ? "Creada como duplicado" : "Creada";
+      else if (a.version !== d.version) accion = `Editada: versión ${d.version}`;
+      else if (a.estado !== d.estado) accion = etiquetas[d.estado] ?? `Estado: ${d.estado}`;
+      else if (a.token_hash !== d.token_hash) accion = "Enlace de aceptación emitido";
+      if (accion) eventos.push({ fecha: r.creado_el, usuario: nombre(r.usuario_id), accion });
+    }
+    return eventos;
   }
 
   async guardarCotizacion(d: DatosCotizacion, id?: string) {
