@@ -208,6 +208,14 @@ function Total({ q, color }: { q: Cotizacion; color: string }) {
   );
 }
 
+/** "https://app.co/c/abcdefgh…" para mostrar; el QR lleva la URL completa. */
+function enlaceCorto(url: string) {
+  const sinEsquema = url.replace(/^https?:\/\//, "");
+  const [base, ...resto] = sinEsquema.split("/c/");
+  const token = resto.join("/c/");
+  return token.length > 10 ? `${base}/c/${token.slice(0, 8)}…` : sinEsquema;
+}
+
 function Aceptar({ enlace, color, contacto }: { enlace?: string; color: string; contacto?: string }) {
   if (!enlace) {
     return (
@@ -233,7 +241,7 @@ function Aceptar({ enlace, color, contacto }: { enlace?: string; color: string; 
             </View>
           ))}
         </View>
-        <Text style={{ fontFamily: "Mono", fontSize: 6.5, color: T.tenue, marginTop: 7 }}>{enlace}</Text>
+        <Text style={{ fontFamily: "Mono", fontSize: 6.5, color: T.tenue, marginTop: 7 }}>{enlaceCorto(enlace)}</Text>
       </View>
     </View>
   );
