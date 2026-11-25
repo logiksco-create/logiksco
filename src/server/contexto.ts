@@ -37,22 +37,34 @@ export const contexto = cache(async (): Promise<Repositorio> => {
 
   const membresiasDe = () =>
     db.from("usuarios_empresa").select("roles, nombre, empresas(*)").eq("usuario_id", uid).eq("activo", true);
-  let { data: membresias } = await membresiasDe();
+  let { data: membresias, error: errorMembresias } = await membresiasDe();
+  if (errorMembresias) console.error("[contexto] membresías:", errorMembresias.message);
 
   // Primer ingreso tras verificar el correo: crea la empresa con los datos
-  // que el administrador dejó al registrarse.
+  // que el administrador dejó al registrarse. Se leen del usuario en Supabase
+  // (el token puede no traerlos).
   if (!membresias?.length) {
-    const meta = (claims.claims.user_metadata ?? {}) as Record<string, string>;
+    const { data: datosUsuario } = await db.auth.getUser();
+    const meta = (datosUsuario.user?.user_metadata ?? {}) as Record<string, string>;
     if (meta.nit && meta.razon_social) {
-      await db.rpc("registrar_empresa", {
+      const { data: empresaId, error: errorRegistro } = await db.rpc("registrar_empresa", {
         p_nit: meta.nit,
         p_razon_social: meta.razon_social,
         p_nombre: meta.nombre ?? "Administrador",
       });
-      ({ data: membresias } = await membresiasDe());
+      if (errorRegistro) console.error("[contexto] registrar_empresa:", errorRegistro.message);
+      if (empresaId) {
+        // Consulta distinta a la primera: Next.js reutiliza dentro de la misma
+        // petición la respuesta de un GET idéntico, que estaría vacía.
+        ({ data: membresias, error: errorMembresias } = await membresiasDe().eq("empresa_id", empresaId));
+        if (errorMembresias) console.error("[contexto] membresías tras registro:", errorMembresias.message);
+      }
     }
   }
-  if (!membresias?.length) redirect("/registro");
+  if (!membresias?.length) {
+    console.error("[contexto] usuario sin empresa tras el primer ingreso");
+    redirect("/registro");
+  }
 
   // Un usuario puede pertenecer a varias empresas y cambiar entre ellas.
   const activa =
