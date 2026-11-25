@@ -1,78 +1,188 @@
 import "server-only";
 import { createHash } from "node:crypto";
-import { Document, Image, Page, StyleSheet, Text, View, renderToBuffer } from "@react-pdf/renderer";
-import { logoParaPdf } from "./logo";
+import { Document, Page, Text, View, renderToBuffer } from "@react-pdf/renderer";
 import type { Comunicacion, Empresa, Operacion, Tercero } from "@/domain/types";
 import { ESTADOS_DO, TIPOS_SERVICIO } from "@/domain/types";
+import { avance, hitoActual } from "@/domain/operacion";
+import { diasEntre } from "@/domain/fechas";
 import { fecha, fechaHora } from "@/lib/formato";
+import { logoParaPdf } from "./logo";
+import {
+  Chulo,
+  Encabezado,
+  FlechaDireccion,
+  Marco,
+  Oscura,
+  QR,
+  Ruta,
+  Seccion,
+  T,
+  codigoLugar,
+  e,
+  marca,
+  partirLugar,
+  registrarFuentes,
+} from "./sistema";
 
 /**
- * Línea de tiempo del DO como evidencia ante un reclamo (RF-40): hitos y
- * todas las comunicaciones, con huella SHA-256 del contenido.
+ * Trazabilidad del DO como evidencia ante un reclamo (RF-40), sistema
+ * «Manifiesto»: hitos, todas las comunicaciones y huella SHA-256.
  */
-const s = StyleSheet.create({
-  pagina: { padding: 40, paddingBottom: 60, fontSize: 9, color: "#0d1326", fontFamily: "Helvetica" },
-  titulo: { fontSize: 14, fontFamily: "Helvetica-Bold" },
-  sub: { color: "#5b6478", marginTop: 2 },
-  seccion: { marginTop: 16, marginBottom: 4, fontSize: 8, color: "#5b6478", fontFamily: "Helvetica-Bold", textTransform: "uppercase", letterSpacing: 0.6 },
-  fila: { flexDirection: "row", paddingVertical: 4, borderBottomWidth: 1, borderColor: "#e4e7ef" },
-  correo: { paddingVertical: 7, borderBottomWidth: 1, borderColor: "#e4e7ef" },
-  pie: { position: "absolute", bottom: 26, left: 40, right: 40, flexDirection: "row", justifyContent: "space-between", color: "#8a92a6", fontSize: 7.5 },
-});
-const t = (x: string) => x.replaceAll("→", "–");
-
 export async function pdfTrazabilidad(d: { op: Operacion; empresa: Empresa; cliente?: Tercero | null; comunicaciones: Comunicacion[] }) {
+  registrarFuentes();
   const { op, empresa, cliente } = d;
+  const m = marca(empresa);
   const logo = await logoParaPdf(empresa.logoUrl);
   const orden = [...d.comunicaciones].sort((a, b) => a.fecha.localeCompare(b.fecha));
   const huella = createHash("sha256")
     .update(JSON.stringify({ op: op.id, hitos: op.hitos, c: orden.map((c) => [c.id, c.fecha, c.asunto, c.para, c.resumen]) }))
     .digest("hex");
-  const generado = new Date().toISOString();
+  const actual = hitoActual(op);
+  const hechos = op.hitos.filter((h) => h.real).length;
+  const o = partirLugar(op.origen);
+  const de = partirLugar(op.destino);
+
   return renderToBuffer(
     <Document title={`Trazabilidad ${op.consecutivo}`} author={empresa.razonSocial} creator="LOGIKS.CO" language="es-CO">
-      <Page size="LETTER" style={s.pagina}>
-        {logo && <Image src={logo} style={{ maxHeight: 36, maxWidth: 160, objectFit: "contain", marginBottom: 10 }} />}
-        <Text style={s.titulo}>Trazabilidad de la operación {op.consecutivo}</Text>
-        <Text style={s.sub}>
-          {empresa.razonSocial} · NIT {empresa.nit} · Cliente {cliente?.razonSocial ?? "—"} · {TIPOS_SERVICIO[op.tipo]} · {t(op.origen)} – {t(op.destino)}
-        </Text>
-        <Text style={s.sub}>
-          Estado {ESTADOS_DO[op.estado]} · abierto el {fecha(op.abiertoEl)} · generado {fechaHora(generado)}
-        </Text>
+      <Page size="LETTER" style={e.pagina}>
+        <Marco empresa={empresa} pie={`${empresa.razonSocial}  ·  Trazabilidad ${op.consecutivo}`} />
+        <Encabezado
+          empresa={empresa}
+          logo={logo}
+          tipoDoc="Trazabilidad de la operación"
+          numero={op.consecutivo}
+          sub={`generada ${fechaHora(new Date().toISOString())}`}
+        />
 
-        <Text style={s.seccion}>Hitos</Text>
-        {op.hitos.map((h) => (
-          <View key={h.id} style={s.fila} wrap={false}>
-            <Text style={{ width: 150 }}>{h.nombre}</Text>
-            <Text style={{ width: 150, color: "#5b6478" }}>Estimado {fecha(h.estimada)}</Text>
-            <Text>Real {fecha(h.real)}</Text>
+        <Oscura>
+          <View style={{ flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", marginBottom: 12 }}>
+            <View style={{ flexDirection: "row", alignItems: "baseline" }}>
+              <Text style={[e.etiqueta, { color: "#7F8BA6", marginRight: 8 }]}>Cliente</Text>
+              <Text style={{ fontFamily: "Manrope", fontWeight: 700, fontSize: 10, color: "#FFFFFF" }}>{cliente?.razonSocial ?? "—"}</Text>
+            </View>
+            <View style={{ paddingHorizontal: 7, paddingVertical: 2, borderRadius: 8, backgroundColor: m.color }}>
+              <Text style={{ fontFamily: "Mono", fontSize: 6.5, color: "#FFFFFF" }}>{ESTADOS_DO[op.estado].toUpperCase()}</Text>
+            </View>
           </View>
-        ))}
-
-        <Text style={s.seccion}>Comunicaciones ({orden.length})</Text>
-        {orden.length === 0 && <Text style={s.sub}>Sin comunicaciones registradas.</Text>}
-        {orden.map((c) => (
-          <View key={c.id} style={s.correo} wrap={false}>
-            <Text style={{ fontFamily: "Helvetica-Bold" }}>
-              {fechaHora(c.fecha)} · {c.direccion === "saliente" ? "Enviado" : "Recibido"} · {t(c.asunto)}
-            </Text>
-            <Text style={s.sub}>
-              {c.direccion === "saliente" ? "Para" : "En"} {c.para.join(", ")}
-              {c.entregadoEl ? ` · entregado ${fechaHora(c.entregadoEl)}` : ""}
-              {c.abiertoEl ? ` · abierto ${fechaHora(c.abiertoEl)}` : ""}
-            </Text>
-            <Text style={{ marginTop: 3, lineHeight: 1.4 }}>{t(c.resumen)}</Text>
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+            <View>
+              <Text style={{ fontFamily: "Grotesk", fontWeight: 700, fontSize: 24, color: "#FFFFFF" }}>{codigoLugar(op.origen)}</Text>
+              <Text style={{ fontSize: 8, color: "#A8B2C8" }}>{o.ciudad}</Text>
+            </View>
+            <Ruta ancho={250} color={m.color} tipo={op.tipo} />
+            <View style={{ alignItems: "flex-end" }}>
+              <Text style={{ fontFamily: "Grotesk", fontWeight: 700, fontSize: 24, color: "#FFFFFF" }}>{codigoLugar(op.destino)}</Text>
+              <Text style={{ fontSize: 8, color: "#A8B2C8" }}>{de.ciudad}</Text>
+            </View>
           </View>
-        ))}
+          {/* Hitos como segmentos */}
+          <View style={{ flexDirection: "row", marginTop: 14 }}>
+            {op.hitos.map((h, i) => (
+              <View
+                key={h.id}
+                style={{
+                  flex: 1,
+                  height: 5,
+                  borderRadius: 2.5,
+                  marginLeft: i ? 3 : 0,
+                  backgroundColor: h.real ? m.color : h.id === actual?.id ? "#3B4A6B" : "#243049",
+                }}
+              />
+            ))}
+          </View>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 5 }}>
+            <Text style={{ fontFamily: "Mono", fontSize: 7, color: "#A8B2C8" }}>
+              {hechos} de {op.hitos.length} hitos  ·  {Math.round(avance(op) * 100)}%
+            </Text>
+            <Text style={{ fontFamily: "Mono", fontSize: 7, color: "#A8B2C8" }}>
+              {TIPOS_SERVICIO[op.tipo]}  ·  abierto {fecha(op.abiertoEl)}
+            </Text>
+          </View>
+        </Oscura>
 
-        <Text style={s.seccion}>Huella del documento</Text>
-        <Text style={{ fontFamily: "Courier", fontSize: 8 }}>SHA-256 {huella}</Text>
-        <Text style={[s.sub, { fontSize: 8 }]}>Registro inmutable: las comunicaciones no se editan ni se borran en LOGIKS.CO.</Text>
+        <Seccion n="01" titulo="Hitos" derecha={actual ? `Sigue: ${actual.nombre}` : "Completada"} color={m.color} />
+        <View style={{ borderRadius: 12, borderWidth: 1, borderColor: T.linea, paddingVertical: 4 }}>
+          <View style={{ flexDirection: "row", paddingHorizontal: 14, paddingVertical: 5 }}>
+            <Text style={[e.etiqueta, { flex: 1.4 }]}>Hito</Text>
+            <Text style={[e.etiqueta, { flex: 1 }]}>Estimado</Text>
+            <Text style={[e.etiqueta, { flex: 1 }]}>Real</Text>
+            <Text style={[e.etiqueta, { flex: 0.8, textAlign: "right" }]}>Diferencia</Text>
+          </View>
+          {op.hitos.map((h) => {
+            const dif = h.real && h.estimada ? diasEntre(h.estimada, h.real) : null;
+            return (
+              <View key={h.id} wrap={false} style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 14, paddingVertical: 4.5, borderTopWidth: 1, borderTopColor: T.lavado }}>
+                <View style={{ flex: 1.4, flexDirection: "row", alignItems: "center" }}>
+                  {h.real ? (
+                    <Chulo color={m.color} tam={8} />
+                  ) : (
+                    <View style={{ width: 8, height: 8, borderRadius: 4, borderWidth: 1.2, borderColor: h.id === actual?.id ? m.color : T.linea }} />
+                  )}
+                  <Text style={{ marginLeft: 7, fontSize: 8.8, color: h.real || h.id === actual?.id ? T.tinta : T.suave, fontWeight: h.id === actual?.id ? 700 : 400 }}>{h.nombre}</Text>
+                </View>
+                <Text style={{ flex: 1, fontFamily: "Mono", fontSize: 7.8, color: T.suave }}>{fecha(h.estimada)}</Text>
+                <Text style={{ flex: 1, fontFamily: "Mono", fontSize: 7.8, color: T.tinta }}>{fecha(h.real)}</Text>
+                <Text style={{ flex: 0.8, textAlign: "right", fontFamily: "Mono", fontSize: 7.8, color: dif === null ? T.tenue : dif > 0 ? T.peligro : T.exito }}>
+                  {dif === null ? "—" : dif === 0 ? "a tiempo" : `${dif > 0 ? "+" : ""}${dif} d`}
+                </Text>
+              </View>
+            );
+          })}
+        </View>
 
-        <View style={s.pie} fixed>
-          <Text>{empresa.razonSocial} · Trazabilidad {op.consecutivo}</Text>
-          <Text render={({ pageNumber, totalPages }) => `Página ${pageNumber} de ${totalPages}`} />
+        <Seccion n="02" titulo="Comunicaciones" derecha={`${orden.length} registradas`} color={m.color} />
+        {orden.length === 0 && <Text style={{ fontSize: 8.5, color: T.suave }}>Sin comunicaciones registradas.</Text>}
+        {orden.map((c, i) => {
+          const sal = c.direccion === "saliente";
+          const color = sal ? m.color : T.exito;
+          return (
+            <View key={c.id} wrap={false} style={{ flexDirection: "row" }}>
+              <View style={{ width: 62, paddingTop: 1 }}>
+                <Text style={{ fontFamily: "Mono", fontSize: 7, color: T.tinta }}>{fecha(c.fecha).split(" ").slice(0, 2).join(" ")}</Text>
+                <Text style={{ fontFamily: "Mono", fontSize: 6.5, color: T.tenue, marginTop: 1 }}>{fechaHora(c.fecha).split(", ").pop()}</Text>
+              </View>
+              <View style={{ width: 20, alignItems: "center" }}>
+                <View style={{ width: 16, height: 16, borderRadius: 8, backgroundColor: sal ? m.suave : "#E7F7F0", alignItems: "center", justifyContent: "center" }}>
+                  <FlechaDireccion saliente={sal} color={color} tam={9} />
+                </View>
+                {i < orden.length - 1 && <View style={{ width: 1, flexGrow: 1, backgroundColor: T.linea, marginTop: 2 }} />}
+              </View>
+              <View style={{ flex: 1, paddingLeft: 10, paddingBottom: 12 }}>
+                <Text style={{ fontFamily: "Manrope", fontWeight: 700, fontSize: 9, color: T.tinta }}>{c.asunto.replaceAll("→", "–")}</Text>
+                <Text style={{ fontFamily: "Mono", fontSize: 6.8, color: T.suave, marginTop: 2 }}>
+                  {sal ? "ENVIADO A" : "RECIBIDO EN"}  {c.para.join(", ")}
+                </Text>
+                <Text style={{ fontSize: 8.3, lineHeight: 1.45, color: T.texto, marginTop: 3 }}>{c.resumen.replaceAll("→", "–")}</Text>
+                {(c.entregadoEl || c.abiertoEl) && (
+                  <View style={{ flexDirection: "row", marginTop: 4 }}>
+                    {c.entregadoEl && (
+                      <View style={{ flexDirection: "row", alignItems: "center", marginRight: 10 }}>
+                        <Chulo color={T.suave} tam={7} />
+                        <Text style={{ fontFamily: "Mono", fontSize: 6.5, color: T.suave, marginLeft: 4 }}>Entregado {fechaHora(c.entregadoEl)}</Text>
+                      </View>
+                    )}
+                    {c.abiertoEl && (
+                      <View style={{ flexDirection: "row", alignItems: "center" }}>
+                        <Chulo color={T.exito} tam={7} />
+                        <Text style={{ fontFamily: "Mono", fontSize: 6.5, color: T.exito, marginLeft: 4 }}>Abierto {fechaHora(c.abiertoEl)}</Text>
+                      </View>
+                    )}
+                  </View>
+                )}
+              </View>
+            </View>
+          );
+        })}
+
+        <View wrap={false} style={{ flexDirection: "row", alignItems: "center", marginTop: 8, borderRadius: 12, backgroundColor: T.lavado, padding: 12 }}>
+          <QR texto={`sha256:${huella}`} tam={52} />
+          <View style={{ flex: 1, marginLeft: 12 }}>
+            <Text style={{ fontFamily: "Grotesk", fontWeight: 700, fontSize: 10, color: T.tinta }}>Registro inmutable</Text>
+            <Text style={{ fontSize: 7.8, color: T.suave, marginTop: 2 }}>
+              Las comunicaciones no se editan ni se borran en LOGIKS.CO. Esta huella cambia si cambia cualquier dato del documento.
+            </Text>
+            <Text style={{ fontFamily: "Mono", fontSize: 6.8, color: T.tinta, marginTop: 4 }}>SHA-256 {huella}</Text>
+          </View>
         </View>
       </Page>
     </Document>,

@@ -1,43 +1,243 @@
 import "server-only";
-import { Document, Image, Page, StyleSheet, Text, View, renderToBuffer } from "@react-pdf/renderer";
-import { logoParaPdf } from "./logo";
+import { Document, Page, Text, View, renderToBuffer } from "@react-pdf/renderer";
 import type { Cotizacion, Empresa, Tercero } from "@/domain/types";
-import { BLOQUES, TIPOS_SERVICIO, type Bloque } from "@/domain/types";
-import { convertir, totalesConceptos } from "@/domain/cotizacion";
+import { BLOQUES, TIPOS_SERVICIO, UNIDADES, type Bloque } from "@/domain/types";
+import { convertir, totalesConceptos, totalesPorBloque } from "@/domain/cotizacion";
+import { diasEntre } from "@/domain/fechas";
 import { dinero, fecha, numero } from "@/lib/formato";
+import { logoParaPdf } from "./logo";
+import {
+  COLOR_BLOQUE,
+  Dato,
+  Encabezado,
+  Marco,
+  QR,
+  Ruta,
+  Seccion,
+  T,
+  codigoLugar,
+  e,
+  marca,
+  partirLugar,
+  registrarFuentes,
+} from "./sistema";
 
 /**
- * PDF de la cotización para el cliente (RF-05). Igual que la vista pública:
- * nunca incluye costos, proveedores ni utilidad.
- * Fuente Helvetica (incluida en PDF): por eso "→" se escribe como "–".
+ * Cotización para el cliente (RF-05) en el sistema «Manifiesto».
+ * Nunca incluye costos, proveedores ni utilidad.
  */
 
-const tinta = "#0d1326";
-const gris = "#5b6478";
-const linea = "#e4e7ef";
+type Logo = { data: Buffer; format: "png" | "jpg" };
+const ANCHO = 532;
+const TALON = 150;
 
-const s = StyleSheet.create({
-  pagina: { padding: 40, paddingBottom: 60, fontSize: 9.5, color: tinta, fontFamily: "Helvetica" },
-  cabecera: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
-  empresa: { fontSize: 15, fontFamily: "Helvetica-Bold" },
-  sub: { color: gris, marginTop: 2 },
-  chip: { fontSize: 8, color: "#ffffff", paddingVertical: 3, paddingHorizontal: 7, borderRadius: 8 },
-  banda: { marginTop: 22, padding: 16, borderRadius: 8, backgroundColor: "#0a0f1f", color: "#ffffff" },
-  ruta: { fontSize: 17, fontFamily: "Helvetica-Bold", marginTop: 4 },
-  bandaSub: { color: "#aab3c8", marginTop: 6, fontSize: 9 },
-  datos: { flexDirection: "row", marginTop: 14, borderWidth: 1, borderColor: linea, borderRadius: 6 },
-  dato: { flex: 1, padding: 10, borderRightWidth: 1, borderColor: linea },
-  etiqueta: { color: gris, fontSize: 7.5, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 3 },
-  bloque: { marginTop: 14 },
-  bloqueTitulo: { fontSize: 7.5, color: gris, textTransform: "uppercase", letterSpacing: 0.6, fontFamily: "Helvetica-Bold", marginBottom: 4 },
-  fila: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 5, borderBottomWidth: 1, borderColor: linea },
-  total: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 14, padding: 12, borderRadius: 6, backgroundColor: "#f5f6fa" },
-  totalValor: { fontSize: 15, fontFamily: "Helvetica-Bold" },
-  terminos: { marginTop: 18, color: gris, fontSize: 8, lineHeight: 1.45 },
-  pie: { position: "absolute", bottom: 26, left: 40, right: 40, flexDirection: "row", justifyContent: "space-between", color: "#8a92a6", fontSize: 7.5 },
-});
+function Boleto({ q, empresa, cliente }: { q: Cotizacion; empresa: Empresa; cliente: Tercero }) {
+  const m = marca(empresa);
+  const mon = q.monedaPresentacion;
+  const total = totalesConceptos(q.conceptos, mon, q.trm).venta;
+  const o = partirLugar(q.origen);
+  const d = partirLugar(q.destino);
+  const dias = diasEntre(q.fechaEmision, q.vigenteHasta);
+  const izq = ANCHO - TALON;
+  const contacto = cliente.contactos.find((c) => c.id === q.contactoId) ?? cliente.contactos[0];
 
-const texto = (t: string) => t.replaceAll("→", "–");
+  return (
+    <View wrap={false} style={{ flexDirection: "row", backgroundColor: T.tinta, borderRadius: 14 }}>
+      {/* Cuerpo del boleto */}
+      <View style={{ width: izq, paddingHorizontal: 18, paddingVertical: 15 }}>
+        <View style={{ flexDirection: "row", alignItems: "baseline", marginBottom: 12 }}>
+          <Text style={[e.etiqueta, { color: "#7F8BA6", marginRight: 8 }]}>Para</Text>
+          <Text style={{ fontFamily: "Manrope", fontWeight: 700, fontSize: 10, color: "#FFFFFF" }}>{cliente.razonSocial}</Text>
+          <Text style={{ fontSize: 7.5, color: "#8E9AB5", marginLeft: 6 }}>
+            NIT {cliente.nit}
+            {contacto ? `  ·  ${contacto.nombre}` : ""}
+          </Text>
+        </View>
+        <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+          <Text style={[e.etiqueta, { color: "#7F8BA6" }]}>Origen</Text>
+          <Text style={[e.etiqueta, { color: "#7F8BA6" }]}>Destino</Text>
+        </View>
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 4 }}>
+          <Text style={{ fontFamily: "Grotesk", fontWeight: 700, fontSize: 28, color: "#FFFFFF", letterSpacing: -0.5 }}>{codigoLugar(q.origen)}</Text>
+          <Ruta ancho={150} color={m.color} tipo={q.tipoServicio} />
+          <Text style={{ fontFamily: "Grotesk", fontWeight: 700, fontSize: 28, color: "#FFFFFF", letterSpacing: -0.5 }}>{codigoLugar(q.destino)}</Text>
+        </View>
+        <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 2 }}>
+          <View style={{ maxWidth: 140 }}>
+            <Text style={{ fontSize: 9, fontWeight: 600, color: "#E6EAF3" }}>{o.ciudad}</Text>
+            {o.region ? <Text style={{ fontSize: 7.5, color: "#8E9AB5" }}>{o.region}</Text> : null}
+          </View>
+          <View style={{ maxWidth: 140, alignItems: "flex-end" }}>
+            <Text style={{ fontSize: 9, fontWeight: 600, color: "#E6EAF3", textAlign: "right" }}>{d.ciudad}</Text>
+            {d.region ? <Text style={{ fontSize: 7.5, color: "#8E9AB5", textAlign: "right" }}>{d.region}</Text> : null}
+          </View>
+        </View>
+        <View style={{ height: 1, backgroundColor: "#243049", marginVertical: 10 }} />
+        <View style={{ flexDirection: "row" }}>
+          <Dato claro etiqueta="Servicio" valor={TIPOS_SERVICIO[q.tipoServicio]} />
+          <Dato claro etiqueta="Incoterm" valor={q.incoterm} flex={0.6} />
+          <Dato claro etiqueta="Mercancía" valor={q.mercancia.descripcion} flex={1.4} />
+        </View>
+      </View>
+
+      {/* Muescas de la perforación */}
+      <View style={{ width: 0, position: "relative" }}>
+        <View style={{ position: "absolute", left: -7, top: -7, width: 14, height: 14, borderRadius: 7, backgroundColor: T.papel }} />
+        <View style={{ position: "absolute", left: -7, bottom: -7, width: 14, height: 14, borderRadius: 7, backgroundColor: T.papel }} />
+      </View>
+
+      {/* Talón */}
+      <View style={{ width: TALON, paddingHorizontal: 16, paddingVertical: 15, justifyContent: "space-between", borderLeftWidth: 1.2, borderLeftColor: "#36435E", borderLeftStyle: "dashed" }}>
+        <View>
+          <Text style={[e.etiqueta, { color: "#7F8BA6" }]}>Total {mon}</Text>
+          <Text style={{ fontFamily: "Grotesk", fontWeight: 700, fontSize: 17, color: "#FFFFFF", marginTop: 4, letterSpacing: -0.3 }}>{dinero(total, mon)}</Text>
+          <Text style={{ fontSize: 7, color: "#8E9AB5", marginTop: 2 }}>Antes de impuestos</Text>
+        </View>
+        <View>
+          <Text style={[e.etiqueta, { color: "#7F8BA6" }]}>Válida hasta</Text>
+          <Text style={{ fontFamily: "Manrope", fontWeight: 600, fontSize: 9.5, color: "#FFFFFF", marginTop: 3 }}>{fecha(q.vigenteHasta)}</Text>
+          {dias > 0 && (
+            <View style={{ alignSelf: "flex-start", marginTop: 5, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, backgroundColor: m.color }}>
+              <Text style={{ fontFamily: "Mono", fontSize: 6.5, color: "#FFFFFF" }}>{dias} DÍAS</Text>
+            </View>
+          )}
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function Composicion({ q }: { q: Cotizacion }) {
+  const mon = q.monedaPresentacion;
+  const por = totalesPorBloque(q.conceptos, mon, q.trm);
+  const total = Object.values(por).reduce((s, t) => s + (t?.venta ?? 0), 0);
+  const bloques = (Object.keys(BLOQUES) as Bloque[]).filter((b) => por[b] && por[b]!.venta > 0);
+  if (total <= 0 || bloques.length < 2) return null;
+  return (
+    <View wrap={false} style={{ marginBottom: 4 }}>
+      <View style={{ flexDirection: "row", height: 8, borderRadius: 4, overflow: "hidden" }}>
+        {bloques.map((b, i) => (
+          <View key={b} style={{ flex: por[b]!.venta / total, backgroundColor: COLOR_BLOQUE[b], marginLeft: i === 0 ? 0 : 2 }} />
+        ))}
+      </View>
+      <View style={{ flexDirection: "row", marginTop: 3 }}>
+        {bloques.map((b, i) => {
+          const pct = por[b]!.venta / total;
+          return (
+            <View key={b} style={{ flex: pct, marginLeft: i === 0 ? 0 : 2 }}>
+              {pct >= 0.08 && <Text style={{ fontFamily: "Mono", fontSize: 6.5, color: T.suave }}>{Math.round(pct * 100)}%</Text>}
+            </View>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+function Detalle({ q, color, n }: { q: Cotizacion; color: string; n: string }) {
+  const mon = q.monedaPresentacion;
+  const por = totalesPorBloque(q.conceptos, mon, q.trm);
+  const bloques = (Object.keys(BLOQUES) as Bloque[]).filter((b) => q.conceptos.some((c) => c.bloque === b));
+  return (
+    <View>
+      <Seccion n={n} titulo="Detalle y composición del precio" derecha={`${q.conceptos.length} concepto${q.conceptos.length === 1 ? "" : "s"}`} color={color} />
+      <Composicion q={q} />
+      {bloques.map((b) => {
+        const lineas = q.conceptos.filter((c) => c.bloque === b);
+        const unico = lineas.length === 1;
+        return (
+          <View key={b} wrap={false} style={{ marginTop: 5 }}>
+            {!unico && (
+              <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 3 }}>
+                <View style={{ width: 3, height: 10, borderRadius: 1.5, backgroundColor: COLOR_BLOQUE[b], marginRight: 7 }} />
+                <Text style={{ fontFamily: "Manrope", fontWeight: 700, fontSize: 8.5, color: T.tinta, flex: 1 }}>{BLOQUES[b]}</Text>
+                <Text style={{ fontFamily: "Mono", fontWeight: 600, fontSize: 8, color: T.tinta }}>{dinero(por[b]!.venta, mon)}</Text>
+              </View>
+            )}
+            {lineas.map((c) => (
+              <View key={c.id} style={{ flexDirection: "row", alignItems: "flex-end", paddingLeft: unico ? 0 : 10, paddingVertical: 1.5 }}>
+                {unico && <View style={{ width: 3, alignSelf: "stretch", borderRadius: 1.5, backgroundColor: COLOR_BLOQUE[b], marginRight: 7 }} />}
+                <View style={{ maxWidth: 340 }}>
+                  {unico && <Text style={[e.etiqueta, { fontSize: 6, marginBottom: 1.5 }]}>{BLOQUES[b]}</Text>}
+                  <Text style={{ fontSize: 8.8, color: T.texto }}>{c.descripcion.replaceAll("→", "–")}</Text>
+                  <Text style={{ fontFamily: "Mono", fontSize: 6.8, color: T.tenue, marginTop: 1 }}>
+                    {numero(c.cantidad, 2)} × {UNIDADES[c.unidad].replace("Por ", "").toLowerCase()}
+                    {c.moneda !== mon ? `  ·  ${dinero(c.ventaUnitaria, c.moneda)} c/u` : ""}
+                    {c.paraTerceros ? "  ·  por cuenta del cliente" : ""}
+                  </Text>
+                </View>
+                <View style={{ flex: 1, borderBottomWidth: 1, borderBottomColor: T.linea, borderBottomStyle: "dotted", marginHorizontal: 8, marginBottom: 3 }} />
+                <Text style={{ fontFamily: "Mono", fontWeight: unico ? 600 : 400, fontSize: 8.5, color: T.tinta }}>
+                  {dinero(convertir(c.ventaUnitaria * c.cantidad, c.moneda, mon, q.trm), mon)}
+                </Text>
+              </View>
+            ))}
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+function Total({ q, color }: { q: Cotizacion; color: string }) {
+  const mon = q.monedaPresentacion;
+  const total = totalesConceptos(q.conceptos, mon, q.trm).venta;
+  const terceros = totalesConceptos(q.conceptos.filter((c) => c.paraTerceros), mon, q.trm).venta;
+  const convertidos = q.conceptos.some((c) => c.moneda !== mon);
+  return (
+    <View style={{ width: 250 }}>
+      <View style={{ borderRadius: 12, backgroundColor: T.lavado, padding: 14, flexGrow: 1, justifyContent: "flex-end" }}>
+        {terceros > 0 && (
+          <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 6 }}>
+            <Text style={{ fontSize: 8, color: T.suave }}>Incluye gastos por cuenta del cliente</Text>
+            <Text style={{ fontFamily: "Mono", fontSize: 8, color: T.suave }}>{dinero(terceros, mon)}</Text>
+          </View>
+        )}
+        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end" }}>
+          <View>
+            <Text style={[e.etiqueta, { color }]}>Total</Text>
+            <Text style={{ fontSize: 7, color: T.suave, marginTop: 2 }}>{mon} · antes de impuestos</Text>
+          </View>
+          <Text style={{ fontFamily: "Grotesk", fontWeight: 700, fontSize: 20, color: T.tinta, letterSpacing: -0.4 }}>{dinero(total, mon)}</Text>
+        </View>
+        {convertidos && (
+          <Text style={{ fontFamily: "Mono", fontSize: 6.8, color: T.tenue, marginTop: 6 }}>TRM {dinero(q.trm, "COP")} por USD</Text>
+        )}
+      </View>
+    </View>
+  );
+}
+
+function Aceptar({ enlace, color, contacto }: { enlace?: string; color: string; contacto?: string }) {
+  if (!enlace) {
+    return (
+      <View style={{ flex: 1, marginRight: 12, borderRadius: 12, borderWidth: 1, borderColor: T.linea, padding: 12 }}>
+        <Text style={{ fontFamily: "Grotesk", fontWeight: 700, fontSize: 11, color: T.tinta }}>¿Seguimos?</Text>
+        <Text style={{ fontSize: 8.5, color: T.suave, marginTop: 3 }}>
+          Confirma tu aceptación respondiendo este correo{contacto ? ` o escribiendo a ${contacto}` : ""}. Reservamos espacio en cuanto la recibamos.
+        </Text>
+      </View>
+    );
+  }
+  const pasos = ["Escanea el código", "Revisa el detalle en tu celular", "Acepta y, si hace falta, diligencia tu 170"];
+  return (
+    <View style={{ flex: 1, marginRight: 12, flexDirection: "row", borderRadius: 12, borderWidth: 1, borderColor: T.linea, padding: 12, alignItems: "center" }}>
+      <QR texto={enlace} tam={64} />
+      <View style={{ flex: 1, marginLeft: 12 }}>
+        <Text style={{ fontFamily: "Grotesk", fontWeight: 700, fontSize: 11, color: T.tinta }}>Acepta en línea en un minuto</Text>
+        <View style={{ marginTop: 6 }}>
+          {pasos.map((p, i) => (
+            <View key={p} style={{ flexDirection: "row", alignItems: "center", marginTop: 3 }}>
+              <Text style={{ fontFamily: "Mono", fontWeight: 600, fontSize: 7, color, width: 16 }}>{String(i + 1).padStart(2, "0")}</Text>
+              <Text style={{ fontSize: 8.5, color: T.texto }}>{p}</Text>
+            </View>
+          ))}
+        </View>
+        <Text style={{ fontFamily: "Mono", fontSize: 6.5, color: T.tenue, marginTop: 7 }}>{enlace}</Text>
+      </View>
+    </View>
+  );
+}
 
 export function DocumentoCotizacion({
   q,
@@ -50,104 +250,48 @@ export function DocumentoCotizacion({
   empresa: Empresa;
   cliente: Tercero;
   enlace?: string;
-  logo?: { data: Buffer; format: "png" | "jpg" };
+  logo?: Logo;
 }) {
-  const mon = q.monedaPresentacion;
-  const total = totalesConceptos(q.conceptos, mon, q.trm).venta;
-  const bloques = (Object.keys(BLOQUES) as Bloque[]).filter((b) => q.conceptos.some((c) => c.bloque === b));
+  registrarFuentes();
+  const m = marca(empresa);
   const contacto = cliente.contactos.find((c) => c.id === q.contactoId) ?? cliente.contactos[0];
 
   return (
-    <Document title={`${q.consecutivo} v${q.version}`} author={empresa.razonSocial} creator="LOGIKS.CO" language="es-CO">
-      <Page size="LETTER" style={s.pagina}>
-        <View style={s.cabecera}>
-          <View>
-            {logo && <Image src={logo} style={{ maxHeight: 40, maxWidth: 170, objectFit: "contain", marginBottom: 8 }} />}
-            <Text style={s.empresa}>{empresa.razonSocial}</Text>
-            <Text style={s.sub}>NIT {empresa.nit}{empresa.ciudad ? ` · ${empresa.ciudad}` : ""}</Text>
-          </View>
-          <View style={{ alignItems: "flex-end" }}>
-            <Text style={[s.chip, { backgroundColor: empresa.colorPrimario || "#3b5bfd" }]}>COTIZACIÓN</Text>
-            <Text style={[s.sub, { marginTop: 6, fontFamily: "Helvetica-Bold", color: tinta }]}>
-              {q.consecutivo} · v{q.version}
-            </Text>
-            <Text style={s.sub}>Emitida {fecha(q.fechaEmision)}</Text>
-          </View>
+    <Document title={`${q.consecutivo} v${q.version} · ${empresa.razonSocial}`} author={empresa.razonSocial} creator="LOGIKS.CO" language="es-CO">
+      <Page size="LETTER" style={e.pagina}>
+        <Marco empresa={empresa} pie={`${empresa.razonSocial}  ·  ${q.consecutivo} v${q.version}`} />
+        <Encabezado
+          empresa={empresa}
+          logo={logo}
+          tipoDoc="Cotización"
+          numero={q.consecutivo}
+          sub={`v${q.version}  ·  emitida ${fecha(q.fechaEmision)}`}
+        />
+
+        <Boleto q={q} empresa={empresa} cliente={cliente} />
+
+        <View style={{ flexDirection: "row", marginTop: 8, borderRadius: 10, backgroundColor: T.lavado, paddingHorizontal: 12, paddingVertical: 9 }}>
+          <Dato etiqueta="Piezas" valor={numero(q.mercancia.piezas)} />
+          <Dato etiqueta="Peso" valor={`${numero(q.mercancia.pesoKg)} kg`} />
+          <Dato etiqueta="Volumen" valor={`${numero(q.mercancia.volumenM3, 1)} m³`} />
+          <Dato
+            etiqueta="Equipo"
+            valor={q.mercancia.contenedores?.length ? q.mercancia.contenedores.map((c) => `${c.cantidad}×${c.tipo}`).join(", ") : "Carga general"}
+          />
         </View>
 
-        <View style={s.banda}>
-          <Text style={{ color: "#aab3c8", fontSize: 8.5 }}>Para {cliente.razonSocial} · NIT {cliente.nit}</Text>
-          <Text style={s.ruta}>
-            {texto(q.origen)}  –  {texto(q.destino)}
-          </Text>
-          <Text style={s.bandaSub}>
-            Válida hasta {fecha(q.vigenteHasta)}
-            {contacto ? ` · Atención: ${contacto.nombre}${contacto.cargo ? `, ${contacto.cargo}` : ""}` : ""}
-          </Text>
+        <Detalle q={q} color={m.color} n="01" />
+        <View wrap={false} style={{ flexDirection: "row", marginTop: 12 }}>
+          <Aceptar enlace={enlace} color={m.color} contacto={contacto?.correo} />
+          <Total q={q} color={m.oscuro} />
         </View>
-
-        <View style={s.datos}>
-          <View style={s.dato}>
-            <Text style={s.etiqueta}>Servicio</Text>
-            <Text>{TIPOS_SERVICIO[q.tipoServicio]}</Text>
-            <Text style={s.sub}>Incoterm {q.incoterm}</Text>
-          </View>
-          <View style={s.dato}>
-            <Text style={s.etiqueta}>Mercancía</Text>
-            <Text>{q.mercancia.descripcion}</Text>
-            <Text style={s.sub}>{numero(q.mercancia.piezas)} piezas</Text>
-          </View>
-          <View style={[s.dato, { borderRightWidth: 0 }]}>
-            <Text style={s.etiqueta}>Peso y volumen</Text>
-            <Text>{numero(q.mercancia.pesoKg)} kg</Text>
-            <Text style={s.sub}>{numero(q.mercancia.volumenM3, 1)} m³</Text>
-          </View>
-        </View>
-
-        {bloques.map((b) => (
-          <View key={b} style={s.bloque} wrap={false}>
-            <Text style={s.bloqueTitulo}>{BLOQUES[b]}</Text>
-            {q.conceptos
-              .filter((c) => c.bloque === b)
-              .map((c) => (
-                <View key={c.id} style={s.fila}>
-                  <Text style={{ flex: 1, paddingRight: 12 }}>
-                    {texto(c.descripcion)}
-                    {c.cantidad !== 1 ? `  × ${numero(c.cantidad, 2)}` : ""}
-                  </Text>
-                  <Text>{dinero(convertir(c.ventaUnitaria * c.cantidad, c.moneda, mon, q.trm), mon)}</Text>
-                </View>
-              ))}
-          </View>
-        ))}
-
-        <View style={s.total} wrap={false}>
-          <Text style={{ fontFamily: "Helvetica-Bold" }}>Total</Text>
-          <Text style={s.totalValor}>{dinero(total, mon)}</Text>
-        </View>
-        {q.conceptos.some((c) => c.moneda !== mon) && (
-          <Text style={[s.sub, { marginTop: 4, fontSize: 8 }]}>
-            Valores convertidos a {mon} con TRM {dinero(q.trm, "COP")}.
-          </Text>
-        )}
 
         {q.terminos ? (
-          <View style={s.terminos}>
-            <Text style={{ fontFamily: "Helvetica-Bold", color: tinta, marginBottom: 3 }}>Términos y condiciones</Text>
-            <Text>{q.terminos}</Text>
+          <View style={{ marginTop: 12 }}>
+            <Text style={e.etiqueta}>Términos y condiciones</Text>
+            <Text style={{ fontSize: 7.5, lineHeight: 1.5, color: T.suave, marginTop: 4 }}>{q.terminos}</Text>
           </View>
         ) : null}
-
-        {enlace && (
-          <Text style={[s.terminos, { color: tinta }]}>
-            Acepta en línea en: <Text style={{ color: "#2a44d4" }}>{enlace}</Text>
-          </Text>
-        )}
-
-        <View style={s.pie} fixed>
-          <Text>{empresa.razonSocial} · Generado con LOGIKS.CO</Text>
-          <Text render={({ pageNumber, totalPages }) => `Página ${pageNumber} de ${totalPages}`} />
-        </View>
       </Page>
     </Document>
   );

@@ -10,6 +10,8 @@ const nextConfig: NextConfig = {
     },
   },
   poweredByHeader: false,
+  // Fuentes de los PDF: se leen del disco en tiempo de ejecución.
+  outputFileTracingIncludes: { "/**": ["./src/server/pdf/fuentes/**"] },
   experimental: {
     // Solo el modo demo sube archivos por el servidor; en producción van
     // directo del navegador a Storage con URL firmada.
