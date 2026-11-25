@@ -64,7 +64,7 @@ export default async function AppLayout({ children }: LayoutProps<"/app">) {
 
   return (
     <div className="flex min-h-dvh">
-      <BarraLateral alertas={alertas.length} empresa={empresa.razonSocial} pie={pie} />
+      <BarraLateral alertas={alertas.length} empresa={empresa.razonSocial} logoUrl={empresa.logoUrl} pie={pie} />
       <div className="flex min-w-0 flex-1 flex-col">
         {modoDemo && (
           <div className="flex items-center justify-center gap-2 border-b border-brand/15 bg-brand-soft px-4 py-1.5 text-center text-xs text-brand-fg">

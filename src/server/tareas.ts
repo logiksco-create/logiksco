@@ -81,6 +81,7 @@ export async function tareaDiaria(sv: SupabaseClient) {
               html: plantillaCorreo({
                 empresa: repo.empresa.razonSocial,
                 color: repo.empresa.colorPrimario,
+                logoUrl: repo.empresa.logoUrl,
                 titulo: `Buenos días, ${usuario.nombre.split(" ")[0]}`,
                 parrafos: suyas.slice(0, 15).map((a) => `• ${a.titulo}: ${a.detalle}`),
                 boton: { texto: "Ver alertas", url: `${env.appUrl}/app/alertas` },

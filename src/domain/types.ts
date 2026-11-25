@@ -33,6 +33,8 @@ export interface Empresa {
   servicios?: TipoServicio[];
   /** Completó el asistente de bienvenida. */
   configurada?: boolean;
+  /** URL pública del logo (PNG o JPG). */
+  logoUrl?: string;
 }
 
 export const TIPOS_CATALOGO = {

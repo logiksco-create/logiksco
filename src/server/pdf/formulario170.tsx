@@ -1,6 +1,7 @@
 import "server-only";
 import { createHash } from "node:crypto";
-import { Document, Page, StyleSheet, Text, View, renderToBuffer } from "@react-pdf/renderer";
+import { Document, Image, Page, StyleSheet, Text, View, renderToBuffer } from "@react-pdf/renderer";
+import { logoParaPdf } from "./logo";
 import type { Empresa, Formulario170, Tercero } from "@/domain/types";
 import { ESTADOS_170 } from "@/domain/types";
 import { dinero, fecha, fechaHora } from "@/lib/formato";
@@ -30,11 +31,13 @@ function Fila({ k, v }: { k: string; v: string }) {
   );
 }
 
-export function pdfFormulario170({ f, empresa, cliente }: { f: Formulario170; empresa: Empresa; cliente: Tercero }) {
+export async function pdfFormulario170({ f, empresa, cliente }: { f: Formulario170; empresa: Empresa; cliente: Tercero }) {
   const d = f.datos;
+  const logo = await logoParaPdf(empresa.logoUrl);
   return renderToBuffer(
     <Document title={`Circular 170 · ${cliente.razonSocial} · v${f.version}`} author={empresa.razonSocial} creator="LOGIKS.CO" language="es-CO">
       <Page size="LETTER" style={s.pagina}>
+        {logo && <Image src={logo} style={{ maxHeight: 36, maxWidth: 160, objectFit: "contain", marginBottom: 10 }} />}
         <Text style={s.titulo}>Formato de conocimiento del cliente</Text>
         <Text style={s.sub}>Circular Externa 170 de 2002 (DIAN) · {empresa.razonSocial} · NIT {empresa.nit}</Text>
 

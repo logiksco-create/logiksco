@@ -1,6 +1,7 @@
 import "server-only";
 import { createHash } from "node:crypto";
-import { Document, Page, StyleSheet, Text, View, renderToBuffer } from "@react-pdf/renderer";
+import { Document, Image, Page, StyleSheet, Text, View, renderToBuffer } from "@react-pdf/renderer";
+import { logoParaPdf } from "./logo";
 import type { Comunicacion, Empresa, Operacion, Tercero } from "@/domain/types";
 import { ESTADOS_DO, TIPOS_SERVICIO } from "@/domain/types";
 import { fecha, fechaHora } from "@/lib/formato";
@@ -20,8 +21,9 @@ const s = StyleSheet.create({
 });
 const t = (x: string) => x.replaceAll("→", "–");
 
-export function pdfTrazabilidad(d: { op: Operacion; empresa: Empresa; cliente?: Tercero | null; comunicaciones: Comunicacion[] }) {
+export async function pdfTrazabilidad(d: { op: Operacion; empresa: Empresa; cliente?: Tercero | null; comunicaciones: Comunicacion[] }) {
   const { op, empresa, cliente } = d;
+  const logo = await logoParaPdf(empresa.logoUrl);
   const orden = [...d.comunicaciones].sort((a, b) => a.fecha.localeCompare(b.fecha));
   const huella = createHash("sha256")
     .update(JSON.stringify({ op: op.id, hitos: op.hitos, c: orden.map((c) => [c.id, c.fecha, c.asunto, c.para, c.resumen]) }))
@@ -30,6 +32,7 @@ export function pdfTrazabilidad(d: { op: Operacion; empresa: Empresa; cliente?: 
   return renderToBuffer(
     <Document title={`Trazabilidad ${op.consecutivo}`} author={empresa.razonSocial} creator="LOGIKS.CO" language="es-CO">
       <Page size="LETTER" style={s.pagina}>
+        {logo && <Image src={logo} style={{ maxHeight: 36, maxWidth: 160, objectFit: "contain", marginBottom: 10 }} />}
         <Text style={s.titulo}>Trazabilidad de la operación {op.consecutivo}</Text>
         <Text style={s.sub}>
           {empresa.razonSocial} · NIT {empresa.nit} · Cliente {cliente?.razonSocial ?? "—"} · {TIPOS_SERVICIO[op.tipo]} · {t(op.origen)} – {t(op.destino)}

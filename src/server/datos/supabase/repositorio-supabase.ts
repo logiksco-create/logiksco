@@ -25,7 +25,7 @@ import { duplicarCotizacion, puedeTransicionar } from "@/domain/cotizacion";
 import { estadoSegunHitos, hitosDe } from "@/domain/operacion";
 import { habilitadoParaDO, situacion170, vigenciaAlAprobar } from "@/domain/cumplimiento";
 import { hoyISO } from "@/domain/fechas";
-import { rutaArchivo, rutaPertenece, validarArchivo } from "@/domain/archivos";
+import { esImagenValida, rutaArchivo, rutaPertenece, validarArchivo, validarLogo } from "@/domain/archivos";
 import { cotizacionParaCliente, operacionParaCliente } from "@/domain/portal";
 import { correo } from "../../correo";
 import { plantillaCorreo } from "../../correo/plantilla";
@@ -65,6 +65,9 @@ export const mapEmpresa = (r: Fila): Empresa => ({
   terminos: r.terminos ?? undefined,
   servicios: r.servicios ?? [],
   configurada: r.configurada ?? true,
+  logoUrl: r.logo_path
+    ? `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/logos/${r.logo_path}`
+    : undefined,
 });
 
 const mapTercero = (r: Fila): Tercero => ({
@@ -281,6 +284,7 @@ async function invitarCuenta(
         html: plantillaCorreo({
           empresa: d.empresa.razonSocial,
           color: d.empresa.colorPrimario,
+          logoUrl: d.empresa.logoUrl,
           titulo: `Hola ${d.nombre.split(" ")[0]}, te invitaron`,
           parrafos: [
             d.portal
@@ -370,6 +374,44 @@ export class SupabaseRepositorio implements Repositorio {
       { onConflict: "empresa_id,tercero_id,usuario_id" },
     );
     falla(error);
+  }
+
+  async prepararSubidaLogo(a: { nombre: string; mime: string; tamano: number }) {
+    this.exigirAdmin();
+    const error = validarLogo(a);
+    if (error) throw new ErrorNegocio(error);
+    const ext = a.mime === "image/png" ? "png" : "jpg";
+    const ruta = `${this.empresa.id}/logo-${randomBytes(6).toString("hex")}.${ext}`;
+    const { data, error: e } = await this.db.storage.from("logos").createSignedUploadUrl(ruta);
+    if (e) throw new ErrorNegocio("No tienes permiso para cambiar el logo");
+    return { ruta, token: data.token };
+  }
+
+  async guardarLogo(a: { ruta?: string; mime: string; tamano: number }) {
+    this.exigirAdmin();
+    const partes = a.ruta?.split("/") ?? [];
+    if (partes.length !== 2 || partes[0] !== this.empresa.id || !/^logo-[0-9a-f]{12}\.(png|jpg)$/.test(partes[1])) {
+      throw new ErrorNegocio("Ruta de logo inválida");
+    }
+    // Verifica que lo subido sea de verdad una imagen PNG/JPG.
+    const { data: archivo } = await this.db.storage.from("logos").download(a.ruta!);
+    const bytes = archivo ? new Uint8Array(await archivo.arrayBuffer()) : null;
+    if (!bytes || !esImagenValida(bytes)) {
+      await this.db.storage.from("logos").remove([a.ruta!]);
+      throw new ErrorNegocio("El archivo no es una imagen PNG o JPG válida");
+    }
+    const { data: anterior } = await this.db.from("empresas").select("logo_path").eq("id", this.empresa.id).single();
+    const { error } = await this.db.from("empresas").update({ logo_path: a.ruta }).eq("id", this.empresa.id);
+    falla(error);
+    if (anterior?.logo_path && anterior.logo_path !== a.ruta) await this.db.storage.from("logos").remove([anterior.logo_path]);
+  }
+
+  async quitarLogo() {
+    this.exigirAdmin();
+    const { data: anterior } = await this.db.from("empresas").select("logo_path").eq("id", this.empresa.id).single();
+    const { error } = await this.db.from("empresas").update({ logo_path: null }).eq("id", this.empresa.id);
+    falla(error);
+    if (anterior?.logo_path) await this.db.storage.from("logos").remove([anterior.logo_path]);
   }
 
   async catalogo(tipo?: TipoCatalogo) {

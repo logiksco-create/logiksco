@@ -2,6 +2,7 @@ import { contexto } from "@/server/contexto";
 import { Encabezado } from "@/components/app/encabezado";
 import { FormEmpresa, GestionUsuarios } from "@/components/app/configuracion";
 import { FormMegafoco } from "@/components/app/facturacion";
+import { SubidorLogo } from "@/components/app/subidor-logo";
 import Link from "next/link";
 import { ListTree } from "lucide-react";
 import { Tarjeta, TarjetaEncabezado, clasesBoton } from "@/components/ui";
@@ -28,6 +29,9 @@ export default async function Configuracion() {
         <div className="space-y-6">
           <Tarjeta>
             <TarjetaEncabezado titulo="Empresa" descripcion="Se usa en cotizaciones, PDF y correos" />
+            <div className="border-b border-border px-5 pb-5">
+              <SubidorLogo logoUrl={repo.empresa.logoUrl} razonSocial={repo.empresa.razonSocial} editable={admin} />
+            </div>
             <FormEmpresa empresa={repo.empresa} editable={admin} />
           </Tarjeta>
           <Tarjeta>

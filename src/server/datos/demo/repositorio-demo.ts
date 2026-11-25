@@ -27,7 +27,7 @@ import { catalogoBase } from "@/domain/catalogo";
 import { habilitadoParaDO, situacion170, vigenciaAlAprobar } from "@/domain/cumplimiento";
 import { hoyISO } from "@/domain/fechas";
 import { crearSemilla, type EstadoDemo } from "./semilla";
-import { validarArchivo } from "@/domain/archivos";
+import { esImagenValida, validarArchivo, validarLogo } from "@/domain/archivos";
 import { cotizacionParaCliente, operacionParaCliente, visibleParaCliente } from "@/domain/portal";
 import type { ArchivoDemo } from "./semilla";
 import type {
@@ -85,6 +85,24 @@ export class DemoRepositorio implements Repositorio {
       throw new ErrorNegocio("Ese correo ya tiene acceso al portal");
     }
     s.accesosPortal.push({ terceroId, usuarioId: id(), ...d });
+  }
+
+  async prepararSubidaLogo() {
+    return null; // en demo el logo llega por el servidor
+  }
+
+  async guardarLogo(a: { bytes?: Uint8Array; mime: string; tamano: number }) {
+    this.exigirAdmin();
+    const error = validarLogo(a);
+    if (error) throw new ErrorNegocio(error);
+    const tipo = a.bytes && esImagenValida(a.bytes);
+    if (!tipo) throw new ErrorNegocio("El archivo no es una imagen PNG o JPG válida");
+    estado().empresa.logoUrl = `data:${tipo};base64,${Buffer.from(a.bytes!).toString("base64")}`;
+  }
+
+  async quitarLogo() {
+    this.exigirAdmin();
+    estado().empresa.logoUrl = undefined;
   }
 
   async catalogo(tipo?: TipoCatalogo) {

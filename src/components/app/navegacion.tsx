@@ -76,10 +76,12 @@ function Enlaces({ alertas, alNavegar }: { alertas: number; alNavegar?: () => vo
 export function BarraLateral({
   alertas,
   empresa,
+  logoUrl,
   pie,
 }: {
   alertas: number;
   empresa: string;
+  logoUrl?: string;
   pie: React.ReactNode;
 }) {
   return (
@@ -90,9 +92,17 @@ export function BarraLateral({
           <Logo claro />
         </Link>
       </div>
-      <div className="relative mx-3 rounded-lg border border-white/[0.06] bg-white/[0.03] px-3 py-2">
-        <p className="text-[11px] uppercase tracking-wider text-white/35">Empresa</p>
-        <p className="truncate text-[13px] font-medium text-white/90">{empresa}</p>
+      <div className="relative mx-3 flex items-center gap-3 rounded-lg border border-white/[0.06] bg-white/[0.03] px-3 py-2">
+        {logoUrl && (
+          <span className="flex h-9 w-12 shrink-0 items-center justify-center overflow-hidden rounded-md bg-white p-1">
+            {/* eslint-disable-next-line @next/next/no-img-element -- logo de la empresa */}
+            <img src={logoUrl} alt="" className="max-h-full max-w-full object-contain" />
+          </span>
+        )}
+        <div className="min-w-0">
+          <p className="text-[11px] uppercase tracking-wider text-white/35">Empresa</p>
+          <p className="truncate text-[13px] font-medium text-white/90">{empresa}</p>
+        </div>
       </div>
       <div className="relative flex flex-1 flex-col overflow-hidden">
         <Enlaces alertas={alertas} />

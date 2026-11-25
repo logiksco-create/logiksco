@@ -6,6 +6,7 @@ import { ArrowRight, Check, LoaderCircle, Rocket, UserPlus } from "lucide-react"
 import { TIPOS_SERVICIO, type Empresa } from "@/domain/types";
 import { guardarPasoBienvenida, invitarUsuario } from "@/server/acciones/configuracion";
 import { Boton, Campo, Entrada, Tarjeta } from "@/components/ui";
+import { SubidorLogo } from "./subidor-logo";
 import { cn } from "@/lib/formato";
 
 const PASOS = ["Tu empresa", "Consecutivos", "Servicios", "Tu equipo"];
@@ -54,6 +55,9 @@ export function Bienvenida({ empresa }: { empresa: Empresa }) {
         {paso === 1 && (
           <form action={a1} className="space-y-4">
             <h2 className="font-semibold">¿Cómo se ve tu empresa?</h2>
+            <Campo etiqueta="Logo (opcional)">
+              <SubidorLogo logoUrl={empresa.logoUrl} razonSocial={empresa.razonSocial} editable />
+            </Campo>
             <Campo etiqueta="Razón social">
               <Entrada name="razonSocial" defaultValue={empresa.razonSocial} required />
             </Campo>

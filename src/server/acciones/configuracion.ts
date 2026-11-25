@@ -160,3 +160,50 @@ export async function guardarPasoBienvenida(paso: number, _: R, formData: FormDa
     return "Guardado";
   });
 }
+
+/* ---------------- Logo de la empresa ---------------- */
+
+const metaLogo = z.object({
+  nombre: z.string().min(1).max(200),
+  mime: z.string().max(60),
+  tamano: z.number().int().positive(),
+});
+
+export async function prepararLogo(m: z.input<typeof metaLogo>) {
+  try {
+    const repo = await contexto();
+    return { ok: true as const, datos: await repo.prepararSubidaLogo(metaLogo.parse(m)) };
+  } catch (e) {
+    if (e instanceof ErrorNegocio) return { ok: false as const, error: e.message };
+    if (e instanceof z.ZodError) return { ok: false as const, error: "Datos del logo inválidos" };
+    console.error(e);
+    return { ok: false as const, error: "No se pudo preparar la subida del logo" };
+  }
+}
+
+export async function guardarLogo(m: z.input<typeof metaLogo> & { ruta: string }): Promise<R> {
+  return intentar(async () => {
+    const repo = await contexto();
+    const d = metaLogo.extend({ ruta: z.string().min(5).max(200) }).parse(m);
+    await repo.guardarLogo(d);
+    return "Logo actualizado";
+  });
+}
+
+export async function subirLogoDemo(formData: FormData): Promise<R> {
+  return intentar(async () => {
+    const repo = await contexto();
+    const archivo = formData.get("logo");
+    if (!(archivo instanceof File)) throw new ErrorNegocio("Selecciona una imagen");
+    await repo.guardarLogo({ mime: archivo.type, tamano: archivo.size, bytes: new Uint8Array(await archivo.arrayBuffer()) });
+    return "Logo actualizado";
+  });
+}
+
+export async function quitarLogo(): Promise<R> {
+  return intentar(async () => {
+    const repo = await contexto();
+    await repo.quitarLogo();
+    return "Logo eliminado";
+  });
+}

@@ -37,6 +37,7 @@ export async function notificar(
         html: plantillaCorreo({
           empresa: repo.empresa.razonSocial,
           color: repo.empresa.colorPrimario,
+          logoUrl: repo.empresa.logoUrl,
           titulo: n.titulo,
           parrafos: n.parrafos,
           boton: n.boton,

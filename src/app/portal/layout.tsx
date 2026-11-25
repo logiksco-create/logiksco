@@ -44,7 +44,13 @@ export default async function PortalLayout({ children }: LayoutProps<"/portal">)
           style={{ background: repo.empresa.colorPrimario }}
         />
         <div className="relative mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-3 px-4 py-4 sm:px-6">
-          <Link href="/portal" className="text-lg font-semibold tracking-tight">
+          <Link href="/portal" className="flex items-center gap-3 text-lg font-semibold tracking-tight">
+            {repo.empresa.logoUrl && (
+              <span className="flex h-10 items-center rounded-lg bg-white px-2 py-1">
+                {/* eslint-disable-next-line @next/next/no-img-element -- logo de la empresa */}
+                <img src={repo.empresa.logoUrl} alt="" className="max-h-full max-w-32 object-contain" />
+              </span>
+            )}
             {repo.empresa.razonSocial}
           </Link>
           <nav className="order-3 flex w-full gap-1 overflow-x-auto text-sm sm:order-none sm:w-auto">

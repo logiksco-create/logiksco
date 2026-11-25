@@ -84,7 +84,15 @@ export default async function VistaCliente({ params }: PageProps<"/c/[token]">) 
         <div className="pointer-events-none absolute -top-40 right-0 size-[500px] rounded-full bg-[#3b5bfd]/25 blur-3xl" />
         <div className="relative mx-auto max-w-5xl px-4 pt-6 pb-24 sm:px-6">
           <div className="flex items-center justify-between">
-            <p className="text-lg font-semibold tracking-tight">{empresa.razonSocial}</p>
+            <div className="flex items-center gap-3">
+              {empresa.logoUrl && (
+                <span className="flex h-11 items-center rounded-lg bg-white px-2.5 py-1.5">
+                  {/* eslint-disable-next-line @next/next/no-img-element -- logo de la empresa */}
+                  <img src={empresa.logoUrl} alt="" className="max-h-full max-w-36 object-contain" />
+                </span>
+              )}
+              <p className="text-lg font-semibold tracking-tight">{empresa.razonSocial}</p>
+            </div>
             <p className="text-xs text-white/50">NIT {empresa.nit}</p>
           </div>
           <p className="mt-10 text-sm text-white/60">Cotización para {cliente.razonSocial}</p>

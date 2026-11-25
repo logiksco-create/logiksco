@@ -1,5 +1,6 @@
 import "server-only";
-import { Document, Page, StyleSheet, Text, View, renderToBuffer } from "@react-pdf/renderer";
+import { Document, Image, Page, StyleSheet, Text, View, renderToBuffer } from "@react-pdf/renderer";
+import { logoParaPdf } from "./logo";
 import type { Cotizacion, Empresa, Tercero } from "@/domain/types";
 import { BLOQUES, TIPOS_SERVICIO, type Bloque } from "@/domain/types";
 import { convertir, totalesConceptos } from "@/domain/cotizacion";
@@ -43,11 +44,13 @@ export function DocumentoCotizacion({
   empresa,
   cliente,
   enlace,
+  logo,
 }: {
   q: Cotizacion;
   empresa: Empresa;
   cliente: Tercero;
   enlace?: string;
+  logo?: { data: Buffer; format: "png" | "jpg" };
 }) {
   const mon = q.monedaPresentacion;
   const total = totalesConceptos(q.conceptos, mon, q.trm).venta;
@@ -59,6 +62,7 @@ export function DocumentoCotizacion({
       <Page size="LETTER" style={s.pagina}>
         <View style={s.cabecera}>
           <View>
+            {logo && <Image src={logo} style={{ maxHeight: 40, maxWidth: 170, objectFit: "contain", marginBottom: 8 }} />}
             <Text style={s.empresa}>{empresa.razonSocial}</Text>
             <Text style={s.sub}>NIT {empresa.nit}{empresa.ciudad ? ` · ${empresa.ciudad}` : ""}</Text>
           </View>
@@ -149,6 +153,7 @@ export function DocumentoCotizacion({
   );
 }
 
-export function pdfCotizacion(props: Parameters<typeof DocumentoCotizacion>[0]) {
-  return renderToBuffer(<DocumentoCotizacion {...props} />);
+export async function pdfCotizacion(props: Omit<Parameters<typeof DocumentoCotizacion>[0], "logo">) {
+  const logo = await logoParaPdf(props.empresa.logoUrl);
+  return renderToBuffer(<DocumentoCotizacion {...props} logo={logo} />);
 }

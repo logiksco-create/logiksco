@@ -211,6 +211,7 @@ export async function abrirDO(cotizacionId: string) {
           html: plantillaCorreo({
             empresa: repo.empresa.razonSocial,
             color: repo.empresa.colorPrimario,
+            logoUrl: repo.empresa.logoUrl,
             titulo: `Te asignaron el DO ${op.consecutivo}`,
             parrafos: [
               `${repo.usuario.nombre} abrió el DO ${op.consecutivo} para ${cliente?.razonSocial ?? "el cliente"} (${op.origen} – ${op.destino}).`,

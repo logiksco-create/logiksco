@@ -65,3 +65,21 @@ export function tamanoLegible(bytes: number): string {
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
   return `${(bytes / 1024 / 1024).toFixed(1).replace(".", ",")} MB`;
 }
+
+/** Logo de la empresa: PNG o JPG (lo que el PDF sabe dibujar), máx. 1 MB. */
+export const LOGO_MIME = ["image/png", "image/jpeg"] as const;
+export const LOGO_TAMANO_MAXIMO = 1024 * 1024;
+
+export function validarLogo(a: { mime: string; tamano: number }): string | null {
+  if (!(LOGO_MIME as readonly string[]).includes(a.mime)) return "El logo debe ser PNG o JPG";
+  if (a.tamano <= 0) return "El archivo está vacío";
+  if (a.tamano > LOGO_TAMANO_MAXIMO) return "El logo supera 1 MB";
+  return null;
+}
+
+/** Verifica la firma real del archivo (no solo la extensión). */
+export function esImagenValida(bytes: Uint8Array): "image/png" | "image/jpeg" | null {
+  if (bytes.length > 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) return "image/png";
+  if (bytes.length > 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "image/jpeg";
+  return null;
+}

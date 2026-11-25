@@ -13,6 +13,11 @@ const eslintConfig = defineConfig([
       ],
     },
   },
+  {
+    // <Image> de @react-pdf/renderer no es un <img> HTML: no admite alt.
+    files: ["src/server/pdf/**"],
+    rules: { "jsx-a11y/alt-text": "off" },
+  },
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:

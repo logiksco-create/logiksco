@@ -16,13 +16,19 @@ export function plantillaCorreo(o: {
   parrafos: string[];
   boton?: { texto: string; url: string };
   pie?: string;
+  /** Logo público (https). Los data: URI se omiten: muchos clientes de correo los bloquean. */
+  logoUrl?: string;
 }): string {
   const color = /^#[0-9a-f]{6}$/i.test(o.color) ? o.color : "#3b5bfd";
   return `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"></head>
 <body style="margin:0;background:#f5f6fa;font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;color:#0d1326">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f5f6fa;padding:24px 12px"><tr><td align="center">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #e4e7ef">
-<tr><td style="background:#0a0f1f;padding:20px 28px;color:#ffffff;font-size:16px;font-weight:600">${esc(o.empresa)}</td></tr>
+${
+  o.logoUrl?.startsWith("https://")
+    ? `<tr><td style="background:#ffffff;padding:20px 28px;border-bottom:1px solid #e4e7ef"><img src="${esc(o.logoUrl)}" alt="${esc(o.empresa)}" height="40" style="display:block;height:40px;max-width:200px;border:0"></td></tr>`
+    : `<tr><td style="background:#0a0f1f;padding:20px 28px;color:#ffffff;font-size:16px;font-weight:600">${esc(o.empresa)}</td></tr>`
+}
 <tr><td style="height:3px;background:${color}"></td></tr>
 <tr><td style="padding:28px">
 <h1 style="margin:0 0 16px;font-size:20px;line-height:1.3">${esc(o.titulo)}</h1>

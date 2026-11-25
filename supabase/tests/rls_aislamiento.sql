@@ -167,3 +167,17 @@ do $$ begin
 end $$;
 reset role;
 \echo 'OK: contactos solo los borra su empresa'
+
+-- Logos: el admin de A sube en su carpeta; B no puede subir en la de A.
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000a';
+insert into storage.objects (bucket_id, name) values ('logos', :'empresa_a' || '/logo-1.png');
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000b';
+\set ON_ERROR_STOP off
+insert into storage.objects (bucket_id, name) values ('logos', :'empresa_a' || '/logo-intruso.png');
+\set ON_ERROR_STOP on
+reset role;
+do $$ begin
+  if (select count(*) from storage.objects where bucket_id = 'logos') <> 1 then raise exception 'FUGA: B subió un logo en la carpeta de A'; end if;
+end $$;
+\echo 'OK: logos solo los sube el admin de la empresa'

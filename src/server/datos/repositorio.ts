@@ -46,6 +46,11 @@ export interface Repositorio {
   agregarCatalogo(e: Omit<EntradaCatalogo, "id" | "base">): Promise<void>;
   eliminarCatalogo(id: string): Promise<void>;
 
+  /** Logo de la empresa (RF-54). Solo Administrador. */
+  prepararSubidaLogo(archivo: { nombre: string; mime: string; tamano: number }): Promise<SubidaFirmada | null>;
+  guardarLogo(archivo: { ruta?: string; bytes?: Uint8Array; mime: string; tamano: number }): Promise<void>;
+  quitarLogo(): Promise<void>;
+
   /** Configuración de la empresa (RF-54). Solo Administrador. */
   actualizarEmpresa(cambios: CambiosEmpresa): Promise<void>;
   invitarUsuario(datos: { correo: string; nombre: string; roles: Rol[] }): Promise<void>;
