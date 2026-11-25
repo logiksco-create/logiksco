@@ -7,6 +7,8 @@ import { Estado170Badge, Situacion170Badge } from "@/components/estados";
 import { Revision170 } from "@/components/app/revision-170";
 import { Insignia, Tabla, Tarjeta, TarjetaEncabezado, Td, Th, Vacio } from "@/components/ui";
 import { dinero, fecha, fechaHora } from "@/lib/formato";
+import { TIPOS_SOPORTE_170 } from "@/domain/types";
+import { ListaArchivos } from "@/components/app/lista-archivos";
 
 export const metadata = { title: "Circular 170" };
 
@@ -16,6 +18,7 @@ export default async function Cumplimiento() {
   const clientes = terceros.filter((t) => t.tipo === "cliente");
   const filas = clientes.map((t) => ({ t, s: situacionCliente(formularios, t.id, hoy) }));
   const enRevision = formularios.filter((f) => f.estado === "en_revision");
+  const soportes = await Promise.all(enRevision.map((f) => repo.soportes170(f.id)));
   const puedeRevisar = tieneRol(repo, "cumplimiento");
   const nombre = (id: string) => terceros.find((t) => t.id === id)?.razonSocial ?? "—";
   const n = (tipo: string) => filas.filter((f) => f.s.tipo === tipo).length;
@@ -43,7 +46,7 @@ export default async function Cumplimiento() {
           <Vacio icono={<FileCheck2 />} titulo="Nada pendiente" descripcion="Los formularios que envíen los clientes aparecerán aquí." />
         ) : (
           <ul className="divide-y divide-border border-t border-border">
-            {enRevision.map((f) => (
+            {enRevision.map((f, i) => (
               <li key={f.id} className="grid gap-5 p-5 lg:grid-cols-[1fr_380px]">
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
@@ -71,6 +74,14 @@ export default async function Cumplimiento() {
                       </div>
                     ))}
                   </dl>
+                  <p className="mt-5 mb-2 text-xs font-medium tracking-wide text-subtle uppercase">Soportes</p>
+                  <ListaArchivos
+                    archivos={soportes[i]}
+                    clase="170"
+                    tipos={TIPOS_SOPORTE_170}
+                    descargable={puedeRevisar}
+                    vacio="El cliente aún no ha cargado soportes."
+                  />
                 </div>
                 {puedeRevisar && (
                   <div className="lg:border-l lg:border-border lg:pl-5">
@@ -93,6 +104,7 @@ export default async function Cumplimiento() {
               <Th className="hidden sm:table-cell">Aprobado</Th>
               <Th className="hidden sm:table-cell">Vigente hasta</Th>
               <Th className="hidden md:table-cell">Versiones</Th>
+              <Th className="w-24">Expediente</Th>
             </tr>
           </thead>
           <tbody>
@@ -111,6 +123,15 @@ export default async function Cumplimiento() {
                   <Td className="hidden text-[13px] text-muted sm:table-cell">{fecha(ref?.aprobadoEl)}</Td>
                   <Td className="hidden text-[13px] text-muted sm:table-cell">{fecha(ref?.vigenteHasta)}</Td>
                   <Td className="hidden tabular md:table-cell">{fs.length || "—"}</Td>
+                  <Td>
+                    {ref ? (
+                      <a href={`/app/cumplimiento/${ref.id}/pdf`} target="_blank" rel="noopener" className="text-[13px] font-medium text-brand-fg hover:underline">
+                        PDF v{ref.version}
+                      </a>
+                    ) : (
+                      <span className="text-xs text-subtle">—</span>
+                    )}
+                  </Td>
                 </tr>
               );
             })}

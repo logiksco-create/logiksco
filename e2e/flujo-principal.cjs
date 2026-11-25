@@ -63,7 +63,7 @@ const B = process.env.BASE_URL ?? 'http://localhost:3000';
 
   // 7. Enviar borrador → enlace
   await p.getByRole('button', { name: 'Enviar al cliente' }).click();
-  await p.getByText('Enlace seguro de aceptación').waitFor(); paso('enviada con enlace');
+  await p.getByText(/enlace seguro de aceptación/i).waitFor(); paso('enviada con enlace');
   // 8. Nueva cotización
   await p.goto(B + '/app/cotizaciones/nueva');
   await p.getByLabel('Cliente o prospecto').selectOption('t-agro');

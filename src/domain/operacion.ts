@@ -70,3 +70,15 @@ export function utilidadOperacion(op: Operacion) {
   const real = totalesConceptos(conReales, "COP", op.trm);
   return { cotizada, real };
 }
+
+/** Estado del DO según los hitos con fecha real. Nunca retrocede ni toca un DO cerrado. */
+export function estadoSegunHitos(op: Operacion): Operacion["estado"] {
+  if (op.estado === "cerrado") return "cerrado";
+  const hecho = (...n: string[]) => op.hitos.some((h) => n.includes(h.nombre) && h.real);
+  const orden: Operacion["estado"][] = ["abierto", "en_transito", "en_destino", "entregado"];
+  let nuevo: Operacion["estado"] = "abierto";
+  if (hecho("Salida")) nuevo = "en_transito";
+  if (hecho("Arribo")) nuevo = "en_destino";
+  if (hecho("Entrega", "Cumplido")) nuevo = "entregado";
+  return orden.indexOf(nuevo) > orden.indexOf(op.estado) ? nuevo : op.estado;
+}

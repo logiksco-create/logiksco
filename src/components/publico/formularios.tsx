@@ -89,16 +89,24 @@ export function Exito({ titulo, texto }: { titulo: string; texto: string }) {
   );
 }
 
+type Accion170 = (previo: unknown, datos: FormData) => Promise<{ ok: true } | { ok: false; error: string } | null>;
+
 export function Formulario170({
   token,
   intro,
   previo,
+  accion: accionPropia,
 }: {
-  token: string;
+  token?: string;
   intro?: boolean;
   previo?: Partial<Datos170>;
+  /** Acción alternativa (portal); por defecto, la del enlace público. */
+  accion?: Accion170;
 }) {
-  const [estado, accion, pendiente] = useActionState(enviarFormulario170.bind(null, token), null);
+  const [estado, accion, pendiente] = useActionState<Awaited<ReturnType<Accion170>>, FormData>(
+    accionPropia ?? (enviarFormulario170.bind(null, token ?? "") as Accion170),
+    null,
+  );
 
   if (estado?.ok) {
     return (

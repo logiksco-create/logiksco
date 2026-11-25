@@ -26,12 +26,9 @@ const principal = [
   { href: "/app/clientes", etiqueta: "Clientes", icono: Building2 },
   { href: "/app/cumplimiento", etiqueta: "Circular 170", icono: ShieldCheck },
   { href: "/app/alertas", etiqueta: "Alertas", icono: Bell, contador: "alertas" as const },
-];
-
-const proximamente = [
-  { etiqueta: "Facturación", icono: Receipt },
-  { etiqueta: "Reportes", icono: ChartColumn },
-  { etiqueta: "Configuración", icono: Settings },
+  { href: "/app/facturacion", etiqueta: "Facturación", icono: Receipt },
+  { href: "/app/reportes", etiqueta: "Reportes", icono: ChartColumn },
+  { href: "/app/configuracion", etiqueta: "Configuración", icono: Settings },
 ];
 
 function Enlaces({ alertas, alNavegar }: { alertas: number; alNavegar?: () => void }) {
@@ -71,22 +68,6 @@ function Enlaces({ alertas, alNavegar }: { alertas: number; alNavegar?: () => vo
         })}
       </ul>
 
-      <div>
-        <p className="px-3 pb-2 text-[11px] font-medium uppercase tracking-wider text-white/30">
-          Próximamente
-        </p>
-        <ul className="space-y-0.5">
-          {proximamente.map(({ etiqueta, icono: Icono }) => (
-            <li
-              key={etiqueta}
-              className="flex h-9 cursor-not-allowed items-center gap-3 rounded-lg px-3 text-[13.5px] text-white/30"
-            >
-              <Icono className="size-[17px]" />
-              {etiqueta}
-            </li>
-          ))}
-        </ul>
-      </div>
     </nav>
   );
 }

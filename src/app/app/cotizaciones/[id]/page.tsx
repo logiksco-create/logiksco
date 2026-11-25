@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, ExternalLink, Pencil, ShieldAlert, ShieldCheck, TriangleAlert } from "lucide-react";
+import { ArrowLeft, Download, ExternalLink, Pencil, ShieldAlert, ShieldCheck, TriangleAlert } from "lucide-react";
 import { contexto } from "@/server/contexto";
 import { modoDemo } from "@/lib/env";
 import { estadoEfectivo, tarifasVencidas, totalesConcepto, totalesCotizacion, totalesPorBloque } from "@/domain/cotizacion";
@@ -16,7 +16,7 @@ import {
   DuplicarParaCliente,
 } from "@/components/app/acciones-cotizacion";
 import { Comunicaciones, Historial } from "@/components/app/linea-tiempo";
-import { BotonLink, Tabla, Tarjeta, TarjetaEncabezado, Td, Th } from "@/components/ui";
+import { BotonLink, clasesBoton, Tabla, Tarjeta, TarjetaEncabezado, Td, Th } from "@/components/ui";
 import { cn, dinero, fecha, numero, porcentaje } from "@/lib/formato";
 
 export default async function DetalleCotizacion({ params }: PageProps<"/app/cotizaciones/[id]">) {
@@ -79,6 +79,9 @@ export default async function DetalleCotizacion({ params }: PageProps<"/app/coti
                 <ExternalLink /> Vista del cliente
               </BotonLink>
             )}
+            <a href={`/app/cotizaciones/${q.id}/pdf`} target="_blank" rel="noopener" className={clasesBoton({ variante: "secundario", tamano: "sm" })}>
+              <Download /> PDF
+            </a>
             {q.estado !== "aceptada" && (
               <BotonLink href={`/app/cotizaciones/${q.id}/editar`} variante="secundario" tamano="sm">
                 <Pencil /> Editar

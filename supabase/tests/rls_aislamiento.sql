@@ -74,3 +74,79 @@ set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000b';
 select public.abrir_operacion(:'cot', '00000000-0000-0000-0000-00000000000b', array['x']);
 \set ON_ERROR_STOP on
 \echo 'OK: RPC transaccionales verificadas'
+
+-- Archivos: A (admin) sube y lee documentos de su DO; B no los ve ni puede
+-- subir en la carpeta de A. Soportes 170: solo Cumplimiento/Admin.
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000a';
+insert into storage.objects (bucket_id, name) values ('documentos', :'empresa_a' || '/do/' || :'op' || '/bl.pdf');
+do $$ begin
+  if (select count(*) from storage.objects) <> 1 then raise exception 'A no ve su documento'; end if;
+end $$;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000b';
+do $$ begin
+  if (select count(*) from storage.objects) <> 0 then raise exception 'FUGA: B ve documentos de A'; end if;
+end $$;
+\set ON_ERROR_STOP off
+insert into storage.objects (bucket_id, name) values ('documentos', :'empresa_a' || '/do/x/intruso.pdf');
+\set ON_ERROR_STOP on
+reset role;
+insert into storage.objects (bucket_id, name) values ('documentos', :'empresa_a' || '/170/f/rut.pdf');
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000b';
+do $$ begin
+  if (select count(*) from storage.objects) <> 0 then raise exception 'FUGA: B ve soportes 170 de A'; end if;
+end $$;
+\echo 'OK: archivos aislados por empresa y rol'
+
+-- Comunicaciones: solo se permite registrar entrega/apertura.
+reset role;
+insert into public.comunicaciones (empresa_id, direccion, de, para, asunto) values (:'empresa_a', 'saliente', 'a@x.co', '{b@x.co}', 'Prueba') ;
+update public.comunicaciones set abierto_el = now() where asunto = 'Prueba';
+\set ON_ERROR_STOP off
+update public.comunicaciones set asunto = 'Alterado' where asunto = 'Prueba';
+delete from public.comunicaciones where asunto = 'Prueba';
+\set ON_ERROR_STOP on
+do $$ begin
+  if (select count(*) from public.comunicaciones where asunto = 'Prueba' and abierto_el is not null) <> 1 then
+    raise exception 'comunicación alterada o sin acuse';
+  end if;
+end $$;
+\echo 'OK: trazabilidad inmutable salvo acuses'
+
+-- Llave de Megafoco: el admin la guarda; nadie autenticado la lee; B no
+-- puede guardarla en la empresa de A.
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000a';
+select public.guardar_llave_megafoco(:'empresa_a', 'llave-secreta-de-prueba-123');
+\set ON_ERROR_STOP off
+select public.llave_megafoco(:'empresa_a');
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000b';
+select public.guardar_llave_megafoco(:'empresa_a', 'llave-del-intruso-1234567');
+\set ON_ERROR_STOP on
+reset role;
+set role service_role;
+do $$ begin
+  if (select public.llave_megafoco(id) from public.empresas where nit = '901234567') <> 'llave-secreta-de-prueba-123' then
+    raise exception 'llave alterada o ilegible por el servidor';
+  end if;
+end $$;
+reset role;
+\echo 'OK: llave de Megafoco protegida'
+
+-- Portal: un usuario del cliente no ve ninguna tabla de la empresa.
+reset role;
+insert into auth.users values ('00000000-0000-0000-0000-00000000000c', 'cliente@x.co');
+insert into public.usuarios_cliente (empresa_id, tercero_id, usuario_id, nombre, correo)
+  values (:'empresa_a', :'cliente_a', '00000000-0000-0000-0000-00000000000c', 'Cliente', 'cliente@x.co');
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000c';
+do $$ begin
+  if (select count(*) from public.cotizaciones) + (select count(*) from public.cotizacion_conceptos)
+     + (select count(*) from public.terceros) + (select count(*) from public.operaciones)
+     + (select count(*) from public.facturas) + (select count(*) from public.formularios_170) <> 0 then
+    raise exception 'FUGA: el usuario del portal lee tablas de la empresa';
+  end if;
+  if (select count(*) from public.usuarios_cliente) <> 1 then raise exception 'el cliente no ve su acceso'; end if;
+end $$;
+reset role;
+\echo 'OK: portal sin acceso directo a datos de la empresa'

@@ -9,6 +9,9 @@ import { modoDemo, env } from "@/lib/env";
 import { COOKIE_USUARIO_DEMO, contexto, tieneRol } from "../contexto";
 import { ErrorNegocio } from "../datos/errores";
 import { reiniciarDemo } from "../datos/demo/repositorio-demo";
+import { notificar } from "../notificaciones";
+import { pdfCotizacion } from "../pdf/cotizacion";
+import { fecha } from "@/lib/formato";
 
 /**
  * Server Actions de la aplicación autenticada. Cada acción:
@@ -139,17 +142,24 @@ export async function enviarCotizacion(id: string) {
     const token = await repo.emitirEnlace(id);
     const enlace = `${env.appUrl}/c/${token}`;
     await repo.cambiarEstadoCotizacion(id, "enviada", `Enviada a ${contacto.correo}`);
-    // El envío real se hace con Resend desde un worker; aquí queda la trazabilidad.
-    await repo.registrarComunicacion({
+    const pdf = await pdfCotizacion({ q, empresa: repo.empresa, cliente: cliente!, enlace });
+    const { enviado } = await notificar(repo, {
       entidad: "cotizacion",
       entidadId: id,
-      direccion: "saliente",
-      asunto: `Cotización ${q.consecutivo} · ${q.mercancia.descripcion}`,
       para: [contacto.correo],
-      resumen: `Envío de cotización con enlace seguro de aceptación: ${enlace}`,
+      asunto: `Cotización ${q.consecutivo} · ${q.mercancia.descripcion}`,
+      titulo: `Tu cotización ${q.origen} – ${q.destino}`,
+      parrafos: [
+        `Hola ${contacto.nombre.split(" ")[0]},`,
+        `Te compartimos la cotización ${q.consecutivo} para ${q.mercancia.descripcion}. Es válida hasta el ${fecha(q.vigenteHasta)}.`,
+        "Puedes revisarla y aceptarla en línea desde el botón. También va adjunta en PDF.",
+      ],
+      boton: { texto: "Ver y aceptar cotización", url: enlace },
+      adjuntos: [{ nombre: `${q.consecutivo}-v${q.version}.pdf`, contenido: pdf }],
+      resumen: `Envío de cotización con PDF y enlace seguro de aceptación: ${enlace}`,
     });
     revalidatePath(`/app/cotizaciones/${id}`);
-    return { enlace };
+    return { enlace, enviado };
   });
 }
 
@@ -174,12 +184,18 @@ export async function abrirDO(cotizacionId: string) {
     const op = await repo.abrirOperacion(cotizacionId);
     // RF-24: correo automático de bienvenida al cliente con su número de DO.
     const cliente = await repo.tercero(op.clienteId);
-    await repo.registrarComunicacion({
+    const responsable = (await repo.usuarios()).find((u) => u.id === op.responsableId);
+    await notificar(repo, {
       entidad: "operacion",
       entidadId: op.id,
-      direccion: "saliente",
+      para: cliente?.contactos.map((c) => c.correo) ?? [],
       asunto: `Bienvenido a su operación ${op.consecutivo}`,
-      para: cliente?.contactos.map((c) => c.correo).filter(Boolean) ?? [],
+      titulo: `Tu operación ${op.consecutivo} está en marcha`,
+      parrafos: [
+        `Abrimos tu operación ${op.consecutivo} (${op.origen} – ${op.destino}).`,
+        `${responsable ? `${responsable.nombre} es tu responsable operativo` : "Nuestro equipo de operaciones te acompañará"} y te avisará cada novedad por este medio.`,
+        "Usa este número de operación en tus comunicaciones con nosotros.",
+      ],
       resumen: "Correo automático de bienvenida con número de DO y responsable operativo.",
     });
     return op.id;
@@ -219,12 +235,13 @@ export async function notificarCliente(operacionId: string, asunto: string, mens
     const op = await repo.operacion(operacionId);
     if (!op) throw new ErrorNegocio("El DO no existe");
     const cliente = await repo.tercero(op.clienteId);
-    await repo.registrarComunicacion({
+    await notificar(repo, {
       entidad: "operacion",
       entidadId: operacionId,
-      direccion: "saliente",
-      asunto: datos.asunto,
       para: cliente?.contactos.map((c) => c.correo) ?? [],
+      asunto: datos.asunto,
+      titulo: `Novedad de tu operación ${op.consecutivo}`,
+      parrafos: [datos.mensaje],
       resumen: datos.mensaje,
     });
     revalidatePath(`/app/operaciones/${operacionId}`);
@@ -247,6 +264,25 @@ export async function revisarFormulario(
       throw new ErrorNegocio("Indica las observaciones para el cliente");
     }
     await repo.revisarFormulario170(id, decision, observaciones?.trim());
+    // RF-17: el cliente recibe el resultado (y las observaciones si se devuelve).
+    const f = (await repo.formularios170()).find((x) => x.id === id);
+    const cliente = f && (await repo.tercero(f.terceroId));
+    if (cliente) {
+      const textos = {
+        aprobado: ["Tu formulario de conocimiento del cliente (Circular 170) fue aprobado. Ya podemos operar tus cargas."],
+        devuelto: ["Revisamos tu formulario de conocimiento del cliente (Circular 170) y necesitamos algunos ajustes:", (observaciones ?? "").trim(), "Tu comercial te enviará el enlace para corregirlo en línea."],
+        rechazado: ["Tu formulario de conocimiento del cliente (Circular 170) no fue aprobado.", (observaciones ?? "").trim()],
+      }[decision];
+      await notificar(repo, {
+        entidad: "tercero",
+        entidadId: cliente.id,
+        para: cliente.contactos.map((c) => c.correo),
+        asunto: `Circular 170: formulario ${decision}`,
+        titulo: `Formulario 170 ${decision}`,
+        parrafos: textos,
+        resumen: textos.join(" "),
+      });
+    }
     revalidatePath("/app", "layout");
   });
 }

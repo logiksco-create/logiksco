@@ -2,27 +2,39 @@ import "server-only";
 import { createHash, randomBytes } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
+  Archivo,
   Comunicacion,
   Concepto,
   Cotizacion,
   Datos170,
   Empresa,
   EstadoCotizacion,
+  Factura,
   Formulario170,
   Hito,
   Operacion,
+  Rol,
   Tercero,
   Usuario,
 } from "@/domain/types";
 import { duplicarCotizacion, puedeTransicionar } from "@/domain/cotizacion";
-import { HITOS_POR_TIPO } from "@/domain/operacion";
+import { HITOS_POR_TIPO, estadoSegunHitos } from "@/domain/operacion";
 import { habilitadoParaDO, situacion170, vigenciaAlAprobar } from "@/domain/cumplimiento";
 import { hoyISO } from "@/domain/fechas";
+import { rutaArchivo, rutaPertenece, validarArchivo } from "@/domain/archivos";
+import { cotizacionParaCliente, operacionParaCliente } from "@/domain/portal";
+import { correo } from "../../correo";
+import { plantillaCorreo } from "../../correo/plantilla";
 import type {
+  CambiosEmpresa,
+  Descarga,
+  MetaArchivo,
+  NuevoArchivo,
   DatosCotizacion,
   DecisionCliente,
   NuevoTercero,
   Repositorio,
+  RepositorioPortal,
   RepositorioPublico,
   VistaPublica,
 } from "../repositorio";
@@ -199,6 +211,91 @@ const SELECT_TERCERO = "*, contactos(*), acuerdos_comerciales(*)";
 const SELECT_COTIZACION = "*, cotizacion_conceptos(*, proveedor:terceros(razon_social))";
 const SELECT_OPERACION = "*, do_conceptos(*), do_hitos(*)";
 
+const BUCKET = "documentos";
+
+const mapFactura = (r: Fila): Factura => ({
+  id: r.id,
+  empresaId: r.empresa_id,
+  clienteId: r.cliente_id,
+  estado: r.estado,
+  moneda: r.moneda,
+  trm: Number(r.trm ?? 1),
+  lineas: r.conceptos ?? [],
+  operaciones: r.operaciones ?? [],
+  creadoEl: r.creado_el,
+  megafocoId: r.megafoco_id ?? undefined,
+  numero: r.numero ?? undefined,
+  cufe: r.cufe ?? undefined,
+  pdfUrl: r.pdf_url ?? undefined,
+  xmlUrl: r.xml_url ?? undefined,
+  error: r.error ?? undefined,
+});
+
+const mapArchivo = (r: Fila): Archivo => ({
+  id: r.id,
+  tipo: r.tipo,
+  nombre: r.nombre ?? r.storage_path?.split("/").pop() ?? "archivo",
+  mime: r.mime ?? "application/octet-stream",
+  tamano: Number(r.tamano ?? 0),
+  creadoEl: r.creado_el,
+});
+
+function exigirValido(a: MetaArchivo) {
+  const error = validarArchivo(a);
+  if (error) throw new ErrorNegocio(error);
+}
+
+/**
+ * Invita a un usuario y devuelve su id. Con correo propio (Resend) envía la
+ * invitación con la marca de la empresa y un enlace verificable en el
+ * servidor; si no, usa el correo de Supabase (canje en /auth/invitacion).
+ * Si el correo ya tiene cuenta, solo devuelve su id.
+ */
+async function invitarCuenta(
+  sv: SupabaseClient,
+  d: { correo: string; nombre: string; empresa: Empresa; urlApp: string; portal?: boolean },
+): Promise<string> {
+  const datos = { nombre: d.nombre, ...(d.portal ? { portal: true } : {}) };
+  if (correo().activo) {
+    const { data, error } = await sv.auth.admin.generateLink({
+      type: "invite",
+      email: d.correo,
+      options: { data: datos, redirectTo: `${d.urlApp}/auth/confirmar` },
+    });
+    if (data?.user && data.properties?.hashed_token) {
+      const enlace = `${d.urlApp}/auth/confirmar?token_hash=${data.properties.hashed_token}&type=invite`;
+      await correo().enviar({
+        para: [d.correo],
+        asunto: `${d.empresa.razonSocial} te invitó a ${d.portal ? "su portal de clientes" : "LOGIKS.CO"}`,
+        nombreRemitente: d.empresa.razonSocial,
+        html: plantillaCorreo({
+          empresa: d.empresa.razonSocial,
+          color: d.empresa.colorPrimario,
+          titulo: `Hola ${d.nombre.split(" ")[0]}, te invitaron`,
+          parrafos: [
+            d.portal
+              ? "Desde el portal verás tus cotizaciones, el seguimiento de tus cargas, documentos y facturas."
+              : `${d.empresa.razonSocial} te invitó a trabajar en LOGIKS.CO.`,
+            "Acepta la invitación y define tu contraseña. El enlace vence pronto y solo sirve una vez.",
+          ],
+          boton: { texto: "Aceptar invitación", url: enlace },
+        }),
+      });
+      return data.user.id;
+    }
+    if (error && !/already|registered|exists/i.test(error.message)) throw new Error(error.message);
+  } else {
+    const inv = await sv.auth.admin.inviteUserByEmail(d.correo, {
+      redirectTo: `${d.urlApp}/auth/invitacion`,
+      data: datos,
+    });
+    if (inv.data?.user) return inv.data.user.id;
+  }
+  const { data } = await sv.rpc("usuario_por_correo", { p_correo: d.correo });
+  if (!data) throw new ErrorNegocio("No se pudo enviar la invitación. Revisa el correo.");
+  return data as string;
+}
+
 export const hashToken = (token: string) =>
   createHash("sha256").update(token).digest("hex");
 
@@ -211,16 +308,112 @@ export class SupabaseRepositorio implements Repositorio {
     private readonly db: SupabaseClient,
     readonly empresa: Empresa,
     readonly usuario: Usuario,
+    /** Cliente con llave de servicio, solo para invitar usuarios. */
+    private readonly servicio: () => SupabaseClient,
+    private readonly urlApp: string,
   ) {}
 
   async usuarios(): Promise<Usuario[]> {
     const { data, error } = await this.db
       .from("usuarios_empresa")
-      .select("usuario_id, nombre, roles")
+      .select("usuario_id, nombre, roles, correo")
       .eq("empresa_id", this.empresa.id)
+      .eq("activo", true)
+      .order("nombre");
+    falla(error);
+    return (data ?? []).map((r) => ({ id: r.usuario_id, nombre: r.nombre, correo: r.correo ?? "", roles: r.roles }));
+  }
+
+  async accesosPortal(terceroId: string) {
+    const { data, error } = await this.db
+      .from("usuarios_cliente")
+      .select("usuario_id, nombre, correo")
+      .eq("empresa_id", this.empresa.id)
+      .eq("tercero_id", terceroId)
       .eq("activo", true);
     falla(error);
-    return (data ?? []).map((r) => ({ id: r.usuario_id, nombre: r.nombre, correo: "", roles: r.roles }));
+    return (data ?? []).map((r) => ({ usuarioId: r.usuario_id, nombre: r.nombre, correo: r.correo }));
+  }
+
+  async invitarAlPortal(terceroId: string, d: { nombre: string; correo: string }) {
+    if (!this.usuario.roles.some((r) => r === "comercial" || r === "admin")) {
+      throw new ErrorNegocio("Solo Comercial puede invitar clientes al portal");
+    }
+    const t = await this.tercero(terceroId);
+    if (!t || t.tipo === "proveedor") throw new ErrorNegocio("El cliente no existe");
+    const usuarioId = await invitarCuenta(this.servicio(), {
+      ...d,
+      empresa: this.empresa,
+      urlApp: this.urlApp,
+      portal: true,
+    });
+    const { error } = await this.db.from("usuarios_cliente").upsert(
+      {
+        empresa_id: this.empresa.id,
+        tercero_id: terceroId,
+        usuario_id: usuarioId,
+        nombre: d.nombre,
+        correo: d.correo,
+        activo: true,
+        invitado_por: this.usuario.id,
+      },
+      { onConflict: "empresa_id,tercero_id,usuario_id" },
+    );
+    falla(error);
+  }
+
+  private exigirAdmin() {
+    if (!this.usuario.roles.includes("admin")) throw new ErrorNegocio("Solo el Administrador puede cambiar la configuración");
+  }
+
+  async actualizarEmpresa(c: CambiosEmpresa) {
+    this.exigirAdmin();
+    const fila: Fila = {
+      razon_social: c.razonSocial,
+      ciudad: c.ciudad,
+      color_primario: c.colorPrimario,
+      prefijo_cotizacion: c.prefijoCotizacion,
+      prefijo_do: c.prefijoDO,
+      vigencia_170_meses: c.vigencia170Meses,
+      bloquear_do_sin_170: c.bloquearDOSin170,
+    };
+    for (const k of Object.keys(fila)) if (fila[k] === undefined) delete fila[k];
+    const { error } = await this.db.from("empresas").update(fila).eq("id", this.empresa.id);
+    falla(error);
+  }
+
+  async invitarUsuario(d: { correo: string; nombre: string; roles: Rol[] }) {
+    this.exigirAdmin();
+    const usuarioId = await invitarCuenta(this.servicio(), { ...d, empresa: this.empresa, urlApp: this.urlApp });
+    const { error } = await this.db.from("usuarios_empresa").upsert(
+      { empresa_id: this.empresa.id, usuario_id: usuarioId, nombre: d.nombre, correo: d.correo, roles: d.roles, activo: true },
+      { onConflict: "empresa_id,usuario_id" },
+    );
+    falla(error);
+  }
+
+  async cambiarRoles(usuarioId: string, roles: Rol[]) {
+    this.exigirAdmin();
+    if (usuarioId === this.usuario.id && !roles.includes("admin")) {
+      throw new ErrorNegocio("No puedes quitarte el rol de Administrador");
+    }
+    const { error } = await this.db
+      .from("usuarios_empresa")
+      .update({ roles })
+      .eq("empresa_id", this.empresa.id)
+      .eq("usuario_id", usuarioId);
+    falla(error);
+  }
+
+  async desactivarUsuario(usuarioId: string) {
+    this.exigirAdmin();
+    if (usuarioId === this.usuario.id) throw new ErrorNegocio("No puedes desactivarte a ti mismo");
+    const { error } = await this.db
+      .from("usuarios_empresa")
+      .update({ activo: false })
+      .eq("empresa_id", this.empresa.id)
+      .eq("usuario_id", usuarioId);
+    falla(error);
   }
 
   async terceros(tipo?: Tercero["tipo"]) {
@@ -435,6 +628,151 @@ export class SupabaseRepositorio implements Repositorio {
       .eq("id", h.id)
       .eq("operacion_id", operacionId);
     falla(error);
+    const op = await this.operacion(operacionId);
+    if (op) {
+      const estado = estadoSegunHitos(op);
+      if (estado !== op.estado) {
+        const { error: e2 } = await this.db.from("operaciones").update({ estado }).eq("id", operacionId);
+        falla(e2);
+      }
+    }
+  }
+
+  async documentosDO(operacionId: string) {
+    const { data, error } = await this.db
+      .from("do_documentos")
+      .select("*")
+      .eq("operacion_id", operacionId)
+      .order("creado_el", { ascending: false });
+    falla(error);
+    return (data ?? []).map(mapArchivo);
+  }
+
+  async soportes170(formularioId: string) {
+    // RLS: solo Cumplimiento y Admin ven filas.
+    const { data, error } = await this.db
+      .from("formulario_170_soportes")
+      .select("*")
+      .eq("formulario_id", formularioId)
+      .order("creado_el");
+    falla(error);
+    return (data ?? []).map(mapArchivo);
+  }
+
+  async prepararSubidaDO(operacionId: string, a: MetaArchivo) {
+    exigirValido(a);
+    if (!(await this.operacion(operacionId))) throw new ErrorNegocio("El DO no existe");
+    const ruta = rutaArchivo(this.empresa.id, "do", operacionId, randomBytes(8).toString("hex"), a.nombre);
+    const { data, error } = await this.db.storage.from(BUCKET).createSignedUploadUrl(ruta);
+    if (error) throw new ErrorNegocio("No tienes permiso para subir documentos a este DO");
+    return { ruta, token: data.token };
+  }
+
+  async registrarDocumentoDO(operacionId: string, a: NuevoArchivo) {
+    exigirValido(a);
+    if (!a.ruta || !rutaPertenece(a.ruta, this.empresa.id, "do", operacionId)) {
+      throw new ErrorNegocio("Ruta de archivo inválida");
+    }
+    const { error } = await this.db.from("do_documentos").insert({
+      empresa_id: this.empresa.id,
+      operacion_id: operacionId,
+      tipo: a.tipo,
+      nombre: a.nombre,
+      storage_path: a.ruta,
+      mime: a.mime,
+      tamano: a.tamano,
+      subido_por: this.usuario.id,
+    });
+    falla(error);
+  }
+
+  async descargarArchivo(clase: "do" | "170", id: string): Promise<Descarga> {
+    const tabla = clase === "do" ? "do_documentos" : "formulario_170_soportes";
+    const { data, error } = await this.db.from(tabla).select("storage_path, nombre").eq("id", id).maybeSingle();
+    falla(error);
+    if (!data) throw new ErrorNegocio("Archivo no encontrado o sin permiso");
+    const firmado = await this.db.storage
+      .from(BUCKET)
+      .createSignedUrl(data.storage_path, 60, { download: data.nombre ?? true });
+    if (firmado.error) throw new ErrorNegocio("No se pudo generar el enlace de descarga");
+    return { url: firmado.data.signedUrl };
+  }
+
+  async facturas() {
+    const { data, error } = await this.db
+      .from("facturas")
+      .select("*")
+      .eq("empresa_id", this.empresa.id)
+      .order("creado_el", { ascending: false })
+      .limit(500);
+    falla(error);
+    return (data ?? []).map(mapFactura);
+  }
+
+  async factura(id: string) {
+    const { data, error } = await this.db.from("facturas").select("*").eq("id", id).maybeSingle();
+    falla(error);
+    return data ? mapFactura(data) : null;
+  }
+
+  async crearPrefactura(f: Omit<Factura, "id" | "empresaId" | "estado" | "creadoEl">) {
+    const { data, error } = await this.db
+      .from("facturas")
+      .insert({
+        empresa_id: this.empresa.id,
+        cliente_id: f.clienteId,
+        moneda: f.moneda,
+        trm: f.trm,
+        conceptos: f.lineas,
+        operaciones: f.operaciones,
+      })
+      .select("*")
+      .single();
+    falla(error);
+    return mapFactura(data!);
+  }
+
+  async actualizarLineas(id: string, lineas: Factura["lineas"]) {
+    const { data, error } = await this.db
+      .from("facturas")
+      .update({ conceptos: lineas })
+      .eq("id", id)
+      .eq("estado", "borrador")
+      .select("id");
+    falla(error);
+    if (!data?.length) throw new ErrorNegocio("Solo se edita una prefactura en borrador");
+  }
+
+  async actualizarFactura(id: string, c: Partial<Factura>) {
+    const fila: Fila = {
+      estado: c.estado,
+      megafoco_id: c.megafocoId,
+      numero: c.numero,
+      cufe: c.cufe,
+      pdf_url: c.pdfUrl,
+      xml_url: c.xmlUrl,
+      error: c.error,
+      ...(c.estado === "en_cola" ? { enviada_el: new Date().toISOString() } : {}),
+    };
+    for (const k of Object.keys(fila)) if (fila[k] === undefined) delete fila[k];
+    const { error } = await this.db.from("facturas").update(fila).eq("id", id);
+    falla(error);
+  }
+
+  async megafocoConectado() {
+    const { data } = await this.db.from("empresas").select("megafoco_secret_id").eq("id", this.empresa.id).single();
+    return !!data?.megafoco_secret_id;
+  }
+
+  async guardarLlaveMegafoco(llave: string) {
+    const { error } = await this.db.rpc("guardar_llave_megafoco", { p_empresa: this.empresa.id, p_llave: llave });
+    falla(error);
+  }
+
+  async llaveMegafoco() {
+    const { data, error } = await this.servicio().rpc("llave_megafoco", { p_empresa: this.empresa.id });
+    if (error) throw new Error(error.message);
+    return (data as string | null) ?? null;
   }
 
   async comunicaciones(entidad: Comunicacion["entidad"], id: string) {
@@ -457,6 +795,8 @@ export class SupabaseRepositorio implements Repositorio {
         resumen: (r.cuerpo_html ?? "").replace(/<[^>]+>/g, " ").slice(0, 240),
         fecha: r.creado_el,
         abiertoEl: r.abierto_el ?? undefined,
+        entregadoEl: r.entregado_el ?? undefined,
+        idProveedor: r.proveedor_id_mensaje ?? undefined,
       }),
     );
   }
@@ -471,6 +811,7 @@ export class SupabaseRepositorio implements Repositorio {
       para: c.para,
       asunto: c.asunto,
       cuerpo_html: c.resumen,
+      proveedor_id_mensaje: c.idProveedor ?? null,
     });
     falla(error);
   }
@@ -567,4 +908,238 @@ export class SupabaseRepositorioPublico implements RepositorioPublico {
     });
     falla(error);
   }
+
+  private async formularioActual(token: string) {
+    const fila = await this.porToken(token);
+    if (!fila) throw new ErrorNegocio("Enlace inválido o vencido");
+    const { data } = await this.db
+      .from("formularios_170")
+      .select("id, estado, empresa_id")
+      .eq("tercero_id", fila.cliente_id)
+      .order("version", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!data || !["en_revision", "devuelto", "pendiente"].includes(data.estado)) {
+      throw new ErrorNegocio("Primero envía el formulario 170");
+    }
+    return data as { id: string; empresa_id: string };
+  }
+
+  async prepararSoporte170(token: string, a: MetaArchivo) {
+    exigirValido(a);
+    const f = await this.formularioActual(token);
+    const ruta = rutaArchivo(f.empresa_id, "170", f.id, randomBytes(8).toString("hex"), a.nombre);
+    const { data, error } = await this.db.storage.from(BUCKET).createSignedUploadUrl(ruta);
+    if (error) throw new Error(error.message);
+    return { ruta, token: data.token };
+  }
+
+  async registrarSoporte170(token: string, a: NuevoArchivo) {
+    exigirValido(a);
+    const f = await this.formularioActual(token);
+    if (!a.ruta || !rutaPertenece(a.ruta, f.empresa_id, "170", f.id)) {
+      throw new ErrorNegocio("Ruta de archivo inválida");
+    }
+    // El objeto debe existir realmente en Storage antes de registrarlo.
+    const carpeta = a.ruta.split("/").slice(0, 3).join("/");
+    const { data: objetos } = await this.db.storage.from(BUCKET).list(carpeta, { search: a.ruta.split("/")[3] });
+    if (!objetos?.length) throw new ErrorNegocio("El archivo no terminó de subir");
+    const { error } = await this.db.from("formulario_170_soportes").insert({
+      empresa_id: f.empresa_id,
+      formulario_id: f.id,
+      tipo: a.tipo,
+      nombre: a.nombre,
+      storage_path: a.ruta,
+      mime: a.mime,
+      tamano: a.tamano,
+    });
+    falla(error);
+  }
+
+  async soportesPorToken(token: string) {
+    const fila = await this.porToken(token);
+    if (!fila) return [];
+    const { data: f } = await this.db
+      .from("formularios_170")
+      .select("id")
+      .eq("tercero_id", fila.cliente_id)
+      .order("version", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!f) return [];
+    const { data } = await this.db.from("formulario_170_soportes").select("*").eq("formulario_id", f.id);
+    return (data ?? []).map(mapArchivo);
+  }
+}
+
+
+/* ------------------------------------------------------------------ */
+/* Portal del cliente: cliente de servicio, siempre filtrado por        */
+/* (empresa, cliente) y sin costos. El usuario ya fue autenticado.      */
+/* ------------------------------------------------------------------ */
+
+export class SupabaseRepositorioPortal implements RepositorioPortal {
+  constructor(
+    private readonly db: SupabaseClient,
+    readonly empresa: Empresa,
+    readonly cliente: Tercero,
+    readonly usuario: { id: string; nombre: string; correo: string },
+  ) {}
+
+  async cotizaciones() {
+    const { data, error } = await this.db
+      .from("cotizaciones")
+      .select(SELECT_COTIZACION)
+      .eq("empresa_id", this.empresa.id)
+      .eq("cliente_id", this.cliente.id)
+      .neq("estado", "borrador")
+      .order("creado_el", { ascending: false });
+    falla(error);
+    return (data ?? []).map(mapCotizacion).map(cotizacionParaCliente);
+  }
+
+  async cotizacion(id: string) {
+    return (await this.cotizaciones()).find((q) => q.id === id) ?? null;
+  }
+
+  async operaciones() {
+    const { data, error } = await this.db
+      .from("operaciones")
+      .select(SELECT_OPERACION)
+      .eq("empresa_id", this.empresa.id)
+      .eq("cliente_id", this.cliente.id)
+      .order("creado_el", { ascending: false });
+    falla(error);
+    return (data ?? []).map(mapOperacion).map(operacionParaCliente);
+  }
+
+  async operacion(id: string) {
+    const { data, error } = await this.db
+      .from("operaciones")
+      .select(SELECT_OPERACION)
+      .eq("id", id)
+      .eq("empresa_id", this.empresa.id)
+      .eq("cliente_id", this.cliente.id)
+      .maybeSingle();
+    falla(error);
+    return data ? operacionParaCliente(mapOperacion(data)) : null;
+  }
+
+  async novedades(operacionId: string) {
+    if (!(await this.operacion(operacionId))) return [];
+    const { data, error } = await this.db
+      .from("comunicaciones")
+      .select("*")
+      .eq("empresa_id", this.empresa.id)
+      .eq("operacion_id", operacionId)
+      .eq("direccion", "saliente")
+      .order("creado_el", { ascending: false });
+    falla(error);
+    return (data ?? []).map(
+      (r): Comunicacion => ({
+        id: r.id,
+        empresaId: r.empresa_id,
+        entidad: "operacion",
+        entidadId: operacionId,
+        direccion: "saliente",
+        asunto: r.asunto,
+        para: [],
+        resumen: (r.cuerpo_html ?? "").replace(/<[^>]+>/g, " ").slice(0, 600),
+        fecha: r.creado_el,
+      }),
+    );
+  }
+
+  async documentos(operacionId: string) {
+    if (!(await this.operacion(operacionId))) return [];
+    const { data, error } = await this.db
+      .from("do_documentos")
+      .select("*")
+      .eq("empresa_id", this.empresa.id)
+      .eq("operacion_id", operacionId)
+      .eq("visible_cliente", true)
+      .order("creado_el", { ascending: false });
+    falla(error);
+    return (data ?? []).map(mapArchivo);
+  }
+
+  async descargarDocumento(id: string): Promise<Descarga> {
+    const { data } = await this.db
+      .from("do_documentos")
+      .select("storage_path, nombre, operacion_id, visible_cliente")
+      .eq("id", id)
+      .eq("empresa_id", this.empresa.id)
+      .maybeSingle();
+    if (!data || !data.visible_cliente || !(await this.operacion(data.operacion_id))) {
+      throw new ErrorNegocio("Archivo no encontrado");
+    }
+    const f = await this.db.storage.from(BUCKET).createSignedUrl(data.storage_path, 60, { download: data.nombre ?? true });
+    if (f.error) throw new ErrorNegocio("No se pudo generar el enlace de descarga");
+    return { url: f.data.signedUrl };
+  }
+
+  async facturas() {
+    const { data, error } = await this.db
+      .from("facturas")
+      .select("*")
+      .eq("empresa_id", this.empresa.id)
+      .eq("cliente_id", this.cliente.id)
+      .eq("estado", "emitida")
+      .order("creado_el", { ascending: false });
+    falla(error);
+    return (data ?? []).map(mapFactura);
+  }
+
+  async formularios170() {
+    const { data, error } = await this.db
+      .from("formularios_170")
+      .select("*")
+      .eq("empresa_id", this.empresa.id)
+      .eq("tercero_id", this.cliente.id)
+      .order("version");
+    falla(error);
+    return (data ?? []).map(mapFormulario);
+  }
+
+  async enviarFormulario170(datos: Datos170) {
+    const previos = await this.formularios170();
+    if (previos.some((f) => f.estado === "en_revision")) throw new ErrorNegocio("Ya tienes un formulario en revisión");
+    const { error } = await this.db.from("formularios_170").insert({
+      empresa_id: this.empresa.id,
+      tercero_id: this.cliente.id,
+      version: previos.reduce((m, f) => Math.max(m, f.version), 0) + 1,
+      estado: "en_revision",
+      datos,
+      diligenciado_el: new Date().toISOString(),
+      firma: { usuario: this.usuario.id, correo: this.usuario.correo, fecha: new Date().toISOString() },
+    });
+    falla(error);
+  }
+}
+
+/** Resuelve el acceso al portal del usuario autenticado (o null). */
+export async function repositorioPortalDe(
+  db: SupabaseClient,
+  servicio: SupabaseClient,
+  uid: string,
+  terceroPreferido?: string,
+): Promise<SupabaseRepositorioPortal | null> {
+  // RLS: el usuario solo ve sus propios accesos.
+  const { data: accesos } = await db
+    .from("usuarios_cliente")
+    .select("empresa_id, tercero_id, nombre, correo")
+    .eq("usuario_id", uid)
+    .eq("activo", true);
+  if (!accesos?.length) return null;
+  const a = accesos.find((x) => x.tercero_id === terceroPreferido) ?? accesos[0];
+  const [emp, ter] = await Promise.all([
+    servicio.from("empresas").select("*").eq("id", a.empresa_id).single(),
+    servicio.from("terceros").select(SELECT_TERCERO).eq("id", a.tercero_id).eq("empresa_id", a.empresa_id).single(),
+  ]);
+  if (!emp.data || !ter.data) return null;
+  return new SupabaseRepositorioPortal(servicio, mapEmpresa(emp.data), mapTercero(ter.data), {
+    id: uid,
+    nombre: a.nombre,
+    correo: a.correo,
+  });
 }

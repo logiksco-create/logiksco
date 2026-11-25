@@ -1,11 +1,14 @@
 import "server-only";
 import type {
+  Archivo,
   Comunicacion,
   Cotizacion,
   Datos170,
   EstadoCotizacion,
+  Factura,
   Formulario170,
   Hito,
+  Rol,
   Tercero,
   Usuario,
 } from "@/domain/types";
@@ -15,15 +18,23 @@ import {
   puedeTransicionar,
   requiereNuevaVersion,
 } from "@/domain/cotizacion";
-import { crearOperacion } from "@/domain/operacion";
+import { crearOperacion, estadoSegunHitos } from "@/domain/operacion";
 import { habilitadoParaDO, situacion170, vigenciaAlAprobar } from "@/domain/cumplimiento";
 import { hoyISO } from "@/domain/fechas";
 import { crearSemilla, type EstadoDemo } from "./semilla";
+import { validarArchivo } from "@/domain/archivos";
+import { cotizacionParaCliente, operacionParaCliente, visibleParaCliente } from "@/domain/portal";
+import type { ArchivoDemo } from "./semilla";
 import type {
+  CambiosEmpresa,
+  Descarga,
+  MetaArchivo,
+  NuevoArchivo,
   DatosCotizacion,
   DecisionCliente,
   NuevoTercero,
   Repositorio,
+  RepositorioPortal,
   RepositorioPublico,
   VistaPublica,
 } from "../repositorio";
@@ -53,7 +64,57 @@ export class DemoRepositorio implements Repositorio {
   }
 
   async usuarios() {
-    return estado().usuarios;
+    return estado().usuarios.filter((u) => u.activo !== false);
+  }
+
+  async accesosPortal(terceroId: string) {
+    return estado().accesosPortal.filter((a) => a.terceroId === terceroId);
+  }
+
+  async invitarAlPortal(terceroId: string, d: { nombre: string; correo: string }) {
+    if (!this.usuario.roles.some((r) => r === "comercial" || r === "admin")) {
+      throw new ErrorNegocio("Solo Comercial puede invitar clientes al portal");
+    }
+    const s = estado();
+    if (s.accesosPortal.some((a) => a.terceroId === terceroId && a.correo.toLowerCase() === d.correo.toLowerCase())) {
+      throw new ErrorNegocio("Ese correo ya tiene acceso al portal");
+    }
+    s.accesosPortal.push({ terceroId, usuarioId: id(), ...d });
+  }
+
+  private exigirAdmin() {
+    if (!this.usuario.roles.includes("admin")) throw new ErrorNegocio("Solo el Administrador puede cambiar la configuración");
+  }
+
+  async actualizarEmpresa(cambios: CambiosEmpresa) {
+    this.exigirAdmin();
+    Object.assign(estado().empresa, cambios);
+  }
+
+  async invitarUsuario(d: { correo: string; nombre: string; roles: Rol[] }) {
+    this.exigirAdmin();
+    const s = estado();
+    if (s.usuarios.some((u) => u.correo.toLowerCase() === d.correo.toLowerCase() && u.activo !== false)) {
+      throw new ErrorNegocio("Ese correo ya pertenece a la empresa");
+    }
+    s.usuarios.push({ id: id(), nombre: d.nombre, correo: d.correo, roles: d.roles });
+  }
+
+  async cambiarRoles(usuarioId: string, roles: Rol[]) {
+    this.exigirAdmin();
+    const u = estado().usuarios.find((x) => x.id === usuarioId);
+    if (!u) throw new ErrorNegocio("Usuario no encontrado");
+    if (u.id === this.usuario.id && !roles.includes("admin")) {
+      throw new ErrorNegocio("No puedes quitarte el rol de Administrador");
+    }
+    u.roles = roles;
+  }
+
+  async desactivarUsuario(usuarioId: string) {
+    this.exigirAdmin();
+    if (usuarioId === this.usuario.id) throw new ErrorNegocio("No puedes desactivarte a ti mismo");
+    const u = estado().usuarios.find((x) => x.id === usuarioId);
+    if (u) u.activo = false;
   }
 
   /* ---------------- Terceros ---------------- */
@@ -247,15 +308,85 @@ export class DemoRepositorio implements Repositorio {
     const h = op?.hitos.find((x) => x.id === cambio.id);
     if (!op || !h) throw new ErrorNegocio("Hito no encontrado");
     Object.assign(h, cambio);
-    if (op.estado === "abierto" && op.hitos.some((x) => x.nombre === "Salida" && x.real)) {
-      op.estado = "en_transito";
+    op.estado = estadoSegunHitos(op);
+  }
+
+  /* ---------------- Archivos ---------------- */
+
+  async documentosDO(operacionId: string) {
+    return listarArchivos("do", operacionId);
+  }
+
+  async soportes170(formularioId: string) {
+    return listarArchivos("170", formularioId);
+  }
+
+  async prepararSubidaDO() {
+    return null; // en demo los bytes llegan por el servidor
+  }
+
+  async registrarDocumentoDO(operacionId: string, a: NuevoArchivo) {
+    if (!(await this.operacion(operacionId))) throw new ErrorNegocio("El DO no existe");
+    guardarArchivo("do", operacionId, a);
+  }
+
+  async descargarArchivo(clase: "do" | "170", archivoId: string): Promise<Descarga> {
+    if (clase === "170" && !this.usuario.roles.some((r) => r === "cumplimiento" || r === "admin")) {
+      throw new ErrorNegocio("Solo Cumplimiento puede ver los soportes de la 170");
     }
-    if (op.hitos.some((x) => x.nombre === "Arribo" && x.real) && op.estado === "en_transito") {
-      op.estado = "en_destino";
+    const a = estado().archivos.find((x) => x.id === archivoId && x.clase === clase);
+    if (!a) throw new ErrorNegocio("Archivo no encontrado");
+    return { bytes: a.bytes, mime: a.mime, nombre: a.nombre };
+  }
+
+  /* ---------------- Facturación ---------------- */
+
+  private exigirContabilidad() {
+    if (!this.usuario.roles.some((r) => r === "contabilidad" || r === "admin")) {
+      throw new ErrorNegocio("Solo Contabilidad puede gestionar facturas");
     }
-    if (op.hitos.some((x) => (x.nombre === "Entrega" || x.nombre === "Cumplido") && x.real)) {
-      op.estado = "entregado";
-    }
+  }
+
+  async facturas() {
+    return [...estado().facturas].sort((a, b) => b.creadoEl.localeCompare(a.creadoEl));
+  }
+
+  async factura(facturaId: string) {
+    return estado().facturas.find((f) => f.id === facturaId) ?? null;
+  }
+
+  async crearPrefactura(f: Omit<Factura, "id" | "empresaId" | "estado" | "creadoEl">) {
+    this.exigirContabilidad();
+    const nueva: Factura = { ...f, id: id(), empresaId: estado().empresa.id, estado: "borrador", creadoEl: ahora() };
+    estado().facturas.push(nueva);
+    return nueva;
+  }
+
+  async actualizarLineas(facturaId: string, lineas: Factura["lineas"]) {
+    this.exigirContabilidad();
+    const f = await this.factura(facturaId);
+    if (!f) throw new ErrorNegocio("La prefactura no existe");
+    if (f.estado !== "borrador") throw new ErrorNegocio("Solo se edita una prefactura en borrador");
+    f.lineas = lineas;
+  }
+
+  async actualizarFactura(facturaId: string, cambios: Partial<Factura>) {
+    const f = await this.factura(facturaId);
+    if (!f) throw new ErrorNegocio("La factura no existe");
+    Object.assign(f, cambios);
+  }
+
+  async megafocoConectado() {
+    return !!estado().llaveMegafoco;
+  }
+
+  async guardarLlaveMegafoco(llave: string) {
+    if (!this.usuario.roles.includes("admin")) throw new ErrorNegocio("Solo el Administrador puede conectar Megafoco");
+    estado().llaveMegafoco = llave;
+  }
+
+  async llaveMegafoco() {
+    return estado().llaveMegafoco ?? null;
   }
 
   /* ---------------- Comunicaciones ---------------- */
@@ -270,6 +401,30 @@ export class DemoRepositorio implements Repositorio {
     const s = estado();
     s.comunicaciones.push({ ...c, id: id(), empresaId: s.empresa.id, fecha: ahora() });
   }
+}
+
+function listarArchivos(clase: "do" | "170", entidadId: string): Archivo[] {
+  return estado()
+    .archivos.filter((a) => a.clase === clase && a.entidadId === entidadId)
+    .map(({ bytes: _b, clase: _c, entidadId: _e, ...a }) => a);
+}
+
+function guardarArchivo(clase: "do" | "170", entidadId: string, a: NuevoArchivo) {
+  const error = validarArchivo(a);
+  if (error) throw new ErrorNegocio(error);
+  if (!a.bytes) throw new ErrorNegocio("Falta el contenido del archivo");
+  const nuevo: ArchivoDemo = {
+    id: id(),
+    clase,
+    entidadId,
+    tipo: a.tipo,
+    nombre: a.nombre,
+    mime: a.mime,
+    tamano: a.tamano,
+    creadoEl: ahora(),
+    bytes: a.bytes,
+  };
+  estado().archivos.push(nuevo);
 }
 
 /* ------------------------------------------------------------------ */
@@ -331,5 +486,118 @@ export class DemoRepositorioPublico implements RepositorioPublico {
       datos,
     };
     s.formularios.push(form);
+  }
+
+  private async formularioActual(token: string) {
+    const v = await this.cotizacionPorToken(token);
+    if (!v) throw new ErrorNegocio("Enlace inválido");
+    const f = [...v.formularios].sort((a, b) => b.version - a.version)[0];
+    if (!f || (f.estado !== "en_revision" && f.estado !== "devuelto" && f.estado !== "pendiente")) {
+      throw new ErrorNegocio("Primero envía el formulario 170");
+    }
+    return f;
+  }
+
+  async prepararSoporte170(_token: string, _a: MetaArchivo) {
+    return null;
+  }
+
+  async registrarSoporte170(token: string, a: NuevoArchivo) {
+    const f = await this.formularioActual(token);
+    guardarArchivo("170", f.id, a);
+  }
+
+  async soportesPorToken(token: string) {
+    const v = await this.cotizacionPorToken(token);
+    const f = v && [...v.formularios].sort((a, b) => b.version - a.version)[0];
+    return f ? listarArchivos("170", f.id) : [];
+  }
+}
+
+
+/* ------------------------------------------------------------------ */
+/* Portal del cliente                                                   */
+/* ------------------------------------------------------------------ */
+
+export function accesosDemo() {
+  return estado().accesosPortal;
+}
+
+export class DemoRepositorioPortal implements RepositorioPortal {
+  readonly cliente: Tercero;
+  readonly usuario: { id: string; nombre: string; correo: string };
+
+  constructor(acceso: { terceroId: string; usuarioId: string; nombre: string; correo: string }) {
+    this.cliente = estado().terceros.find((t) => t.id === acceso.terceroId)!;
+    this.usuario = { id: acceso.usuarioId, nombre: acceso.nombre, correo: acceso.correo };
+  }
+
+  get empresa() {
+    return estado().empresa;
+  }
+
+  async cotizaciones() {
+    return estado()
+      .cotizaciones.filter((q) => q.clienteId === this.cliente.id && visibleParaCliente(q))
+      .sort((a, b) => b.consecutivo.localeCompare(a.consecutivo))
+      .map(cotizacionParaCliente);
+  }
+
+  async cotizacion(cotId: string) {
+    return (await this.cotizaciones()).find((q) => q.id === cotId) ?? null;
+  }
+
+  async operaciones() {
+    return estado()
+      .operaciones.filter((o) => o.clienteId === this.cliente.id)
+      .sort((a, b) => b.consecutivo.localeCompare(a.consecutivo))
+      .map(operacionParaCliente);
+  }
+
+  async operacion(opId: string) {
+    return (await this.operaciones()).find((o) => o.id === opId) ?? null;
+  }
+
+  async novedades(opId: string) {
+    if (!(await this.operacion(opId))) return [];
+    return estado()
+      .comunicaciones.filter((c) => c.entidad === "operacion" && c.entidadId === opId && c.direccion === "saliente")
+      .filter((c) => c.para.some((p) => this.cliente.contactos.some((k) => k.correo === p)))
+      .sort((a, b) => b.fecha.localeCompare(a.fecha));
+  }
+
+  async documentos(opId: string) {
+    if (!(await this.operacion(opId))) return [];
+    return listarArchivos("do", opId);
+  }
+
+  async descargarDocumento(archivoId: string): Promise<Descarga> {
+    const a = estado().archivos.find((x) => x.id === archivoId && x.clase === "do");
+    const op = a && (await this.operacion(a.entidadId));
+    if (!a || !op) throw new ErrorNegocio("Archivo no encontrado");
+    return { bytes: a.bytes, mime: a.mime, nombre: a.nombre };
+  }
+
+  async facturas() {
+    return estado().facturas.filter((f) => f.clienteId === this.cliente.id && f.estado === "emitida");
+  }
+
+  async formularios170() {
+    return estado().formularios.filter((f) => f.terceroId === this.cliente.id);
+  }
+
+  async enviarFormulario170(datos: Datos170) {
+    const s = estado();
+    const previos = await this.formularios170();
+    if (previos.some((f) => f.estado === "en_revision")) throw new ErrorNegocio("Ya tienes un formulario en revisión");
+    s.formularios.push({
+      id: id(),
+      empresaId: s.empresa.id,
+      terceroId: this.cliente.id,
+      version: previos.reduce((m, f) => Math.max(m, f.version), 0) + 1,
+      estado: "en_revision",
+      diligenciadoEl: ahora(),
+      datos,
+    });
   }
 }

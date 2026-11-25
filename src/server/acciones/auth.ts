@@ -13,7 +13,7 @@ const clave = z.string().min(10, "La contraseña debe tener al menos 10 caracter
 /** Solo rutas internas: evita redirecciones abiertas. */
 function destinoSeguro(v: FormDataEntryValue | null) {
   const s = typeof v === "string" ? v : "";
-  return s.startsWith("/app") && !s.startsWith("//") ? s : "/app";
+  return (s.startsWith("/app") || s.startsWith("/portal")) && !s.startsWith("//") ? s : "/app";
 }
 
 export async function ingresar(_: R, formData: FormData): Promise<R> {
@@ -54,7 +54,10 @@ export async function registrar(_: R, formData: FormData): Promise<R> {
       data: { nombre: d.nombre, nit: d.nit, razon_social: d.razonSocial },
     },
   });
-  if (error) return { ok: false, error: "No pudimos crear la cuenta. Revisa los datos o intenta más tarde." };
+  if (error) {
+    console.error("[registro]", error.message);
+    return { ok: false, error: "No pudimos crear la cuenta. Revisa los datos o intenta más tarde." };
+  }
 
   // Con verificación de correo activa no hay sesión todavía: la empresa se crea
   // al confirmar (primer ingreso). Si ya hay sesión, se crea de inmediato.
@@ -73,4 +76,25 @@ export async function registrar(_: R, formData: FormData): Promise<R> {
 export async function salir() {
   if (!modoDemo) await (await clienteUsuario()).auth.signOut();
   redirect("/login");
+}
+
+export async function definirClave(_: R, formData: FormData): Promise<R> {
+  if (modoDemo) redirect("/app");
+  const c = clave.safeParse(formData.get("clave"));
+  if (!c.success) return { ok: false, error: c.error.issues[0].message };
+  if (formData.get("clave") !== formData.get("confirmar")) return { ok: false, error: "Las contraseñas no coinciden" };
+  const db = await clienteUsuario();
+  const { error } = await db.auth.updateUser({ password: c.data });
+  if (error) return { ok: false, error: "El enlace venció. Pide uno nuevo." };
+  redirect("/app");
+}
+
+export async function recuperarClave(_: R, formData: FormData): Promise<R> {
+  if (modoDemo) redirect("/app");
+  const c = correo.safeParse(formData.get("correo"));
+  if (!c.success) return { ok: false, error: c.error.issues[0].message };
+  const db = await clienteUsuario();
+  await db.auth.resetPasswordForEmail(c.data, { redirectTo: `${env.appUrl}/auth/confirmar` });
+  // Misma respuesta exista o no la cuenta.
+  return { ok: true, mensaje: `Si ${c.data} tiene cuenta, le enviamos un enlace para cambiar la contraseña.` };
 }

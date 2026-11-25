@@ -1,12 +1,14 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, AtSign, FileText, Mail, TriangleAlert, Upload } from "lucide-react";
+import { ArrowLeft, AtSign, Mail, TriangleAlert } from "lucide-react";
 import { contexto, tieneRol } from "@/server/contexto";
 import { avance, hitoActual, utilidadOperacion } from "@/domain/operacion";
 import { fechaSalida } from "@/domain/alertas";
 import { tarifasVencidas } from "@/domain/cotizacion";
 import { hoyISO } from "@/domain/fechas";
-import { TIPOS_SERVICIO } from "@/domain/types";
+import { TIPOS_DOCUMENTO_DO, TIPOS_SERVICIO } from "@/domain/types";
+import { Subidor } from "@/components/app/subidor";
+import { ListaArchivos } from "@/components/app/lista-archivos";
 import { Encabezado } from "@/components/app/encabezado";
 import { EstadoDOBadge, IconoServicio } from "@/components/estados";
 import { FilaHito, NotificarCliente } from "@/components/app/acciones-operacion";
@@ -21,11 +23,12 @@ export default async function DetalleOperacion({ params }: PageProps<"/app/opera
   if (!op) notFound();
 
   const hoy = hoyISO();
-  const [cliente, cotizacion, comunicaciones, usuarios] = await Promise.all([
+  const [cliente, cotizacion, comunicaciones, usuarios, documentos] = await Promise.all([
     repo.tercero(op.clienteId),
     repo.cotizacion(op.cotizacionId),
     repo.comunicaciones("operacion", op.id),
     repo.usuarios(),
+    repo.documentosDO(op.id),
   ]);
   const responsable = usuarios.find((u) => u.id === op.responsableId);
   const actual = hitoActual(op);
@@ -177,21 +180,10 @@ export default async function DetalleOperacion({ params }: PageProps<"/app/opera
               </Tarjeta>
 
               <Tarjeta>
-                <TarjetaEncabezado titulo="Documentos" descripcion="BL/AWB, factura comercial, lista de empaque…" />
-                <div className="px-5 pb-5">
-                  <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border-strong bg-surface-2 px-4 py-6 text-center">
-                    <Upload className="size-5 text-subtle" />
-                    <p className="mt-2 text-[13px] font-medium">Arrastra documentos aquí</p>
-                    <p className="text-xs text-subtle">Almacenamiento privado con enlaces firmados · próximamente</p>
-                  </div>
-                  <ul className="mt-3 space-y-1.5 text-[13px]">
-                    {["Factura comercial", "Lista de empaque"].map((d) => (
-                      <li key={d} className="flex items-center gap-2 text-muted">
-                        <FileText className="size-4 text-subtle" /> {d}
-                        <span className="ml-auto text-xs text-subtle">pendiente</span>
-                      </li>
-                    ))}
-                  </ul>
+                <TarjetaEncabezado titulo="Documentos" descripcion="Almacenamiento privado; descarga con enlace temporal" />
+                <div className="space-y-4 px-5 pb-5">
+                  {editable && <Subidor destino={{ clase: "do", operacionId: op.id }} tipos={TIPOS_DOCUMENTO_DO} compacto />}
+                  <ListaArchivos archivos={documentos} clase="do" tipos={TIPOS_DOCUMENTO_DO} />
                 </div>
               </Tarjeta>
             </div>

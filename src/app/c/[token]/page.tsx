@@ -1,12 +1,14 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { Clock, ShieldCheck } from "lucide-react";
+import { Clock, Download, ShieldCheck } from "lucide-react";
 import { repositorioPublico } from "@/server/contexto";
 import { estadoEfectivo, totalesConceptos, totalesPorBloque } from "@/domain/cotizacion";
 import { requiereFormulario, situacion170 } from "@/domain/cumplimiento";
 import { convertir } from "@/domain/cotizacion";
 import { hoyISO } from "@/domain/fechas";
-import { BLOQUES, TIPOS_SERVICIO, type Bloque } from "@/domain/types";
+import { BLOQUES, TIPOS_SERVICIO, TIPOS_SOPORTE_170, type Bloque } from "@/domain/types";
+import { Subidor } from "@/components/app/subidor";
+import { ListaArchivos } from "@/components/app/lista-archivos";
 import { Decision, Exito, Formulario170 } from "@/components/publico/formularios";
 import { Isotipo } from "@/components/marca";
 import { Tarjeta } from "@/components/ui";
@@ -39,6 +41,7 @@ export default async function VistaCliente({ params }: PageProps<"/c/[token]">) 
   const sit = situacion170(formularios, hoy);
   const contacto = cliente.contactos.find((c) => c.id === q.contactoId) ?? cliente.contactos[0];
   const ultimo170 = [...formularios].sort((a, b) => b.version - a.version)[0];
+  const soportes = sit.tipo === "en_tramite" ? await repo.soportesPorToken(token) : [];
 
   let panel: React.ReactNode;
   if (estado === "enviada" || estado === "vista") {
@@ -48,7 +51,17 @@ export default async function VistaCliente({ params }: PageProps<"/c/[token]">) 
   } else if (estado === "aceptada") {
     panel =
       sit.tipo === "en_tramite" ? (
-        <Exito titulo="Formulario en revisión" texto="Tu cotización está aceptada y tu formulario 170 está en revisión por nuestro oficial de cumplimiento." />
+        <div>
+          <Exito titulo="Formulario en revisión" texto="Tu cotización está aceptada y tu formulario 170 está en revisión por nuestro oficial de cumplimiento." />
+          <div className="mt-2 border-t border-border pt-4">
+            <p className="text-sm font-semibold">Soportes</p>
+            <p className="mb-3 text-[13px] text-muted">RUT, cámara de comercio, cédula del representante y certificación bancaria.</p>
+            <Subidor destino={{ clase: "170", token }} tipos={TIPOS_SOPORTE_170} compacto />
+            <div className="mt-3">
+              <ListaArchivos archivos={soportes} clase="170" tipos={TIPOS_SOPORTE_170} descargable={false} vacio="Aún no has cargado soportes." />
+            </div>
+          </div>
+        </div>
       ) : (
         <Exito titulo="Cotización aceptada" texto="Todo está en orden. Te avisaremos cada novedad de tu operación por correo." />
       );
@@ -142,6 +155,12 @@ export default async function VistaCliente({ params }: PageProps<"/c/[token]">) 
 
         <aside className="lg:sticky lg:top-6 lg:self-start">
           <Tarjeta className="p-5 shadow-pop">{panel}</Tarjeta>
+          <a
+            href={`/c/${token}/pdf`}
+            className="mt-4 flex h-10 items-center justify-center gap-2 rounded-xl border border-border bg-surface text-sm font-medium shadow-card hover:bg-surface-2"
+          >
+            <Download className="size-4" /> Descargar PDF
+          </a>
           <p className="mt-4 flex items-center justify-center gap-1.5 text-xs text-subtle">
             <ShieldCheck className="size-3.5" /> Enlace seguro · <Isotipo className="size-4" /> LOGIKS.CO
           </p>

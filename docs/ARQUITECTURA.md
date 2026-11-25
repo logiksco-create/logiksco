@@ -41,23 +41,34 @@ Navegador ──► Server Components (lectura) ─┐
 
 ## Qué está probado
 
-- Dominio: 15 pruebas unitarias (`npm test`).
-- SQL: migraciones, RLS y RPC contra Postgres 16 (`npm run test:sql`). Supabase se simula con un stub mínimo de `auth`.
+- Dominio: 25 pruebas unitarias (`npm test`): utilidad, duplicado, 170, alertas, archivos, reportes, facturación, portal.
+- SQL: migraciones y 6 suites de seguridad contra Postgres 16 (`npm run test:sql`): aislamiento entre empresas, RPC, archivos por rol, inmutabilidad de correos, llave de Megafoco y portal sin acceso directo.
 - Flujo completo en modo demo con Playwright (`npm run e2e`).
-- `SupabaseRepositorio`: flujo completo probado contra el proyecto Supabase real con un usuario y una empresa de prueba (luego borrados): registro de empresa en el primer ingreso, terceros, cotización, edición, envío, enlace público, aceptación, 170, aprobación, DO, hitos, novedad y duplicado.
+- Contra el Supabase real (con datos de prueba borrados al final): registro, terceros, cotización, PDF, envío, aceptación, 170 con soporte en Storage, aprobación, DO con documento en Storage, hitos y estado, prefactura, reportes CSV, llave de Megafoco en Vault y portal del cliente.
+
+**Sin probar contra el servicio real:** envío con Resend (no hay llave), conector de Megafoco (no hay API ni contrato definitivo) e invitaciones por correo (se evitó enviar correos a direcciones de prueba).
+
+## Integraciones
+
+| Integración | Cómo se activa | Estado |
+| --- | --- | --- |
+| Correo (Resend) | `RESEND_API_KEY`, `CORREO_REMITENTE` (dominio verificado con SPF/DKIM) y webhook con `RESEND_WEBHOOK_SECRET` | Implementado; sin llave solo registra |
+| Megafoco | `MEGAFOCO_API_URL` + `MEGAFOCO_WEBHOOK_SECRET`; cada empresa pega su llave en Configuración (Vault) | Implementado contra el contrato borrador del PRD |
+| Plantillas de correo de Supabase | Requieren SMTP propio en el plan gratuito; mientras tanto las invitaciones se canjean en `/auth/invitacion` | Pendiente de SMTP |
 
 ## Estado frente al PRD (MVP)
 
 | Módulo | Estado |
 | --- | --- |
-| Cotizador RF-01 a RF-06 (conceptos por bloque, utilidad, vigencias, estados, versiones) | Hecho (PDF pendiente) |
+| Cotizador RF-01 a RF-06 | Hecho, incluido PDF |
 | Duplicar RF-08 a RF-10 | Hecho |
-| Aceptación en línea y 170 RF-12 a RF-19 | Hecho (carga de soportes y PDF firmado pendientes) |
-| DO RF-23 a RF-27, RF-29 | Hecho (documentos y solicitudes a proveedores, solo la interfaz) |
-| Alertas RF-30 y RF-31 | Hecho en la app (correos por job pendientes) |
+| Aceptación y 170 RF-12 a RF-20 | Hecho: formulario, soportes en Storage, revisión, PDF del expediente con huella SHA-256 |
+| DO RF-23 a RF-29 | Hecho: hitos con estado automático, documentos, novedades, utilidad real |
+| Alertas RF-30 a RF-32 | Hecho en la app (incluye facturas rechazadas); envío de alertas por correo con job programado pendiente |
 | Dashboard RF-33 y RF-34 | Hecho |
-| Trazabilidad RF-38 y RF-40 | Registro hecho (envío real y correo entrante pendientes) |
-| CRM RF-41 y RF-42 | Básico hecho |
-| Facturación RF-45 a RF-50 | Esquema listo; integración con Megafoco pendiente |
-| Portal del cliente con login RF-35 y RF-36 | Pendiente (hoy el cliente usa el enlace) |
-| Reportes RF-53 y configuración RF-54 | Pendiente |
+| Portal del cliente RF-35 y RF-36 | Hecho; marca blanca y subdominio (RF-37) es F2 |
+| Trazabilidad RF-38 a RF-40 | Hecho (envío real con Resend); buzón entrante por DO pendiente |
+| CRM RF-41 y RF-42 | Hoja de vida del cliente hecha; edición de acuerdos comerciales pendiente |
+| Facturación RF-45 a RF-50 | Prefactura, corte, envío y webhook hechos; notas crédito/débito pendientes |
+| Reportes RF-53 | Hecho, exporta CSV que Excel abre directamente |
+| Configuración RF-54 | Empresa, consecutivos, reglas 170, usuarios y Megafoco hechos; catálogos y plantillas editables pendientes |

@@ -52,6 +52,9 @@ export function Comunicaciones({ items }: { items: Comunicacion[] }) {
                 {c.direccion === "saliente" ? "Para" : "Recibido en"} {c.para.join(", ")} · {fechaHora(c.fecha)}
               </p>
               <p className="mt-1.5 text-[13px] text-muted">{c.resumen}</p>
+              {c.entregadoEl && !c.abiertoEl && (
+                <p className="mt-1.5 text-xs text-muted">Entregado {fechaHora(c.entregadoEl)}</p>
+              )}
               {c.abiertoEl && (
                 <p className="mt-1.5 inline-flex items-center gap-1 text-xs text-success">
                   <Eye className="size-3" /> Abierto {fechaHora(c.abiertoEl)}

@@ -1,4 +1,4 @@
-import type { Alerta, Cotizacion, Formulario170, Operacion, Tercero } from "./types";
+import type { Alerta, Cotizacion, Factura, Formulario170, Operacion, Tercero } from "./types";
 import { diasEntre, fechaLegible as f } from "./fechas";
 import { estadoEfectivo, tarifasVencidas } from "./cotizacion";
 import { situacion170 } from "./cumplimiento";
@@ -27,6 +27,7 @@ export interface EntradaAlertas {
   operaciones: Operacion[];
   terceros: Tercero[];
   formularios: Formulario170[];
+  facturas?: Factura[];
 }
 
 export function calcularAlertas(e: EntradaAlertas): Alerta[] {
@@ -143,6 +144,20 @@ export function calcularAlertas(e: EntradaAlertas): Alerta[] {
         });
       }
     }
+  }
+
+  // RF-49: rechazos de Finppi van a Contabilidad con el error.
+  for (const f of e.facturas ?? []) {
+    if (f.estado !== "rechazada" && !f.error) continue;
+    alertas.push({
+      id: `factura-${f.id}`,
+      tipo: "factura_rechazada",
+      severidad: "alta",
+      titulo: `Factura de ${nombre(f.clienteId)} ${f.estado === "rechazada" ? "rechazada" : "con error de envío"}`,
+      detalle: f.error ?? "Revisa la prefactura y vuelve a enviarla.",
+      href: `/app/facturacion/${f.id}`,
+      fecha: hoy,
+    });
   }
 
   const peso = { alta: 0, media: 1, baja: 2 };

@@ -8,14 +8,15 @@ import { hoyISO, diasEntre } from "@/domain/fechas";
 
 /** Carga todo lo necesario para alertas y tableros (memoizado por petición). */
 export const cargarTodo = cache(async (repo: Repositorio) => {
-  const [cotizaciones, operaciones, terceros, formularios, usuarios] = await Promise.all([
+  const [cotizaciones, operaciones, terceros, formularios, usuarios, facturas] = await Promise.all([
     repo.cotizaciones(),
     repo.operaciones(),
     repo.terceros(),
     repo.formularios170(),
     repo.usuarios(),
+    repo.facturas(),
   ]);
-  return { cotizaciones, operaciones, terceros, formularios, usuarios, hoy: hoyISO() };
+  return { cotizaciones, operaciones, terceros, formularios, usuarios, facturas, hoy: hoyISO() };
 });
 
 export const cargarAlertas = cache(async (repo: Repositorio) => {

@@ -10,6 +10,11 @@ const nextConfig: NextConfig = {
     },
   },
   poweredByHeader: false,
+  experimental: {
+    // Solo el modo demo sube archivos por el servidor; en producción van
+    // directo del navegador a Storage con URL firmada.
+    serverActions: { bodySizeLimit: "16mb" },
+  },
   async headers() {
     return [
       {

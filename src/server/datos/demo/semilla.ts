@@ -4,6 +4,7 @@ import type {
   Cotizacion,
   Datos170,
   Empresa,
+  Factura,
   Formulario170,
   Operacion,
   Tercero,
@@ -27,6 +28,22 @@ export interface EstadoDemo {
   operaciones: Operacion[];
   comunicaciones: Comunicacion[];
   secuencias: { cotizacion: number; do: number };
+  archivos: ArchivoDemo[];
+  facturas: Factura[];
+  llaveMegafoco?: string;
+  accesosPortal: { terceroId: string; usuarioId: string; nombre: string; correo: string }[];
+}
+
+export interface ArchivoDemo {
+  id: string;
+  clase: "do" | "170";
+  entidadId: string;
+  tipo: string;
+  nombre: string;
+  mime: string;
+  tamano: number;
+  creadoEl: string;
+  bytes: Uint8Array;
 }
 
 export function crearSemilla(hoy = hoyISO()): EstadoDemo {
@@ -243,5 +260,11 @@ export function crearSemilla(hoy = hoyISO()): EstadoDemo {
     operaciones,
     comunicaciones,
     secuencias: { cotizacion: cotizaciones.length, do: operaciones.length },
+    archivos: [],
+    facturas: [],
+    accesosPortal: [
+      { terceroId: "t-agro", usuarioId: "c-laura", nombre: "Laura Ospina", correo: "laura@agrooriente.co" },
+      { terceroId: "t-flores", usuarioId: "c-andres", nombre: "Andrés Vélez", correo: "andres@floreslamontana.co" },
+    ],
   };
 }

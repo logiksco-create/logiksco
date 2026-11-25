@@ -77,7 +77,9 @@ export default async function Clientes({ searchParams }: PageProps<"/app/cliente
                         <Avatar nombre={t.razonSocial} className="rounded-lg" />
                         <div className="min-w-0">
                           <p className="flex items-center gap-2 font-medium">
-                            <span className="truncate">{t.razonSocial}</span>
+                            <Link href={`/app/clientes/${t.id}`} className="truncate hover:text-brand-fg">
+                              {t.razonSocial}
+                            </Link>
                             {t.tipo === "prospecto" && <Insignia tono="info">Prospecto</Insignia>}
                           </p>
                           <p className="text-xs text-muted">

@@ -93,13 +93,15 @@ export function BotonEnviar({ id }: { id: string }) {
   const [pendiente, iniciar] = useTransition();
   const [error, setError] = useState<string>();
   const [enlace, setEnlace] = useState<string>();
+  const [enviado, setEnviado] = useState(false);
   const [copiado, setCopiado] = useState(false);
 
   if (enlace) {
     return (
       <div className="rounded-lg border border-success/25 bg-success-soft p-3 text-[13px]">
         <p className="flex items-center gap-1.5 font-medium text-success">
-          <Check className="size-4" /> Enviada. Enlace seguro de aceptación:
+          <Check className="size-4" />{" "}
+          {enviado ? "Correo enviado con el PDF. Enlace seguro de aceptación:" : "Lista. El correo no está configurado: comparte este enlace seguro de aceptación:"}
         </p>
         <div className="mt-2 flex gap-2">
           <code className="min-w-0 flex-1 truncate rounded-md bg-surface px-2 py-1.5 font-mono text-xs">{enlace}</code>
@@ -125,7 +127,10 @@ export function BotonEnviar({ id }: { id: string }) {
         onClick={() =>
           iniciar(async () => {
             const r = await enviarCotizacion(id);
-            if (r.ok) setEnlace(r.datos.enlace);
+            if (r.ok) {
+              setEnlace(r.datos.enlace);
+              setEnviado(r.datos.enviado);
+            }
             else setError(r.error);
           })
         }

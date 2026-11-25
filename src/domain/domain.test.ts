@@ -241,3 +241,117 @@ describe("alertas (RF-30, RF-31)", () => {
     expect(tarifasVencidas(op.conceptos, "2026-12-01")).toHaveLength(1);
   });
 });
+
+import { nombreSeguro, rutaArchivo, rutaPertenece, validarArchivo } from "./archivos";
+
+describe("archivos (RF-16, RF-28)", () => {
+  it("valida tipo y tamaño", () => {
+    expect(validarArchivo({ nombre: "bl.pdf", mime: "application/pdf", tamano: 1000 })).toBeNull();
+    expect(validarArchivo({ nombre: "x.exe", mime: "application/x-msdownload", tamano: 10 })).toMatch(/no permitido/);
+    expect(validarArchivo({ nombre: "g.pdf", mime: "application/pdf", tamano: 16 * 1024 * 1024 })).toMatch(/15 MB/);
+  });
+  it("limpia nombres y rutas", () => {
+    expect(nombreSeguro("../../etc/Factura Señor #1.pdf")).toBe("Factura_Senor_1.pdf");
+    const r = rutaArchivo("e1", "do", "o1", "abc", "BL final.pdf");
+    expect(r).toBe("e1/do/o1/abc-BL_final.pdf");
+    expect(rutaPertenece(r, "e1", "do", "o1")).toBe(true);
+    expect(rutaPertenece(r, "e2", "do", "o1")).toBe(false);
+    expect(rutaPertenece("e1/do/o1/../x", "e1", "do", "o1")).toBe(false);
+  });
+});
+
+import { aCSV, calcularReportes, rangoPeriodo } from "./reportes";
+
+describe("reportes (RF-53)", () => {
+  it("calcula rangos de periodo", () => {
+    expect(rangoPeriodo("mes", "2026-11-24")).toEqual({ desde: "2026-11-01", hasta: "2026-11-24" });
+    expect(rangoPeriodo("trimestre", "2026-11-24").desde).toBe("2026-09-01");
+  });
+  it("agrupa ventas y utilidad por cliente y tipo", () => {
+    const q = cotizacion({ estado: "aceptada", fechaEmision: "2026-11-02" });
+    const op: Operacion = {
+      id: "o1", empresaId: "e1", consecutivo: "DO-1", cotizacionId: q.id, clienteId: "t1", responsableId: "u1",
+      tipo: "maritimo_fcl", origen: "A", destino: "B", estado: "abierto", abiertoEl: "2026-11-05", trm: 4000,
+      conceptos: q.conceptos, hitos: [],
+    };
+    const r = calcularReportes({
+      hoy: "2026-11-24", periodo: "mes", operaciones: [op, { ...op, id: "o2", abiertoEl: "2026-09-01" }],
+      cotizaciones: [q], terceros: [], usuarios: [], formularios: [],
+    });
+    expect(r.total.operaciones).toBe(1);
+    expect(r.porTipo[0].ventas).toBe(5_400_000);
+    expect(r.porCliente[0].utilidadReal).toBe(1_000_000);
+    expect(r.conversion[0]).toMatchObject({ enviadas: 1, aceptadas: 1, conversion: 1 });
+  });
+  it("exporta CSV para Excel con BOM, ; y comillas", () => {
+    const csv = aCSV(["Cliente", "Ventas"], [['Flores "La Montaña"; SAS', 1234.5]]);
+    expect(csv.startsWith("﻿")).toBe(true);
+    expect(csv).toContain('"Flores ""La Montaña""; SAS";1234,5');
+  });
+});
+
+import { fechaCorte, lineasDesdeOperaciones, pendientesPorCliente, totalesFactura } from "./facturacion";
+import type { Factura } from "./types";
+
+describe("facturación (RF-45, RF-46)", () => {
+  const op: Operacion = {
+    id: "o1", empresaId: "e1", consecutivo: "DO-1", cotizacionId: "q1", clienteId: "t1", responsableId: "u1",
+    tipo: "maritimo_fcl", origen: "A", destino: "B", estado: "entregado", abiertoEl: "2026-11-10", trm: 4000,
+    conceptos: [
+      concepto({ id: "a", descripcion: "Flete", costoUnitario: 900, ventaUnitaria: 1000, cantidad: 2 }),
+      concepto({ id: "b", descripcion: "THC destino", moneda: "COP", ventaUnitaria: 500_000, paraTerceros: true }),
+    ],
+    hitos: [],
+  };
+  const cliente = { id: "t1", empresaId: "e1", tipo: "cliente", nit: "1", razonSocial: "C", ciudad: "", contactos: [], acuerdo: { diaCorte: 25, plazoPagoDias: 30, moneda: "COP" } } as Tercero;
+
+  it("calcula la fecha de corte vigente", () => {
+    expect(fechaCorte(25, "2026-11-24")).toBe("2026-10-25");
+    expect(fechaCorte(25, "2026-11-25")).toBe("2026-11-25");
+    expect(fechaCorte(31, "2026-11-30")).toBe("2026-11-30");
+  });
+
+  it("separa propios y terceros, convierte moneda y sugiere IVA solo a propios", () => {
+    const l = lineasDesdeOperaciones([op], "COP");
+    expect(l[0]).toMatchObject({ tipo: "propio", valorUnitario: 4_000_000, cantidad: 2, ivaPct: 19 });
+    expect(l[1]).toMatchObject({ tipo: "terceros", valorUnitario: 500_000, ivaPct: 0 });
+    expect(totalesFactura(l)).toEqual({ propios: 8_000_000, terceros: 500_000, iva: 1_520_000, total: 10_020_000 });
+  });
+
+  it("solo propone DO no facturados, no abiertos y dentro del corte", () => {
+    const hoy = "2026-11-26";
+    expect(pendientesPorCliente([op], [], [cliente], hoy)[0].operaciones).toHaveLength(1);
+    const f = { estado: "emitida", operaciones: ["o1"] } as Factura;
+    expect(pendientesPorCliente([op], [f], [cliente], hoy)).toHaveLength(0);
+    expect(pendientesPorCliente([{ ...op, estado: "abierto" }], [], [cliente], hoy)).toHaveLength(0);
+    expect(pendientesPorCliente([{ ...op, abiertoEl: "2026-11-26" }], [], [cliente], hoy)).toHaveLength(0);
+  });
+});
+
+import { cotizacionParaCliente, operacionParaCliente } from "./portal";
+
+describe("portal del cliente (RF-36)", () => {
+  it("nunca expone costos, proveedores ni utilidad", () => {
+    const q = cotizacionParaCliente(cotizacion({ conceptos: [concepto({ costoUnitario: 900, ventaUnitaria: 1000, proveedorId: "p1", proveedorNombre: "Naviera" })] }));
+    const json = JSON.stringify(q);
+    expect(q.conceptos[0].costoUnitario).toBe(0);
+    expect(json).not.toContain("Naviera");
+    expect(json).not.toContain("p1");
+    expect(q.conceptos[0].ventaUnitaria).toBe(1000);
+    const o = operacionParaCliente({ ...({} as Operacion), conceptos: q.conceptos, costosReales: { a: 1 }, hitos: [] });
+    expect(o.costosReales).toBeUndefined();
+  });
+});
+
+import { estadoSegunHitos } from "./operacion";
+
+describe("estado del DO por hitos (RF-26)", () => {
+  const base = { estado: "abierto", hitos: [{ id: "1", nombre: "Salida" }, { id: "2", nombre: "Arribo" }, { id: "3", nombre: "Entrega" }] } as unknown as Operacion;
+  it("avanza con los hitos reales y no retrocede", () => {
+    expect(estadoSegunHitos(base)).toBe("abierto");
+    expect(estadoSegunHitos({ ...base, hitos: [{ id: "1", nombre: "Salida", real: "2026-11-01" }] })).toBe("en_transito");
+    expect(estadoSegunHitos({ ...base, hitos: [{ id: "3", nombre: "Entrega", real: "2026-11-01" }] })).toBe("entregado");
+    expect(estadoSegunHitos({ ...base, estado: "entregado" })).toBe("entregado");
+    expect(estadoSegunHitos({ ...base, estado: "cerrado", hitos: [{ id: "1", nombre: "Salida", real: "2026-11-01" }] })).toBe("cerrado");
+  });
+});

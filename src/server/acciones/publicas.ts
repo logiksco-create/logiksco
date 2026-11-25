@@ -7,6 +7,7 @@ import { repositorioPublico } from "../contexto";
 import { ErrorNegocio } from "../datos/errores";
 import { hoyISO } from "@/domain/fechas";
 import { requiereFormulario, situacion170 } from "@/domain/cumplimiento";
+import { parsearFormulario170 } from "../validacion170";
 
 /**
  * Acciones del enlace público de aceptación. No hay sesión: la autorización
@@ -65,43 +66,10 @@ export async function responderCotizacion(t: string, _: unknown, formData: FormD
   }
 }
 
-const esquema170 = z.object({
-  razonSocial: z.string().trim().min(3, "Razón social requerida").max(200),
-  nit: z.string().trim().min(5, "NIT requerido").max(20),
-  domicilio: z.string().trim().min(5, "Dirección requerida").max(200),
-  ciudad: z.string().trim().min(2, "Ciudad requerida").max(80),
-  actividadEconomica: z.string().trim().min(3, "Actividad económica requerida").max(200),
-  capitalSocial: z.coerce.number().min(0, "Capital inválido"),
-  origenRecursos: z.string().trim().min(3, "Indica el origen de los recursos").max(300),
-  formaPago: z.string().trim().min(3, "Indica la forma de pago").max(120),
-  entidadFinanciera: z.string().trim().min(3, "Indica la entidad financiera y ciudad").max(200),
-  rlNombre: z.string().trim().min(3, "Nombre del representante legal").max(120),
-  rlDocumento: z.string().trim().min(5, "Documento del representante legal").max(40),
-  beneficiarios: z.string().trim().min(3, "Indica los beneficiarios").max(500),
-  esPEP: z.enum(["si", "no"], { message: "Indica si es PEP" }),
-  autorizaDatos: z.literal("on", { message: "Debes autorizar el tratamiento de datos (Ley 1581 de 2012)" }),
-  firma: z.string().trim().min(3, "Escribe tu nombre como firma"),
-});
-
 export async function enviarFormulario170(t: string, _: unknown, formData: FormData): Promise<R> {
   try {
     const tk = token.parse(t);
-    const d = esquema170.parse(Object.fromEntries(formData));
-    await repositorioPublico().enviarFormulario170(tk, {
-      razonSocial: d.razonSocial,
-      nit: d.nit,
-      domicilio: d.domicilio,
-      ciudad: d.ciudad,
-      actividadEconomica: d.actividadEconomica,
-      capitalSocial: d.capitalSocial,
-      origenRecursos: d.origenRecursos,
-      formaPago: d.formaPago,
-      entidadFinanciera: d.entidadFinanciera,
-      representantes: [{ nombre: d.rlNombre, documento: d.rlDocumento, cargo: "Representante legal" }],
-      beneficiarios: d.beneficiarios,
-      esPEP: d.esPEP === "si",
-      autorizaDatos: true,
-    });
+    await repositorioPublico().enviarFormulario170(tk, parsearFormulario170(formData));
     revalidatePath(`/c/${tk}`);
     revalidatePath("/app", "layout");
     return { ok: true };

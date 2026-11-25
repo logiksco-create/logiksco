@@ -73,6 +73,9 @@ export default async function AppLayout({ children }: LayoutProps<"/app">) {
               <strong className="font-semibold">Modo demo</strong> con datos del piloto. Los cambios viven
               en memoria.
             </span>
+            <Link href="/portal" className="font-medium underline-offset-2 hover:underline">
+              Ver portal del cliente
+            </Link>
             <form action={restablecerDemo}>
               <button className="inline-flex items-center gap-1 font-medium underline-offset-2 hover:underline">
                 <RotateCcw className="size-3" /> Restablecer

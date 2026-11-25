@@ -32,7 +32,16 @@ export interface Usuario {
   nombre: string;
   correo: string;
   roles: Rol[];
+  activo?: boolean;
 }
+
+export const NOMBRES_ROL: Record<Rol, string> = {
+  admin: "Administrador",
+  comercial: "Comercial",
+  operaciones: "Operaciones",
+  cumplimiento: "Cumplimiento",
+  contabilidad: "Contabilidad",
+};
 
 export type TipoTercero = "cliente" | "prospecto" | "proveedor";
 
@@ -248,7 +257,8 @@ export type TipoAlerta =
   | "hito_atrasado"
   | "eta_proxima"
   | "f170_por_vencer"
-  | "corte_facturacion";
+  | "corte_facturacion"
+  | "factura_rechazada";
 
 export type Severidad = "alta" | "media" | "baja";
 
@@ -273,4 +283,75 @@ export interface Comunicacion {
   resumen: string;
   fecha: string; // ISO
   abiertoEl?: string; // ISO
+  entregadoEl?: string; // ISO
+  /** Id del mensaje en el proveedor de correo; ausente si no salió. */
+  idProveedor?: string;
+}
+
+export const TIPOS_DOCUMENTO_DO = {
+  bl: "BL",
+  awb: "AWB",
+  factura_comercial: "Factura comercial",
+  lista_empaque: "Lista de empaque",
+  declaracion: "Declaración",
+  certificado: "Certificado",
+  otro: "Otro",
+} as const;
+export type TipoDocumentoDO = keyof typeof TIPOS_DOCUMENTO_DO;
+
+export const TIPOS_SOPORTE_170 = {
+  rut: "RUT",
+  camara_comercio: "Certificado de existencia y representación",
+  cedula_rl: "Cédula del representante legal",
+  cert_bancaria: "Certificación bancaria",
+  estados_financieros: "Estados financieros",
+  otro: "Otro soporte",
+} as const;
+export type TipoSoporte170 = keyof typeof TIPOS_SOPORTE_170;
+
+export interface Archivo {
+  id: string;
+  tipo: string;
+  nombre: string;
+  mime: string;
+  tamano: number;
+  creadoEl: string; // ISO
+}
+
+export const ESTADOS_FACTURA = {
+  borrador: "Prefactura",
+  aprobada: "Aprobada",
+  en_cola: "En cola de emisión",
+  emitida: "Emitida",
+  rechazada: "Rechazada",
+} as const;
+export type EstadoFactura = keyof typeof ESTADOS_FACTURA;
+
+export interface LineaFactura {
+  operacionId: string;
+  descripcion: string;
+  /** Ingreso propio o recibido para terceros (gasto pagado por cuenta del cliente). */
+  tipo: "propio" | "terceros";
+  cantidad: number;
+  valorUnitario: number;
+  /** Porcentaje de IVA de la línea (lo valida el contador en Megafoco). */
+  ivaPct: number;
+}
+
+export interface Factura {
+  id: string;
+  empresaId: string;
+  clienteId: string;
+  estado: EstadoFactura;
+  moneda: Moneda;
+  trm: number;
+  lineas: LineaFactura[];
+  operaciones: string[];
+  creadoEl: string; // ISO
+  megafocoId?: string;
+  numero?: string;
+  cufe?: string;
+  pdfUrl?: string;
+  xmlUrl?: string;
+  error?: string;
 }
