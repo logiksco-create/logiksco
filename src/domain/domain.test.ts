@@ -16,7 +16,7 @@ import {
 } from "./cumplimiento";
 import { calcularAlertas } from "./alertas";
 import { diasEntre, sumarDias, sumarMeses } from "./fechas";
-import type { Concepto, Cotizacion, Formulario170, Operacion, Tercero } from "./types";
+import type { Alerta, Concepto, Cotizacion, Formulario170, Operacion, Tercero } from "./types";
 
 const concepto = (p: Partial<Concepto>): Concepto => ({
   id: "c",
@@ -353,5 +353,28 @@ describe("estado del DO por hitos (RF-26)", () => {
     expect(estadoSegunHitos({ ...base, hitos: [{ id: "3", nombre: "Entrega", real: "2026-11-01" }] })).toBe("entregado");
     expect(estadoSegunHitos({ ...base, estado: "entregado" })).toBe("entregado");
     expect(estadoSegunHitos({ ...base, estado: "cerrado", hitos: [{ id: "1", nombre: "Salida", real: "2026-11-01" }] })).toBe("cerrado");
+  });
+});
+
+import { alertasDeUsuario, resumenesDiarios } from "./tareas";
+
+describe("resumen diario de alertas (RF-31)", () => {
+  const a = (tipo: Alerta["tipo"]): Alerta => ({ id: tipo, tipo, severidad: "alta", titulo: tipo, detalle: "", href: "/", fecha: "2026-11-25" });
+  const todas = [a("tarifa_vencida"), a("f170_por_vencer"), a("factura_rechazada")];
+  it("reparte por rol; el admin recibe todo", () => {
+    expect(alertasDeUsuario({ id: "1", nombre: "", correo: "x", roles: ["operaciones"] }, todas).map((x) => x.tipo)).toEqual(["tarifa_vencida"]);
+    expect(alertasDeUsuario({ id: "2", nombre: "", correo: "x", roles: ["cumplimiento"] }, todas).map((x) => x.tipo)).toEqual(["f170_por_vencer"]);
+    expect(alertasDeUsuario({ id: "3", nombre: "", correo: "x", roles: ["admin"] }, todas)).toHaveLength(3);
+  });
+  it("omite usuarios sin correo o sin alertas", () => {
+    const r = resumenesDiarios(
+      [
+        { id: "1", nombre: "A", correo: "", roles: ["admin"] },
+        { id: "2", nombre: "B", correo: "b@x.co", roles: ["contabilidad"] },
+        { id: "3", nombre: "C", correo: "c@x.co", roles: ["operaciones"] },
+      ],
+      [a("factura_rechazada")],
+    );
+    expect(r.map((x) => x.usuario.id)).toEqual(["2"]);
   });
 });

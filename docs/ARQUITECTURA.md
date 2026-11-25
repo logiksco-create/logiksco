@@ -54,21 +54,26 @@ Navegador ──► Server Components (lectura) ─┐
 | --- | --- | --- |
 | Correo (Resend) | `RESEND_API_KEY`, `CORREO_REMITENTE` (dominio verificado con SPF/DKIM) y webhook con `RESEND_WEBHOOK_SECRET` | Implementado; sin llave solo registra |
 | Megafoco | `MEGAFOCO_API_URL` + `MEGAFOCO_WEBHOOK_SECRET`; cada empresa pega su llave en Configuración (Vault) | Implementado contra el contrato borrador del PRD |
+| TRM del día | Automática desde datos.gov.co (Superintendencia Financiera), caché de 1 h; `TRM_RESPALDO` si no responde | Activa |
+| Tarea diaria | Vercel Cron 7:00 a. m. Colombia → `/api/tareas/diaria` con `CRON_SECRET` | Activa: guarda alertas; resúmenes y recordatorios salen cuando haya Resend |
+| Buzón por DO | Proveedor de correo entrante → `/api/correo-entrante` firmado con `CORREO_ENTRANTE_SECRET`; MX del dominio en `CORREO_ENTRANTE_DOMINIO` | Implementado; falta elegir proveedor y DNS |
 | Plantillas de correo de Supabase | Requieren SMTP propio en el plan gratuito; mientras tanto las invitaciones se canjean en `/auth/invitacion` | Pendiente de SMTP |
 
 ## Estado frente al PRD (MVP)
 
 | Módulo | Estado |
 | --- | --- |
-| Cotizador RF-01 a RF-06 | Hecho, incluido PDF |
+| Cotizador RF-01 a RF-06 | Hecho: PDF y TRM oficial del día |
 | Duplicar RF-08 a RF-10 | Hecho |
-| Aceptación y 170 RF-12 a RF-20 | Hecho: formulario, soportes en Storage, revisión, PDF del expediente con huella SHA-256 |
-| DO RF-23 a RF-29 | Hecho: hitos con estado automático, documentos, novedades, utilidad real |
-| Alertas RF-30 a RF-32 | Hecho en la app (incluye facturas rechazadas); envío de alertas por correo con job programado pendiente |
+| Aceptación y 170 RF-12 a RF-20 | Hecho; campos de la 170 configurables por empresa pendientes |
+| DO RF-23 a RF-29 | Hecho: hitos propios por empresa, solicitudes a proveedores, aviso al responsable, costos reales |
+| Alertas RF-30 a RF-32 | Hecho: acciones en la alerta de tarifa, tarea diaria con resumen por rol y recordatorios 170 (salen con Resend) |
 | Dashboard RF-33 y RF-34 | Hecho |
-| Portal del cliente RF-35 y RF-36 | Hecho; marca blanca y subdominio (RF-37) es F2 |
-| Trazabilidad RF-38 a RF-40 | Hecho (envío real con Resend); buzón entrante por DO pendiente |
-| CRM RF-41 y RF-42 | Hoja de vida del cliente hecha; edición de acuerdos comerciales pendiente |
-| Facturación RF-45 a RF-50 | Prefactura, corte, envío y webhook hechos; notas crédito/débito pendientes |
-| Reportes RF-53 | Hecho, exporta CSV que Excel abre directamente |
-| Configuración RF-54 | Empresa, consecutivos, reglas 170, usuarios y Megafoco hechos; catálogos y plantillas editables pendientes |
+| Portal del cliente RF-35 y RF-36 | Hecho |
+| Trazabilidad RF-38 a RF-40 | Hecho: buzón entrante por DO y PDF de la línea de tiempo |
+| CRM RF-41 y RF-42 | Hecho: contactos con cumpleaños y acuerdos editables |
+| Facturación RF-45 a RF-50 | Hecho salvo notas crédito/débito |
+| Reportes RF-53 | Hecho |
+| Configuración RF-54 | Hecho: empresa, usuarios, catálogos, hitos, términos, Megafoco |
+| Registro y arranque | Hecho: asistente de 4 pasos y catálogos base |
+| Planes y cobro, superadmin, 2FA | Pendiente |

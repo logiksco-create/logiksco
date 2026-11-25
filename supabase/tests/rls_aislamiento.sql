@@ -150,3 +150,20 @@ do $$ begin
 end $$;
 reset role;
 \echo 'OK: portal sin acceso directo a datos de la empresa'
+
+-- Contactos: el comercial de A borra; B no puede borrar los de A.
+reset role;
+insert into public.contactos (empresa_id, tercero_id, nombre) values (:'empresa_a', :'cliente_a', 'Contacto A');
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000b';
+delete from public.contactos where nombre = 'Contacto A';
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000a';
+do $$ begin
+  if (select count(*) from public.contactos where nombre = 'Contacto A') <> 1 then raise exception 'FUGA: B borró un contacto de A'; end if;
+end $$;
+delete from public.contactos where nombre = 'Contacto A';
+do $$ begin
+  if (select count(*) from public.contactos where nombre = 'Contacto A') <> 0 then raise exception 'A no pudo borrar su contacto'; end if;
+end $$;
+reset role;
+\echo 'OK: contactos solo los borra su empresa'

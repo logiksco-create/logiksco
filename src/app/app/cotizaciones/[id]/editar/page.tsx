@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { contexto } from "@/server/contexto";
 import { datosEditor } from "@/server/vistas-editor";
+import { trmDelDia } from "@/server/trm";
 import { Encabezado } from "@/components/app/encabezado";
 import { EditorCotizacion } from "@/components/app/editor-cotizacion";
 import { EstadoCotizacionBadge } from "@/components/estados";
@@ -13,7 +14,7 @@ export default async function EditarCotizacion({ params, searchParams }: PagePro
   const { id } = await params;
   const sp = await searchParams;
   const repo = await contexto();
-  const [q, d] = await Promise.all([repo.cotizacion(id), datosEditor(repo)]);
+  const [q, d, trm] = await Promise.all([repo.cotizacion(id), datosEditor(repo), trmDelDia()]);
   if (!q) notFound();
   if (q.estado === "aceptada") redirect(`/app/cotizaciones/${id}`);
   const origen = q.origenId ? await repo.cotizacion(q.origenId) : null;
@@ -36,6 +37,10 @@ export default async function EditarCotizacion({ params, searchParams }: PagePro
       <EditorCotizacion
         id={q.id}
         hoy={d.hoy}
+        trmDia={trm}
+        lugares={d.lugares}
+        conceptosCatalogo={d.conceptos}
+        servicios={d.servicios}
         clientes={d.clientes}
         proveedores={d.proveedores}
         aviso={

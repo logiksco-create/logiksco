@@ -13,4 +13,4 @@ for f in migrations/*.sql; do psql "$URL" -q -v ON_ERROR_STOP=1 -f "$f" >/dev/nu
 salida=$(psql "$URL" -f tests/rls_aislamiento.sql 2>&1)
 echo "$salida" | grep -E "OK:|FUGA|exception" || true
 if echo "$salida" | grep -q "FUGA\|ERROR:  .*\(faltan\|inesperado\|debería\|alterado\)"; then exit 1; fi
-[ "$(echo "$salida" | grep -c "^OK:")" -eq 6 ] || { echo "$salida"; exit 1; }
+[ "$(echo "$salida" | grep -c "^OK:")" -eq 7 ] || { echo "$salida"; exit 1; }

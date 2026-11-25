@@ -1,15 +1,19 @@
 import "server-only";
 import type {
+  AcuerdoComercial,
   Archivo,
   Comunicacion,
+  Contacto,
   Cotizacion,
   Datos170,
+  EntradaCatalogo,
   EstadoCotizacion,
   Factura,
   Formulario170,
   Hito,
   Rol,
   Tercero,
+  TipoCatalogo,
   Usuario,
 } from "@/domain/types";
 import {
@@ -18,7 +22,8 @@ import {
   puedeTransicionar,
   requiereNuevaVersion,
 } from "@/domain/cotizacion";
-import { crearOperacion, estadoSegunHitos } from "@/domain/operacion";
+import { crearOperacion, estadoSegunHitos, hitosDe } from "@/domain/operacion";
+import { catalogoBase } from "@/domain/catalogo";
 import { habilitadoParaDO, situacion170, vigenciaAlAprobar } from "@/domain/cumplimiento";
 import { hoyISO } from "@/domain/fechas";
 import { crearSemilla, type EstadoDemo } from "./semilla";
@@ -82,6 +87,23 @@ export class DemoRepositorio implements Repositorio {
     s.accesosPortal.push({ terceroId, usuarioId: id(), ...d });
   }
 
+  async catalogo(tipo?: TipoCatalogo) {
+    return [...catalogoBase(), ...estado().catalogoPropio].filter((e) => !tipo || e.tipo === tipo);
+  }
+
+  async agregarCatalogo(e: Omit<EntradaCatalogo, "id" | "base">) {
+    this.exigirAdmin();
+    const todos = await this.catalogo(e.tipo);
+    if (todos.some((x) => x.nombre.toLowerCase() === e.nombre.toLowerCase())) throw new ErrorNegocio("Ya existe en el catálogo");
+    estado().catalogoPropio.push({ ...e, id: id(), base: false });
+  }
+
+  async eliminarCatalogo(catId: string) {
+    this.exigirAdmin();
+    const s = estado();
+    s.catalogoPropio = s.catalogoPropio.filter((x) => x.id !== catId);
+  }
+
   private exigirAdmin() {
     if (!this.usuario.roles.includes("admin")) throw new ErrorNegocio("Solo el Administrador puede cambiar la configuración");
   }
@@ -143,6 +165,38 @@ export class DemoRepositorio implements Repositorio {
     };
     s.terceros.push(nuevo);
     return nuevo;
+  }
+
+  private exigirComercial() {
+    if (!this.usuario.roles.some((r) => r === "comercial" || r === "contabilidad" || r === "admin")) {
+      throw new ErrorNegocio("Tu rol no permite editar clientes");
+    }
+  }
+
+  async guardarAcuerdo(terceroId: string, acuerdo: AcuerdoComercial) {
+    this.exigirComercial();
+    const t = await this.tercero(terceroId);
+    if (!t) throw new ErrorNegocio("El tercero no existe");
+    t.acuerdo = acuerdo;
+  }
+
+  async guardarContacto(terceroId: string, c: Omit<Contacto, "id"> & { id?: string }) {
+    this.exigirComercial();
+    const t = await this.tercero(terceroId);
+    if (!t) throw new ErrorNegocio("El tercero no existe");
+    if (c.id) {
+      const k = t.contactos.find((x) => x.id === c.id);
+      if (!k) throw new ErrorNegocio("El contacto no existe");
+      Object.assign(k, c);
+    } else {
+      t.contactos.push({ ...c, id: id() });
+    }
+  }
+
+  async eliminarContacto(terceroId: string, contactoId: string) {
+    this.exigirComercial();
+    const t = await this.tercero(terceroId);
+    if (t) t.contactos = t.contactos.filter((k) => k.id !== contactoId);
   }
 
   /* ---------------- Cotizaciones ---------------- */
@@ -293,6 +347,7 @@ export class DemoRepositorio implements Repositorio {
       );
     }
     const op = crearOperacion(q, {
+      hitos: hitosDe(q.tipoServicio, s.empresa.hitosPorTipo),
       id: id(),
       consecutivo: this.siguienteConsecutivo("do"),
       responsableId: s.usuarios.find((u) => u.roles.includes("operaciones"))?.id ?? this.usuario.id,
@@ -309,6 +364,18 @@ export class DemoRepositorio implements Repositorio {
     if (!op || !h) throw new ErrorNegocio("Hito no encontrado");
     Object.assign(h, cambio);
     op.estado = estadoSegunHitos(op);
+  }
+
+  async registrarCostoReal(opId: string, conceptoId: string, costoTotal: number | null) {
+    if (!this.usuario.roles.some((r) => r === "operaciones" || r === "contabilidad" || r === "admin")) {
+      throw new ErrorNegocio("Tu rol no permite registrar costos");
+    }
+    const op = await this.operacion(opId);
+    if (!op || !op.conceptos.some((c) => c.id === conceptoId)) throw new ErrorNegocio("Concepto no encontrado");
+    const costos = { ...(op.costosReales ?? {}) };
+    if (costoTotal === null) delete costos[conceptoId];
+    else costos[conceptoId] = costoTotal;
+    op.costosReales = costos;
   }
 
   /* ---------------- Archivos ---------------- */

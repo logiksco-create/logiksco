@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, AtSign, Mail, TriangleAlert } from "lucide-react";
+import { ArrowLeft, AtSign, Download, Mail, Send, TriangleAlert } from "lucide-react";
 import { contexto, tieneRol } from "@/server/contexto";
 import { avance, hitoActual, utilidadOperacion } from "@/domain/operacion";
 import { fechaSalida } from "@/domain/alertas";
@@ -9,15 +9,20 @@ import { hoyISO } from "@/domain/fechas";
 import { TIPOS_DOCUMENTO_DO, TIPOS_SERVICIO } from "@/domain/types";
 import { Subidor } from "@/components/app/subidor";
 import { ListaArchivos } from "@/components/app/lista-archivos";
+import { CostosReales } from "@/components/app/costos-reales";
 import { Encabezado } from "@/components/app/encabezado";
 import { EstadoDOBadge, IconoServicio } from "@/components/estados";
-import { FilaHito, NotificarCliente } from "@/components/app/acciones-operacion";
+import { FilaHito, NotificarCliente, SolicitudProveedor } from "@/components/app/acciones-operacion";
+import { BotonDuplicar } from "@/components/app/acciones-cotizacion";
+import { buzonCompleto } from "@/server/buzon";
+import { PLANTILLAS_PROVEEDOR, textoSolicitud, type PlantillaProveedor } from "@/domain/plantillas";
 import { Comunicaciones } from "@/components/app/linea-tiempo";
-import { Avatar, Insignia, Progreso, Tarjeta, TarjetaEncabezado } from "@/components/ui";
+import { Avatar, Progreso, Tarjeta, TarjetaEncabezado, clasesBoton } from "@/components/ui";
 import { dinero, fecha, fechaLegibleCorta, porcentaje } from "@/lib/formato";
 
-export default async function DetalleOperacion({ params }: PageProps<"/app/operaciones/[id]">) {
+export default async function DetalleOperacion({ params, searchParams }: PageProps<"/app/operaciones/[id]">) {
   const { id } = await params;
+  const sp = await searchParams;
   const repo = await contexto();
   const op = await repo.operacion(id);
   if (!op) notFound();
@@ -36,7 +41,22 @@ export default async function DetalleOperacion({ params }: PageProps<"/app/opera
   const vencidas = salida ? tarifasVencidas(op.conceptos, salida) : [];
   const { cotizada, real } = utilidadOperacion(op);
   const editable = tieneRol(repo, "operaciones");
-  const buzon = `do-${op.consecutivo.split("-").pop()}@${repo.empresa.razonSocial.split(" ")[0].toLowerCase()}.logiks.co`;
+  const buzon = buzonCompleto(op);
+  const terceros = await repo.terceros("proveedor");
+  const idsProveedores = new Set(op.conceptos.map((c) => c.proveedorId).filter(Boolean));
+  const proveedores = terceros
+    .sort((a, b) => Number(idsProveedores.has(b.id)) - Number(idsProveedores.has(a.id)))
+    .map((t) => ({ id: t.id, nombre: t.razonSocial, correo: t.contactos.find((k) => k.correo)?.correo ?? "" }));
+  const primeraVencida = vencidas[0];
+  const plantillasProveedor = Object.fromEntries(
+    (Object.keys(PLANTILLAS_PROVEEDOR) as PlantillaProveedor[]).map((k) => [
+      k,
+      {
+        etiqueta: PLANTILLAS_PROVEEDOR[k],
+        ...textoSolicitud(k, op, { concepto: primeraVencida?.descripcion, vigencia: primeraVencida?.vigenciaTarifa, salida }),
+      },
+    ]),
+  );
 
   const eta = op.hitos.find((h) => h.nombre === "ETA");
   const plantillas = [
@@ -90,8 +110,13 @@ export default async function DetalleOperacion({ params }: PageProps<"/app/opera
             </div>
           </div>
           <div className="flex shrink-0 gap-2">
-            <Insignia tono="peligro">Pedir actualización al proveedor</Insignia>
-            <Insignia tono="peligro">Re-cotizar</Insignia>
+            <a
+              href={`?solicitar=tarifa&proveedor=${primeraVencida?.proveedorId ?? ""}#solicitud`}
+              className={clasesBoton({ variante: "secundario", tamano: "sm" })}
+            >
+              <Send /> Pedir actualización
+            </a>
+            {cotizacion && <BotonDuplicar id={cotizacion.id} etiqueta="Re-cotizar" />}
           </div>
         </div>
       )}
@@ -154,8 +179,8 @@ export default async function DetalleOperacion({ params }: PageProps<"/app/opera
 
             <div className="space-y-6">
               <Tarjeta>
-                <TarjetaEncabezado titulo="Utilidad" descripcion="Cotizada vs. real, en COP" />
-                <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-b-xl border-t border-border bg-border">
+                <TarjetaEncabezado titulo="Utilidad" descripcion="Cotizada vs. real. Registra cada costo real cuando llegue la factura del proveedor." />
+                <dl className="grid grid-cols-2 gap-px overflow-hidden border-t border-border bg-border">
                   <div className="bg-surface p-4">
                     <dt className="text-xs text-subtle">Venta</dt>
                     <dd className="mt-1 font-semibold tabular">{dinero(cotizada.venta)}</dd>
@@ -177,6 +202,12 @@ export default async function DetalleOperacion({ params }: PageProps<"/app/opera
                     </dd>
                   </div>
                 </dl>
+                <CostosReales
+                  operacionId={op.id}
+                  conceptos={op.conceptos}
+                  reales={op.costosReales ?? {}}
+                  editable={tieneRol(repo, "operaciones", "contabilidad")}
+                />
               </Tarjeta>
 
               <Tarjeta>
@@ -193,6 +224,11 @@ export default async function DetalleOperacion({ params }: PageProps<"/app/opera
             <TarjetaEncabezado
               titulo="Trazabilidad de comunicaciones"
               descripcion="Línea de tiempo inmutable; se exporta como evidencia ante un reclamo."
+              accion={
+                <a href={`/app/operaciones/${op.id}/trazabilidad`} target="_blank" rel="noopener" className={clasesBoton({ variante: "secundario", tamano: "sm" })}>
+                  <Download /> PDF
+                </a>
+              }
             />
             <div className="px-5 pb-5">
               <Comunicaciones items={comunicaciones} />
@@ -205,6 +241,22 @@ export default async function DetalleOperacion({ params }: PageProps<"/app/opera
             <TarjetaEncabezado titulo="Notificar al cliente" descripcion="Una novedad con un clic" />
             <div className="px-5 pb-5">
               <NotificarCliente operacionId={op.id} consecutivo={op.consecutivo} plantillas={plantillas} />
+            </div>
+          </Tarjeta>
+
+          <Tarjeta id="solicitud" className="scroll-mt-20">
+            <TarjetaEncabezado titulo="Solicitar a proveedor" descripcion="Booking, tarifa, carga lista o documentos" />
+            <div className="px-5 pb-5">
+              <SolicitudProveedor
+                key={`${sp.solicitar ?? ""}-${sp.proveedor ?? ""}`}
+                operacionId={op.id}
+                proveedores={proveedores}
+                plantillas={plantillasProveedor}
+                inicial={{
+                  plantilla: typeof sp.solicitar === "string" ? sp.solicitar : undefined,
+                  proveedorId: typeof sp.proveedor === "string" ? sp.proveedor : undefined,
+                }}
+              />
             </div>
           </Tarjeta>
 

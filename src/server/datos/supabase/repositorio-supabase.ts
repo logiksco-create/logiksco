@@ -2,12 +2,15 @@ import "server-only";
 import { createHash, randomBytes } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
+  AcuerdoComercial,
   Archivo,
   Comunicacion,
+  Contacto,
   Concepto,
   Cotizacion,
   Datos170,
   Empresa,
+  EntradaCatalogo,
   EstadoCotizacion,
   Factura,
   Formulario170,
@@ -15,10 +18,11 @@ import type {
   Operacion,
   Rol,
   Tercero,
+  TipoCatalogo,
   Usuario,
 } from "@/domain/types";
 import { duplicarCotizacion, puedeTransicionar } from "@/domain/cotizacion";
-import { HITOS_POR_TIPO, estadoSegunHitos } from "@/domain/operacion";
+import { estadoSegunHitos, hitosDe } from "@/domain/operacion";
 import { habilitadoParaDO, situacion170, vigenciaAlAprobar } from "@/domain/cumplimiento";
 import { hoyISO } from "@/domain/fechas";
 import { rutaArchivo, rutaPertenece, validarArchivo } from "@/domain/archivos";
@@ -57,6 +61,10 @@ export const mapEmpresa = (r: Fila): Empresa => ({
   prefijoDO: r.prefijo_do,
   vigencia170Meses: r.vigencia_170_meses,
   bloquearDOSin170: r.bloquear_do_sin_170,
+  hitosPorTipo: r.hitos_por_tipo ?? {},
+  terminos: r.terminos ?? undefined,
+  servicios: r.servicios ?? [],
+  configurada: r.configurada ?? true,
 });
 
 const mapTercero = (r: Fila): Tercero => ({
@@ -72,6 +80,7 @@ const mapTercero = (r: Fila): Tercero => ({
     cargo: k.cargo ?? "",
     correo: k.correo ?? "",
     telefono: k.telefono ?? undefined,
+    cumpleanos: k.cumpleanos ?? undefined,
   })),
   acuerdo: r.acuerdos_comerciales
     ? {
@@ -155,6 +164,7 @@ const mapOperacion = (r: Fila): Operacion => ({
   destino: r.destino,
   estado: r.estado,
   abiertoEl: r.abierto_el,
+  buzon: r.buzon ?? undefined,
   trm: Number(r.trm),
   conceptos: (r.do_conceptos ?? []).map(mapConcepto),
   costosReales: Object.fromEntries(
@@ -362,6 +372,42 @@ export class SupabaseRepositorio implements Repositorio {
     falla(error);
   }
 
+  async catalogo(tipo?: TipoCatalogo) {
+    let q = this.db.from("catalogos").select("*").eq("activo", true).or(`empresa_id.is.null,empresa_id.eq.${this.empresa.id}`);
+    if (tipo) q = q.eq("tipo", tipo);
+    const { data, error } = await q.order("nombre").limit(2000);
+    falla(error);
+    return (data ?? []).map(
+      (r): EntradaCatalogo => ({
+        id: r.id,
+        tipo: r.tipo,
+        nombre: r.nombre,
+        codigo: r.codigo ?? undefined,
+        base: r.empresa_id === null,
+        datos: r.datos ?? {},
+      }),
+    );
+  }
+
+  async agregarCatalogo(e: Omit<EntradaCatalogo, "id" | "base">) {
+    this.exigirAdmin();
+    const { error } = await this.db.from("catalogos").insert({
+      empresa_id: this.empresa.id,
+      tipo: e.tipo,
+      nombre: e.nombre,
+      codigo: e.codigo ?? null,
+      datos: e.datos,
+    });
+    if (error?.code === "23505") throw new ErrorNegocio("Ya existe en el catálogo");
+    falla(error);
+  }
+
+  async eliminarCatalogo(id: string) {
+    this.exigirAdmin();
+    const { error } = await this.db.from("catalogos").update({ activo: false }).eq("id", id).eq("empresa_id", this.empresa.id);
+    falla(error);
+  }
+
   private exigirAdmin() {
     if (!this.usuario.roles.includes("admin")) throw new ErrorNegocio("Solo el Administrador puede cambiar la configuración");
   }
@@ -376,6 +422,10 @@ export class SupabaseRepositorio implements Repositorio {
       prefijo_do: c.prefijoDO,
       vigencia_170_meses: c.vigencia170Meses,
       bloquear_do_sin_170: c.bloquearDOSin170,
+      hitos_por_tipo: c.hitosPorTipo,
+      terminos: c.terminos,
+      servicios: c.servicios,
+      configurada: c.configurada,
     };
     for (const k of Object.keys(fila)) if (fila[k] === undefined) delete fila[k];
     const { error } = await this.db.from("empresas").update(fila).eq("id", this.empresa.id);
@@ -445,6 +495,42 @@ export class SupabaseRepositorio implements Repositorio {
       falla(e2);
     }
     return (await this.tercero(data!.id))!;
+  }
+
+  async guardarAcuerdo(terceroId: string, a: AcuerdoComercial) {
+    const { error } = await this.db.from("acuerdos_comerciales").upsert(
+      {
+        tercero_id: terceroId,
+        empresa_id: this.empresa.id,
+        dia_corte: a.diaCorte,
+        plazo_pago_dias: a.plazoPagoDias,
+        moneda: a.moneda,
+        condiciones: a.condiciones ?? null,
+      },
+      { onConflict: "tercero_id" },
+    );
+    falla(error);
+  }
+
+  async guardarContacto(terceroId: string, c: Omit<Contacto, "id"> & { id?: string }) {
+    const fila = {
+      empresa_id: this.empresa.id,
+      tercero_id: terceroId,
+      nombre: c.nombre,
+      cargo: c.cargo || null,
+      correo: c.correo || null,
+      telefono: c.telefono || null,
+      cumpleanos: c.cumpleanos || null,
+    };
+    const { error } = c.id
+      ? await this.db.from("contactos").update(fila).eq("id", c.id).eq("tercero_id", terceroId)
+      : await this.db.from("contactos").insert(fila);
+    falla(error);
+  }
+
+  async eliminarContacto(terceroId: string, contactoId: string) {
+    const { error } = await this.db.from("contactos").delete().eq("id", contactoId).eq("tercero_id", terceroId);
+    falla(error);
   }
 
   async cotizaciones() {
@@ -615,7 +701,7 @@ export class SupabaseRepositorio implements Repositorio {
     const { data, error } = await this.db.rpc("abrir_operacion", {
       p_cotizacion: cotizacionId,
       p_responsable: responsable,
-      p_hitos: HITOS_POR_TIPO[q.tipoServicio],
+      p_hitos: hitosDe(q.tipoServicio, this.empresa.hitosPorTipo),
     });
     falla(error);
     return (await this.operacion(data as string))!;
@@ -696,6 +782,20 @@ export class SupabaseRepositorio implements Repositorio {
       .createSignedUrl(data.storage_path, 60, { download: data.nombre ?? true });
     if (firmado.error) throw new ErrorNegocio("No se pudo generar el enlace de descarga");
     return { url: firmado.data.signedUrl };
+  }
+
+  async registrarCostoReal(operacionId: string, conceptoId: string, costoTotal: number | null) {
+    const { data: c } = await this.db
+      .from("do_conceptos")
+      .select("cantidad")
+      .eq("id", conceptoId)
+      .eq("operacion_id", operacionId)
+      .maybeSingle();
+    if (!c) throw new ErrorNegocio("Concepto no encontrado");
+    // Se guarda por unidad, igual que el costo cotizado.
+    const unitario = costoTotal === null ? null : costoTotal / Number(c.cantidad);
+    const { error } = await this.db.from("do_conceptos").update({ costo_real: unitario }).eq("id", conceptoId);
+    falla(error);
   }
 
   async facturas() {
@@ -1033,6 +1133,8 @@ export class SupabaseRepositorioPortal implements RepositorioPortal {
       .eq("empresa_id", this.empresa.id)
       .eq("operacion_id", operacionId)
       .eq("direccion", "saliente")
+      // Solo lo enviado al cliente: nunca las solicitudes a proveedores.
+      .overlaps("para", this.cliente.contactos.map((k) => k.correo).filter(Boolean).concat(["__sin_contactos__"]))
       .order("creado_el", { ascending: false });
     falla(error);
     return (data ?? []).map(

@@ -1,0 +1,884 @@
+{
+ "puerto": [
+  {
+   "nombre": "Cartagena",
+   "codigo": "COCTG",
+   "datos": {
+    "pais": "CO"
+   }
+  },
+  {
+   "nombre": "Buenaventura",
+   "codigo": "COBUN",
+   "datos": {
+    "pais": "CO"
+   }
+  },
+  {
+   "nombre": "Santa Marta",
+   "codigo": "COSMR",
+   "datos": {
+    "pais": "CO"
+   }
+  },
+  {
+   "nombre": "Barranquilla",
+   "codigo": "COBAQ",
+   "datos": {
+    "pais": "CO"
+   }
+  },
+  {
+   "nombre": "Turbo (Urabá)",
+   "codigo": "COTRB",
+   "datos": {
+    "pais": "CO"
+   }
+  },
+  {
+   "nombre": "Tumaco",
+   "codigo": "COTCO",
+   "datos": {
+    "pais": "CO"
+   }
+  },
+  {
+   "nombre": "San Andrés",
+   "codigo": "COADZ",
+   "datos": {
+    "pais": "CO"
+   }
+  },
+  {
+   "nombre": "Shanghái",
+   "codigo": "CNSHA",
+   "datos": {
+    "pais": "CN"
+   }
+  },
+  {
+   "nombre": "Ningbo",
+   "codigo": "CNNGB",
+   "datos": {
+    "pais": "CN"
+   }
+  },
+  {
+   "nombre": "Shenzhen",
+   "codigo": "CNSZX",
+   "datos": {
+    "pais": "CN"
+   }
+  },
+  {
+   "nombre": "Qingdao",
+   "codigo": "CNTAO",
+   "datos": {
+    "pais": "CN"
+   }
+  },
+  {
+   "nombre": "Busan",
+   "codigo": "KRPUS",
+   "datos": {
+    "pais": "KR"
+   }
+  },
+  {
+   "nombre": "Singapur",
+   "codigo": "SGSIN",
+   "datos": {
+    "pais": "SG"
+   }
+  },
+  {
+   "nombre": "Rotterdam",
+   "codigo": "NLRTM",
+   "datos": {
+    "pais": "NL"
+   }
+  },
+  {
+   "nombre": "Amberes",
+   "codigo": "BEANR",
+   "datos": {
+    "pais": "BE"
+   }
+  },
+  {
+   "nombre": "Hamburgo",
+   "codigo": "DEHAM",
+   "datos": {
+    "pais": "DE"
+   }
+  },
+  {
+   "nombre": "Valencia",
+   "codigo": "ESVLC",
+   "datos": {
+    "pais": "ES"
+   }
+  },
+  {
+   "nombre": "Algeciras",
+   "codigo": "ESALG",
+   "datos": {
+    "pais": "ES"
+   }
+  },
+  {
+   "nombre": "Houston",
+   "codigo": "USHOU",
+   "datos": {
+    "pais": "US"
+   }
+  },
+  {
+   "nombre": "Miami",
+   "codigo": "USMIA",
+   "datos": {
+    "pais": "US"
+   }
+  },
+  {
+   "nombre": "Nueva York / Nueva Jersey",
+   "codigo": "USNYC",
+   "datos": {
+    "pais": "US"
+   }
+  },
+  {
+   "nombre": "Los Ángeles",
+   "codigo": "USLAX",
+   "datos": {
+    "pais": "US"
+   }
+  },
+  {
+   "nombre": "Manzanillo",
+   "codigo": "MXZLO",
+   "datos": {
+    "pais": "MX"
+   }
+  },
+  {
+   "nombre": "Colón",
+   "codigo": "PAONX",
+   "datos": {
+    "pais": "PA"
+   }
+  },
+  {
+   "nombre": "Balboa",
+   "codigo": "PABLB",
+   "datos": {
+    "pais": "PA"
+   }
+  },
+  {
+   "nombre": "Callao",
+   "codigo": "PECLL",
+   "datos": {
+    "pais": "PE"
+   }
+  },
+  {
+   "nombre": "Guayaquil",
+   "codigo": "ECGYE",
+   "datos": {
+    "pais": "EC"
+   }
+  },
+  {
+   "nombre": "Santos",
+   "codigo": "BRSSZ",
+   "datos": {
+    "pais": "BR"
+   }
+  },
+  {
+   "nombre": "San Antonio",
+   "codigo": "CLSAI",
+   "datos": {
+    "pais": "CL"
+   }
+  }
+ ],
+ "aeropuerto": [
+  {
+   "nombre": "Bogotá (El Dorado)",
+   "codigo": "BOG",
+   "datos": {
+    "pais": "CO"
+   }
+  },
+  {
+   "nombre": "Rionegro (José María Córdova)",
+   "codigo": "MDE",
+   "datos": {
+    "pais": "CO"
+   }
+  },
+  {
+   "nombre": "Cali (Alfonso Bonilla Aragón)",
+   "codigo": "CLO",
+   "datos": {
+    "pais": "CO"
+   }
+  },
+  {
+   "nombre": "Barranquilla (Ernesto Cortissoz)",
+   "codigo": "BAQ",
+   "datos": {
+    "pais": "CO"
+   }
+  },
+  {
+   "nombre": "Cartagena (Rafael Núñez)",
+   "codigo": "CTG",
+   "datos": {
+    "pais": "CO"
+   }
+  },
+  {
+   "nombre": "Pereira (Matecaña)",
+   "codigo": "PEI",
+   "datos": {
+    "pais": "CO"
+   }
+  },
+  {
+   "nombre": "Bucaramanga (Palonegro)",
+   "codigo": "BGA",
+   "datos": {
+    "pais": "CO"
+   }
+  },
+  {
+   "nombre": "Miami",
+   "codigo": "MIA",
+   "datos": {
+    "pais": "US"
+   }
+  },
+  {
+   "nombre": "Nueva York (JFK)",
+   "codigo": "JFK",
+   "datos": {
+    "pais": "US"
+   }
+  },
+  {
+   "nombre": "Houston",
+   "codigo": "IAH",
+   "datos": {
+    "pais": "US"
+   }
+  },
+  {
+   "nombre": "Los Ángeles",
+   "codigo": "LAX",
+   "datos": {
+    "pais": "US"
+   }
+  },
+  {
+   "nombre": "Ciudad de Panamá (Tocumen)",
+   "codigo": "PTY",
+   "datos": {
+    "pais": "PA"
+   }
+  },
+  {
+   "nombre": "Ciudad de México",
+   "codigo": "MEX",
+   "datos": {
+    "pais": "MX"
+   }
+  },
+  {
+   "nombre": "Lima",
+   "codigo": "LIM",
+   "datos": {
+    "pais": "PE"
+   }
+  },
+  {
+   "nombre": "São Paulo (Guarulhos)",
+   "codigo": "GRU",
+   "datos": {
+    "pais": "BR"
+   }
+  },
+  {
+   "nombre": "Madrid",
+   "codigo": "MAD",
+   "datos": {
+    "pais": "ES"
+   }
+  },
+  {
+   "nombre": "Ámsterdam",
+   "codigo": "AMS",
+   "datos": {
+    "pais": "NL"
+   }
+  },
+  {
+   "nombre": "Fráncfort",
+   "codigo": "FRA",
+   "datos": {
+    "pais": "DE"
+   }
+  },
+  {
+   "nombre": "Londres (Heathrow)",
+   "codigo": "LHR",
+   "datos": {
+    "pais": "GB"
+   }
+  },
+  {
+   "nombre": "Shanghái (Pudong)",
+   "codigo": "PVG",
+   "datos": {
+    "pais": "CN"
+   }
+  },
+  {
+   "nombre": "Hong Kong",
+   "codigo": "HKG",
+   "datos": {
+    "pais": "HK"
+   }
+  }
+ ],
+ "ciudad": [
+  {
+   "nombre": "Bogotá",
+   "codigo": null,
+   "datos": {
+    "pais": "CO"
+   }
+  },
+  {
+   "nombre": "Medellín",
+   "codigo": null,
+   "datos": {
+    "pais": "CO"
+   }
+  },
+  {
+   "nombre": "Rionegro",
+   "codigo": null,
+   "datos": {
+    "pais": "CO"
+   }
+  },
+  {
+   "nombre": "Envigado",
+   "codigo": null,
+   "datos": {
+    "pais": "CO"
+   }
+  },
+  {
+   "nombre": "Itagüí",
+   "codigo": null,
+   "datos": {
+    "pais": "CO"
+   }
+  },
+  {
+   "nombre": "La Ceja",
+   "codigo": null,
+   "datos": {
+    "pais": "CO"
+   }
+  },
+  {
+   "nombre": "Cali",
+   "codigo": null,
+   "datos": {
+    "pais": "CO"
+   }
+  },
+  {
+   "nombre": "Barranquilla",
+   "codigo": null,
+   "datos": {
+    "pais": "CO"
+   }
+  },
+  {
+   "nombre": "Cartagena",
+   "codigo": null,
+   "datos": {
+    "pais": "CO"
+   }
+  },
+  {
+   "nombre": "Santa Marta",
+   "codigo": null,
+   "datos": {
+    "pais": "CO"
+   }
+  },
+  {
+   "nombre": "Bucaramanga",
+   "codigo": null,
+   "datos": {
+    "pais": "CO"
+   }
+  },
+  {
+   "nombre": "Cúcuta",
+   "codigo": null,
+   "datos": {
+    "pais": "CO"
+   }
+  },
+  {
+   "nombre": "Pereira",
+   "codigo": null,
+   "datos": {
+    "pais": "CO"
+   }
+  },
+  {
+   "nombre": "Manizales",
+   "codigo": null,
+   "datos": {
+    "pais": "CO"
+   }
+  },
+  {
+   "nombre": "Armenia",
+   "codigo": null,
+   "datos": {
+    "pais": "CO"
+   }
+  },
+  {
+   "nombre": "Ibagué",
+   "codigo": null,
+   "datos": {
+    "pais": "CO"
+   }
+  },
+  {
+   "nombre": "Neiva",
+   "codigo": null,
+   "datos": {
+    "pais": "CO"
+   }
+  },
+  {
+   "nombre": "Villavicencio",
+   "codigo": null,
+   "datos": {
+    "pais": "CO"
+   }
+  },
+  {
+   "nombre": "Pasto",
+   "codigo": null,
+   "datos": {
+    "pais": "CO"
+   }
+  },
+  {
+   "nombre": "Popayán",
+   "codigo": null,
+   "datos": {
+    "pais": "CO"
+   }
+  },
+  {
+   "nombre": "Montería",
+   "codigo": null,
+   "datos": {
+    "pais": "CO"
+   }
+  },
+  {
+   "nombre": "Sincelejo",
+   "codigo": null,
+   "datos": {
+    "pais": "CO"
+   }
+  },
+  {
+   "nombre": "Valledupar",
+   "codigo": null,
+   "datos": {
+    "pais": "CO"
+   }
+  },
+  {
+   "nombre": "Tunja",
+   "codigo": null,
+   "datos": {
+    "pais": "CO"
+   }
+  },
+  {
+   "nombre": "Duitama",
+   "codigo": null,
+   "datos": {
+    "pais": "CO"
+   }
+  },
+  {
+   "nombre": "Sogamoso",
+   "codigo": null,
+   "datos": {
+    "pais": "CO"
+   }
+  },
+  {
+   "nombre": "Yumbo",
+   "codigo": null,
+   "datos": {
+    "pais": "CO"
+   }
+  },
+  {
+   "nombre": "Palmira",
+   "codigo": null,
+   "datos": {
+    "pais": "CO"
+   }
+  },
+  {
+   "nombre": "Funza",
+   "codigo": null,
+   "datos": {
+    "pais": "CO"
+   }
+  },
+  {
+   "nombre": "Mosquera",
+   "codigo": null,
+   "datos": {
+    "pais": "CO"
+   }
+  },
+  {
+   "nombre": "Cota",
+   "codigo": null,
+   "datos": {
+    "pais": "CO"
+   }
+  },
+  {
+   "nombre": "Tocancipá",
+   "codigo": null,
+   "datos": {
+    "pais": "CO"
+   }
+  },
+  {
+   "nombre": "Zipaquirá",
+   "codigo": null,
+   "datos": {
+    "pais": "CO"
+   }
+  },
+  {
+   "nombre": "Girardota",
+   "codigo": null,
+   "datos": {
+    "pais": "CO"
+   }
+  },
+  {
+   "nombre": "Sabaneta",
+   "codigo": null,
+   "datos": {
+    "pais": "CO"
+   }
+  },
+  {
+   "nombre": "Bello",
+   "codigo": null,
+   "datos": {
+    "pais": "CO"
+   }
+  }
+ ],
+ "contenedor": [
+  {
+   "nombre": "20' estándar",
+   "codigo": "20GP",
+   "datos": {}
+  },
+  {
+   "nombre": "40' estándar",
+   "codigo": "40GP",
+   "datos": {}
+  },
+  {
+   "nombre": "40' high cube",
+   "codigo": "40HC",
+   "datos": {}
+  },
+  {
+   "nombre": "45' high cube",
+   "codigo": "45HC",
+   "datos": {}
+  },
+  {
+   "nombre": "20' refrigerado",
+   "codigo": "20RF",
+   "datos": {}
+  },
+  {
+   "nombre": "40' refrigerado",
+   "codigo": "40RF",
+   "datos": {}
+  },
+  {
+   "nombre": "20' open top",
+   "codigo": "20OT",
+   "datos": {}
+  },
+  {
+   "nombre": "40' open top",
+   "codigo": "40OT",
+   "datos": {}
+  },
+  {
+   "nombre": "20' flat rack",
+   "codigo": "20FR",
+   "datos": {}
+  },
+  {
+   "nombre": "40' flat rack",
+   "codigo": "40FR",
+   "datos": {}
+  }
+ ],
+ "concepto": [
+  {
+   "nombre": "Gastos en origen (THC, documentación)",
+   "codigo": null,
+   "datos": {
+    "bloque": "origen",
+    "moneda": "USD",
+    "unidad": "contenedor",
+    "paraTerceros": false
+   }
+  },
+  {
+   "nombre": "Recogida en origen (pick up)",
+   "codigo": null,
+   "datos": {
+    "bloque": "origen",
+    "moneda": "USD",
+    "unidad": "embarque",
+    "paraTerceros": false
+   }
+  },
+  {
+   "nombre": "Despacho de exportación en origen",
+   "codigo": null,
+   "datos": {
+    "bloque": "origen",
+    "moneda": "USD",
+    "unidad": "embarque",
+    "paraTerceros": false
+   }
+  },
+  {
+   "nombre": "Flete marítimo",
+   "codigo": null,
+   "datos": {
+    "bloque": "flete",
+    "moneda": "USD",
+    "unidad": "contenedor",
+    "paraTerceros": false
+   }
+  },
+  {
+   "nombre": "Flete marítimo LCL",
+   "codigo": null,
+   "datos": {
+    "bloque": "flete",
+    "moneda": "USD",
+    "unidad": "m3",
+    "paraTerceros": false
+   }
+  },
+  {
+   "nombre": "Flete aéreo",
+   "codigo": null,
+   "datos": {
+    "bloque": "flete",
+    "moneda": "USD",
+    "unidad": "kg",
+    "paraTerceros": false
+   }
+  },
+  {
+   "nombre": "Recargo de combustible (BAF/FSC)",
+   "codigo": null,
+   "datos": {
+    "bloque": "flete",
+    "moneda": "USD",
+    "unidad": "contenedor",
+    "paraTerceros": false
+   }
+  },
+  {
+   "nombre": "Recargo de seguridad (SSC)",
+   "codigo": null,
+   "datos": {
+    "bloque": "flete",
+    "moneda": "USD",
+    "unidad": "kg",
+    "paraTerceros": false
+   }
+  },
+  {
+   "nombre": "Liberación de BL / AWB",
+   "codigo": null,
+   "datos": {
+    "bloque": "destino",
+    "moneda": "COP",
+    "unidad": "embarque",
+    "paraTerceros": true
+   }
+  },
+  {
+   "nombre": "THC destino",
+   "codigo": null,
+   "datos": {
+    "bloque": "destino",
+    "moneda": "COP",
+    "unidad": "contenedor",
+    "paraTerceros": true
+   }
+  },
+  {
+   "nombre": "Almacenaje",
+   "codigo": null,
+   "datos": {
+    "bloque": "destino",
+    "moneda": "COP",
+    "unidad": "embarque",
+    "paraTerceros": true
+   }
+  },
+  {
+   "nombre": "Desconsolidación",
+   "codigo": null,
+   "datos": {
+    "bloque": "destino",
+    "moneda": "COP",
+    "unidad": "embarque",
+    "paraTerceros": true
+   }
+  },
+  {
+   "nombre": "Devolución de contenedor vacío",
+   "codigo": null,
+   "datos": {
+    "bloque": "destino",
+    "moneda": "COP",
+    "unidad": "contenedor",
+    "paraTerceros": true
+   }
+  },
+  {
+   "nombre": "Transporte terrestre puerto → bodega",
+   "codigo": null,
+   "datos": {
+    "bloque": "terrestre",
+    "moneda": "COP",
+    "unidad": "contenedor",
+    "paraTerceros": false
+   }
+  },
+  {
+   "nombre": "Descargue en bodega",
+   "codigo": null,
+   "datos": {
+    "bloque": "terrestre",
+    "moneda": "COP",
+    "unidad": "embarque",
+    "paraTerceros": false
+   }
+  },
+  {
+   "nombre": "Escolta",
+   "codigo": null,
+   "datos": {
+    "bloque": "terrestre",
+    "moneda": "COP",
+    "unidad": "embarque",
+    "paraTerceros": false
+   }
+  },
+  {
+   "nombre": "Agenciamiento aduanero",
+   "codigo": null,
+   "datos": {
+    "bloque": "aduana",
+    "moneda": "COP",
+    "unidad": "embarque",
+    "paraTerceros": false
+   }
+  },
+  {
+   "nombre": "Tributos aduaneros (aranceles e IVA)",
+   "codigo": null,
+   "datos": {
+    "bloque": "aduana",
+    "moneda": "COP",
+    "unidad": "embarque",
+    "paraTerceros": true
+   }
+  },
+  {
+   "nombre": "Inspección ICA / INVIMA",
+   "codigo": null,
+   "datos": {
+    "bloque": "aduana",
+    "moneda": "COP",
+    "unidad": "embarque",
+    "paraTerceros": true
+   }
+  },
+  {
+   "nombre": "Certificado de origen",
+   "codigo": null,
+   "datos": {
+    "bloque": "aduana",
+    "moneda": "COP",
+    "unidad": "embarque",
+    "paraTerceros": true
+   }
+  },
+  {
+   "nombre": "Seguro de carga",
+   "codigo": null,
+   "datos": {
+    "bloque": "seguro",
+    "moneda": "USD",
+    "unidad": "embarque",
+    "paraTerceros": false
+   }
+  },
+  {
+   "nombre": "Gastos bancarios",
+   "codigo": null,
+   "datos": {
+    "bloque": "otros",
+    "moneda": "COP",
+    "unidad": "embarque",
+    "paraTerceros": false
+   }
+  }
+ ]
+}

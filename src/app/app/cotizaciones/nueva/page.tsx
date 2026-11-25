@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { contexto } from "@/server/contexto";
 import { datosEditor } from "@/server/vistas-editor";
+import { trmDelDia } from "@/server/trm";
 import { Encabezado } from "@/components/app/encabezado";
 import { EditorCotizacion } from "@/components/app/editor-cotizacion";
 
@@ -13,7 +14,7 @@ const TERMINOS =
 export default async function NuevaCotizacion({ searchParams }: PageProps<"/app/cotizaciones/nueva">) {
   const { cliente } = await searchParams;
   const repo = await contexto();
-  const d = await datosEditor(repo);
+  const [d, trm] = await Promise.all([datosEditor(repo), trmDelDia()]);
   const c = d.clientes.find((x) => x.id === cliente);
 
   return (
@@ -29,12 +30,16 @@ export default async function NuevaCotizacion({ searchParams }: PageProps<"/app/
       />
       <EditorCotizacion
         hoy={d.hoy}
+        trmDia={trm}
+        lugares={d.lugares}
+        conceptosCatalogo={d.conceptos}
+        servicios={d.servicios}
         clientes={d.clientes}
         proveedores={d.proveedores}
         inicial={{
           clienteId: c?.id ?? "",
           contactoId: c?.contactos[0]?.id,
-          tipoServicio: "maritimo_fcl",
+          tipoServicio: repo.empresa.servicios?.[0] ?? "maritimo_fcl",
           incoterm: "FOB",
           origen: "",
           destino: "",
@@ -42,10 +47,10 @@ export default async function NuevaCotizacion({ searchParams }: PageProps<"/app/
           conceptos: [
             { bloque: "flete", descripcion: "", moneda: "USD", unidad: "contenedor", cantidad: 1, costoUnitario: 0, ventaUnitaria: 0 },
           ],
-          trm: 3985,
+          trm: trm.valor,
           monedaPresentacion: c?.acuerdo?.moneda ?? "COP",
           vigenteHasta: d.vigenciaPorDefecto,
-          terminos: TERMINOS,
+          terminos: repo.empresa.terminos || TERMINOS,
         }}
       />
     </>

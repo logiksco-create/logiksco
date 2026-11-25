@@ -1,10 +1,13 @@
 import type {
+  AcuerdoComercial,
   Archivo,
   Comunicacion,
   Concepto,
+  Contacto,
   Cotizacion,
   Datos170,
   Empresa,
+  EntradaCatalogo,
   EstadoCotizacion,
   Factura,
   Formulario170,
@@ -15,6 +18,7 @@ import type {
   Operacion,
   Rol,
   Tercero,
+  TipoCatalogo,
   TipoServicio,
   Usuario,
 } from "@/domain/types";
@@ -37,6 +41,11 @@ export interface Repositorio {
   accesosPortal(terceroId: string): Promise<{ usuarioId: string; nombre: string; correo: string }[]>;
   invitarAlPortal(terceroId: string, datos: { nombre: string; correo: string }): Promise<void>;
 
+  /** Catálogos base de LOGIKS + propios de la empresa (RF-54). */
+  catalogo(tipo?: TipoCatalogo): Promise<EntradaCatalogo[]>;
+  agregarCatalogo(e: Omit<EntradaCatalogo, "id" | "base">): Promise<void>;
+  eliminarCatalogo(id: string): Promise<void>;
+
   /** Configuración de la empresa (RF-54). Solo Administrador. */
   actualizarEmpresa(cambios: CambiosEmpresa): Promise<void>;
   invitarUsuario(datos: { correo: string; nombre: string; roles: Rol[] }): Promise<void>;
@@ -46,6 +55,10 @@ export interface Repositorio {
   terceros(tipo?: Tercero["tipo"]): Promise<Tercero[]>;
   tercero(id: string): Promise<Tercero | null>;
   crearTercero(datos: NuevoTercero): Promise<Tercero>;
+  /** CRM (RF-41, RF-42) */
+  guardarAcuerdo(terceroId: string, acuerdo: AcuerdoComercial): Promise<void>;
+  guardarContacto(terceroId: string, contacto: Omit<Contacto, "id"> & { id?: string }): Promise<void>;
+  eliminarContacto(terceroId: string, contactoId: string): Promise<void>;
 
   cotizaciones(): Promise<Cotizacion[]>;
   cotizacion(id: string): Promise<Cotizacion | null>;
@@ -74,6 +87,8 @@ export interface Repositorio {
   operacion(id: string): Promise<Operacion | null>;
   abrirOperacion(cotizacionId: string): Promise<Operacion>;
   actualizarHito(operacionId: string, hito: Pick<Hito, "id" | "real" | "estimada" | "nota">): Promise<void>;
+  /** Costo real total de un concepto del DO (RF-29); null lo borra. */
+  registrarCostoReal(operacionId: string, conceptoId: string, costoTotal: number | null): Promise<void>;
 
   documentosDO(operacionId: string): Promise<Archivo[]>;
   soportes170(formularioId: string): Promise<Archivo[]>;
@@ -114,7 +129,17 @@ export interface RepositorioPublico {
 export type CambiosEmpresa = Partial<
   Pick<
     Empresa,
-    "razonSocial" | "ciudad" | "colorPrimario" | "prefijoCotizacion" | "prefijoDO" | "vigencia170Meses" | "bloquearDOSin170"
+    | "razonSocial"
+    | "ciudad"
+    | "colorPrimario"
+    | "prefijoCotizacion"
+    | "prefijoDO"
+    | "vigencia170Meses"
+    | "bloquearDOSin170"
+    | "hitosPorTipo"
+    | "terminos"
+    | "servicios"
+    | "configurada"
   >
 >;
 

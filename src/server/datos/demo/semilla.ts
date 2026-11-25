@@ -4,6 +4,7 @@ import type {
   Cotizacion,
   Datos170,
   Empresa,
+  EntradaCatalogo,
   Factura,
   Formulario170,
   Operacion,
@@ -32,6 +33,7 @@ export interface EstadoDemo {
   facturas: Factura[];
   llaveMegafoco?: string;
   accesosPortal: { terceroId: string; usuarioId: string; nombre: string; correo: string }[];
+  catalogoPropio: EntradaCatalogo[];
 }
 
 export interface ArchivoDemo {
@@ -60,6 +62,9 @@ export function crearSemilla(hoy = hoyISO()): EstadoDemo {
     prefijoDO: "OIK",
     vigencia170Meses: 12,
     bloquearDOSin170: true,
+    configurada: true,
+    terminos:
+      "Tarifas sujetas a disponibilidad de espacio y equipo. No incluye impuestos, almacenajes ni demoras. Valores en USD se liquidan a la TRM del día de facturación.",
   };
 
   const usuarios: Usuario[] = [
@@ -245,7 +250,7 @@ export function crearSemilla(hoy = hoyISO()): EstadoDemo {
   const comunicaciones: Comunicacion[] = [
     { id: "m-1", empresaId: empresa.id, entidad: "operacion", entidadId: "o-1", direccion: "saliente", asunto: `Bienvenido a su operación ${O(1)}`, para: ["laura@agrooriente.co"], resumen: "Correo automático de bienvenida con número de DO y responsable operativo.", fecha: `${d(-12)}T15:02:00.000Z`, abiertoEl: `${d(-12)}T16:40:00.000Z` },
     { id: "m-2", empresaId: empresa.id, entidad: "operacion", entidadId: "o-1", direccion: "saliente", asunto: "Solicitud de booking 2x40HC Ningbo → Cartagena", para: ["ops@ningbogl.cn"], resumen: "Solicitud al agente en origen con datos de la carga y fecha estimada de carga lista.", fecha: `${d(-11)}T13:10:00.000Z` },
-    { id: "m-3", empresaId: empresa.id, entidad: "operacion", entidadId: "o-1", direccion: "entrante", asunto: "RE: Solicitud de booking 2x40HC", para: ["do-0001@oikor.logiks.co"], resumen: `El agente confirma carga lista el ${fechaLegible(d(-1))} y booking para el ${fechaLegible(d(7))}.`, fecha: `${d(-2)}T09:45:00.000Z` },
+    { id: "m-3", empresaId: empresa.id, entidad: "operacion", entidadId: "o-1", direccion: "entrante", asunto: "RE: Solicitud de booking 2x40HC", para: ["do-o1@entrante.logiks.co"], resumen: `El agente confirma carga lista el ${fechaLegible(d(-1))} y booking para el ${fechaLegible(d(7))}.`, fecha: `${d(-2)}T09:45:00.000Z` },
     { id: "m-4", empresaId: empresa.id, entidad: "operacion", entidadId: "o-1", direccion: "saliente", asunto: `Novedad ${O(1)}: carga lista`, para: ["laura@agrooriente.co"], resumen: `Su proveedor indica carga lista el ${fechaLegible(d(-1))}; booking para el ${fechaLegible(d(7))}.`, fecha: `${d(-1)}T14:20:00.000Z`, abiertoEl: `${d(-1)}T15:01:00.000Z` },
     { id: "m-5", empresaId: empresa.id, entidad: "operacion", entidadId: "o-2", direccion: "saliente", asunto: `Novedad ${O(2)}: carga en vuelo`, para: ["andres@floreslamontana.co"], resumen: "La carga salió en el vuelo AV-1234; ETA Miami mañana.", fecha: `${d(-2)}T22:00:00.000Z`, abiertoEl: `${d(-2)}T22:15:00.000Z` },
     { id: "m-6", empresaId: empresa.id, entidad: "cotizacion", entidadId: "q-4", direccion: "saliente", asunto: `Cotización ${C(4)} · Telares industriales`, para: ["mateo@textilesrionegro.co"], resumen: "Envío de cotización con enlace de aceptación en línea.", fecha: `${d(-6)}T15:10:00.000Z`, abiertoEl: `${d(-5)}T13:22:00.000Z` },
@@ -262,6 +267,9 @@ export function crearSemilla(hoy = hoyISO()): EstadoDemo {
     secuencias: { cotizacion: cotizaciones.length, do: operaciones.length },
     archivos: [],
     facturas: [],
+    catalogoPropio: [
+      { id: "cat-1", tipo: "concepto", nombre: "Manejo de carga refrigerada", base: false, datos: { bloque: "origen", moneda: "COP", unidad: "embarque" } },
+    ],
     accesosPortal: [
       { terceroId: "t-agro", usuarioId: "c-laura", nombre: "Laura Ospina", correo: "laura@agrooriente.co" },
       { terceroId: "t-flores", usuarioId: "c-andres", nombre: "Andrés Vélez", correo: "andres@floreslamontana.co" },

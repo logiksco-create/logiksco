@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { Check, CircleCheck, LoaderCircle, Mail, Pencil, Send, X } from "lucide-react";
 import type { Hito } from "@/domain/types";
-import { actualizarHito, notificarCliente } from "@/server/acciones/app";
+import { actualizarHito, notificarCliente, solicitarAProveedor } from "@/server/acciones/app";
 import { AreaTexto, Boton, Entrada } from "@/components/ui";
 import { cn, fecha } from "@/lib/formato";
 
@@ -167,6 +167,89 @@ export function NotificarCliente({
       <p className="flex items-center gap-1.5 text-xs text-subtle">
         <Mail className="size-3.5" /> Las respuestas del cliente llegan al buzón del DO.
       </p>
+    </div>
+  );
+}
+
+/** Solicitud a un proveedor con plantilla (RF-25). */
+export function SolicitudProveedor({
+  operacionId,
+  proveedores,
+  plantillas,
+  inicial,
+}: {
+  operacionId: string;
+  proveedores: { id: string; nombre: string; correo: string }[];
+  plantillas: Record<string, { etiqueta: string; asunto: string; mensaje: string }>;
+  inicial?: { plantilla?: string; proveedorId?: string };
+}) {
+  const p0 = plantillas[inicial?.plantilla ?? ""] ?? Object.values(plantillas)[0];
+  const prov0 = proveedores.find((p) => p.id === inicial?.proveedorId) ?? proveedores[0];
+  const [proveedorId, setProveedorId] = useState(prov0?.id ?? "");
+  const [correo, setCorreo] = useState(prov0?.correo ?? "");
+  const [asunto, setAsunto] = useState(p0.asunto);
+  const [mensaje, setMensaje] = useState(p0.mensaje);
+  const [pendiente, iniciar] = useTransition();
+  const [estado, setEstado] = useState<{ ok?: boolean; enviado?: boolean; error?: string }>({});
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap gap-1.5">
+        {Object.entries(plantillas).map(([k, p]) => (
+          <button
+            key={k}
+            type="button"
+            onClick={() => {
+              setAsunto(p.asunto);
+              setMensaje(p.mensaje);
+              setEstado({});
+            }}
+            className="rounded-full border border-border px-2.5 py-1 text-xs font-medium text-muted transition-colors hover:border-brand hover:text-brand-fg"
+          >
+            {p.etiqueta}
+          </button>
+        ))}
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <select
+          value={proveedorId}
+          onChange={(e) => {
+            setProveedorId(e.target.value);
+            setCorreo(proveedores.find((p) => p.id === e.target.value)?.correo ?? "");
+          }}
+          className="h-9 rounded-lg border border-border bg-surface px-3 text-sm"
+          aria-label="Proveedor"
+        >
+          <option value="">Otro proveedor</option>
+          {proveedores.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.nombre}
+            </option>
+          ))}
+        </select>
+        <Entrada type="email" value={correo} onChange={(e) => setCorreo(e.target.value)} placeholder="correo@proveedor.com" aria-label="Correo del proveedor" />
+      </div>
+      <Entrada value={asunto} onChange={(e) => setAsunto(e.target.value)} aria-label="Asunto de la solicitud" />
+      <AreaTexto rows={5} value={mensaje} onChange={(e) => setMensaje(e.target.value)} aria-label="Mensaje al proveedor" />
+      {estado.error && <p className="text-[13px] text-danger">{estado.error}</p>}
+      {estado.ok && (
+        <p className="flex items-center gap-1.5 text-[13px] text-success">
+          <Check className="size-4" /> {estado.enviado ? "Enviada y registrada." : "Registrada en la trazabilidad (el correo aún no está configurado)."}
+        </p>
+      )}
+      <Boton
+        className="w-full"
+        variante="secundario"
+        disabled={pendiente}
+        onClick={() =>
+          iniciar(async () => {
+            const r = await solicitarAProveedor(operacionId, { correo, asunto, mensaje });
+            setEstado(r.ok ? { ok: true, enviado: r.datos.enviado } : { error: r.error });
+          })
+        }
+      >
+        {pendiente ? <LoaderCircle className="animate-spin" /> : <Send />} Enviar solicitud
+      </Boton>
     </div>
   );
 }

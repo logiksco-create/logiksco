@@ -12,6 +12,9 @@ import { reiniciarDemo } from "../datos/demo/repositorio-demo";
 import { notificar } from "../notificaciones";
 import { pdfCotizacion } from "../pdf/cotizacion";
 import { fecha } from "@/lib/formato";
+import { buzonCompleto } from "../buzon";
+import { correo } from "../correo";
+import { plantillaCorreo } from "../correo/plantilla";
 
 /**
  * Server Actions de la aplicación autenticada. Cada acción:
@@ -198,6 +201,26 @@ export async function abrirDO(cotizacionId: string) {
       ],
       resumen: "Correo automático de bienvenida con número de DO y responsable operativo.",
     });
+    // RF-24: el responsable operativo recibe el traspaso (correo interno).
+    if (responsable?.correo && responsable.id !== repo.usuario.id && correo().activo) {
+      await correo()
+        .enviar({
+          para: [responsable.correo],
+          asunto: `Nuevo DO asignado: ${op.consecutivo}`,
+          nombreRemitente: "LOGIKS.CO",
+          html: plantillaCorreo({
+            empresa: repo.empresa.razonSocial,
+            color: repo.empresa.colorPrimario,
+            titulo: `Te asignaron el DO ${op.consecutivo}`,
+            parrafos: [
+              `${repo.usuario.nombre} abrió el DO ${op.consecutivo} para ${cliente?.razonSocial ?? "el cliente"} (${op.origen} – ${op.destino}).`,
+              "Revisa los hitos y las vigencias de las tarifas.",
+            ],
+            boton: { texto: "Abrir el DO", url: `${env.appUrl}/app/operaciones/${op.id}` },
+          }),
+        })
+        .catch((e) => console.error("[correo] aviso al responsable:", e instanceof Error ? e.message : e));
+    }
     return op.id;
   });
   if (!r.ok) return r;
@@ -317,5 +340,39 @@ export async function crearTercero(_: unknown, formData: FormData) {
     });
     revalidatePath("/app/clientes");
     return { id: t.id };
+  });
+}
+
+/* ------------------------------------------------------------------ */
+/* Solicitudes a proveedores (RF-25)                                    */
+/* ------------------------------------------------------------------ */
+
+export async function solicitarAProveedor(
+  operacionId: string,
+  datos: { correo: string; asunto: string; mensaje: string },
+) {
+  return ejecutar(async () => {
+    const repo = await contexto();
+    exigirRol(tieneRol(repo, "operaciones", "comercial"));
+    const d = z
+      .object({
+        correo: z.email("Correo del proveedor inválido"),
+        asunto: z.string().trim().min(3, "Escribe el asunto").max(200),
+        mensaje: z.string().trim().min(5, "Escribe el mensaje").max(5000),
+      })
+      .parse(datos);
+    const op = await repo.operacion(operacionId);
+    if (!op) throw new ErrorNegocio("El DO no existe");
+    const { enviado } = await notificar(repo, {
+      entidad: "operacion",
+      entidadId: operacionId,
+      para: [d.correo],
+      asunto: d.asunto,
+      titulo: d.asunto,
+      parrafos: [d.mensaje, `Por favor responde a este correo o copia a ${buzonCompleto(op)} para que quede en el expediente.`],
+      resumen: d.mensaje,
+    });
+    revalidatePath(`/app/operaciones/${operacionId}`);
+    return { enviado };
   });
 }

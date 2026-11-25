@@ -25,6 +25,33 @@ export interface Empresa {
   prefijoDO: string;
   vigencia170Meses: number;
   bloquearDOSin170: boolean;
+  /** Hitos propios por tipo de operación (RF-26); si falta, los de LOGIKS. */
+  hitosPorTipo?: Partial<Record<TipoServicio, string[]>>;
+  /** Términos y condiciones por defecto de las cotizaciones. */
+  terminos?: string;
+  /** Servicios que presta (bienvenida). Vacío = todos. */
+  servicios?: TipoServicio[];
+  /** Completó el asistente de bienvenida. */
+  configurada?: boolean;
+}
+
+export const TIPOS_CATALOGO = {
+  puerto: "Puertos",
+  aeropuerto: "Aeropuertos",
+  ciudad: "Ciudades",
+  contenedor: "Contenedores",
+  concepto: "Conceptos",
+} as const;
+export type TipoCatalogo = keyof typeof TIPOS_CATALOGO;
+
+export interface EntradaCatalogo {
+  id: string;
+  tipo: TipoCatalogo;
+  nombre: string;
+  codigo?: string;
+  /** Base de LOGIKS (no editable) o propia de la empresa. */
+  base: boolean;
+  datos: { pais?: string; bloque?: Bloque; moneda?: Moneda; unidad?: Unidad; paraTerceros?: boolean };
 }
 
 export interface Usuario {
@@ -51,6 +78,7 @@ export interface Contacto {
   cargo: string;
   correo: string;
   telefono?: string;
+  cumpleanos?: string; // yyyy-mm-dd
 }
 
 export interface AcuerdoComercial {
@@ -249,6 +277,8 @@ export interface Operacion {
   conceptos: Concepto[];
   trm: number;
   costosReales?: Record<string, number>;
+  /** Parte local del buzón de correo del DO (RF-39). */
+  buzon?: string;
 }
 
 export type TipoAlerta =

@@ -7,9 +7,10 @@ import { estadoEfectivo, totalesCotizacion } from "@/domain/cotizacion";
 import { totalesFactura } from "@/domain/facturacion";
 import { Encabezado } from "@/components/app/encabezado";
 import { InvitarPortal } from "@/components/app/invitar-portal";
+import { Contactos, FormAcuerdo } from "@/components/app/crm";
 import { EstadoCotizacionBadge, EstadoDOBadge, Situacion170Badge } from "@/components/estados";
 import { EstadoFacturaBadge } from "@/components/estado-factura";
-import { Avatar, BotonLink, Insignia, Tarjeta, TarjetaEncabezado } from "@/components/ui";
+import { BotonLink, Insignia, Tarjeta, TarjetaEncabezado } from "@/components/ui";
 import { dinero, dineroCorto, fecha } from "@/lib/formato";
 
 /** Hoja de vida del cliente (RF-41) y acceso al portal (RF-35). */
@@ -108,38 +109,12 @@ export default async function Cliente({ params }: PageProps<"/app/clientes/[id]"
         <aside className="space-y-6">
           <Tarjeta>
             <TarjetaEncabezado titulo="Contactos" />
-            <ul className="space-y-3 px-5 pb-5">
-              {t.contactos.length === 0 && <li className="text-[13px] text-muted">Sin contactos.</li>}
-              {t.contactos.map((k) => (
-                <li key={k.id} className="flex items-center gap-3">
-                  <Avatar nombre={k.nombre} className="size-7 text-[10px]" />
-                  <div className="min-w-0 text-[13px]">
-                    <p className="font-medium">{k.nombre}</p>
-                    <p className="truncate text-muted">
-                      {k.cargo} · {k.correo}
-                    </p>
-                  </div>
-                </li>
-              ))}
-            </ul>
+            <Contactos terceroId={t.id} contactos={t.contactos} editable={tieneRol(repo, "comercial", "operaciones")} />
           </Tarjeta>
-          {t.acuerdo && (
+          {t.tipo !== "proveedor" && (
             <Tarjeta>
-              <TarjetaEncabezado titulo="Acuerdo comercial" />
-              <dl className="space-y-2 px-5 pb-5 text-[13px]">
-                <div className="flex justify-between">
-                  <dt className="text-muted">Corte de facturación</dt>
-                  <dd>Día {t.acuerdo.diaCorte}</dd>
-                </div>
-                <div className="flex justify-between">
-                  <dt className="text-muted">Plazo de pago</dt>
-                  <dd>{t.acuerdo.plazoPagoDias} días</dd>
-                </div>
-                <div className="flex justify-between">
-                  <dt className="text-muted">Moneda</dt>
-                  <dd>{t.acuerdo.moneda}</dd>
-                </div>
-              </dl>
+              <TarjetaEncabezado titulo="Acuerdo comercial" descripcion="Corte de facturación, plazo y moneda" />
+              <FormAcuerdo terceroId={t.id} acuerdo={t.acuerdo} editable={tieneRol(repo, "comercial", "contabilidad")} />
             </Tarjeta>
           )}
           {t.tipo === "cliente" && (

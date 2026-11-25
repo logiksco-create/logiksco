@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { ArrowRight, CircleCheck, FileText, PlaneLanding, PlaneTakeoff, Ship, TrendingUp } from "lucide-react";
 import { contexto } from "@/server/contexto";
 import { cargarAlertas, cargarTodo, metricasComerciales } from "@/server/consultas";
@@ -21,6 +22,8 @@ function saludo() {
 
 export default async function Inicio() {
   const repo = await contexto();
+  // Empresa recién registrada: primero el asistente de bienvenida.
+  if (repo.empresa.configurada === false && repo.usuario.roles.includes("admin")) redirect("/app/bienvenida");
   const [datos, alertas, m] = await Promise.all([cargarTodo(repo), cargarAlertas(repo), metricasComerciales(repo)]);
   const { operaciones, terceros, usuarios, hoy } = datos;
   const activas = operaciones.filter((o) => o.estado !== "cerrado" && o.estado !== "entregado");

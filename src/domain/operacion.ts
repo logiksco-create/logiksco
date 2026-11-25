@@ -20,12 +20,14 @@ export function crearOperacion(
     responsableId: string;
     hoy: string;
     generarId: () => string;
+    /** Hitos propios de la empresa para este tipo (RF-26). */
+    hitos?: string[];
   },
 ): Operacion {
   if (q.estado !== "aceptada") {
     throw new Error("Solo se abre un DO desde una cotización aceptada");
   }
-  const hitos: Hito[] = HITOS_POR_TIPO[q.tipoServicio].map((nombre) => ({
+  const hitos: Hito[] = (op.hitos?.length ? op.hitos : HITOS_POR_TIPO[q.tipoServicio]).map((nombre) => ({
     id: op.generarId(),
     nombre,
   }));
@@ -81,4 +83,10 @@ export function estadoSegunHitos(op: Operacion): Operacion["estado"] {
   if (hecho("Arribo")) nuevo = "en_destino";
   if (hecho("Entrega", "Cumplido")) nuevo = "entregado";
   return orden.indexOf(nuevo) > orden.indexOf(op.estado) ? nuevo : op.estado;
+}
+
+/** Hitos que aplica la empresa para un tipo de operación. */
+export function hitosDe(tipo: TipoServicio, propios?: Partial<Record<TipoServicio, string[]>>): string[] {
+  const h = propios?.[tipo]?.map((x) => x.trim()).filter(Boolean);
+  return h?.length ? h : HITOS_POR_TIPO[tipo];
 }

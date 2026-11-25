@@ -2,7 +2,9 @@ import { contexto } from "@/server/contexto";
 import { Encabezado } from "@/components/app/encabezado";
 import { FormEmpresa, GestionUsuarios } from "@/components/app/configuracion";
 import { FormMegafoco } from "@/components/app/facturacion";
-import { Tarjeta, TarjetaEncabezado } from "@/components/ui";
+import Link from "next/link";
+import { ListTree } from "lucide-react";
+import { Tarjeta, TarjetaEncabezado, clasesBoton } from "@/components/ui";
 
 export const metadata = { title: "Configuración" };
 
@@ -14,6 +16,11 @@ export default async function Configuracion() {
   return (
     <>
       <Encabezado
+        acciones={
+          <Link href="/app/configuracion/catalogos" className={clasesBoton({ variante: "secundario", tamano: "sm" })}>
+            <ListTree /> Catálogos, hitos y términos
+          </Link>
+        }
         titulo="Configuración"
         descripcion={admin ? "Datos de la empresa, consecutivos, reglas de la Circular 170 y usuarios." : "Solo el Administrador puede cambiar la configuración."}
       />

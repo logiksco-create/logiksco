@@ -35,6 +35,11 @@ export interface PropsEditor {
   proveedores: { id: string; nombre: string }[];
   hoy: string;
   aviso?: { duplicada: boolean; vencidas: number; origen?: string };
+  trmDia?: { valor: number; fecha: string; oficial: boolean };
+  /** Sugerencias de catálogos (RF-54). */
+  lugares?: string[];
+  conceptosCatalogo?: { nombre: string; bloque?: Bloque; moneda?: Moneda; unidad?: Concepto["unidad"]; paraTerceros?: boolean }[];
+  servicios?: string[];
 }
 
 let secuencia = 0;
@@ -56,7 +61,18 @@ function SeccionTitulo({ n, titulo, descripcion }: { n: number; titulo: string; 
   );
 }
 
-export function EditorCotizacion({ id, inicial, clientes, proveedores, hoy, aviso }: PropsEditor) {
+export function EditorCotizacion({
+  id,
+  inicial,
+  clientes,
+  proveedores,
+  hoy,
+  aviso,
+  trmDia,
+  lugares = [],
+  conceptosCatalogo = [],
+  servicios = [],
+}: PropsEditor) {
   const router = useRouter();
   const [pendiente, iniciar] = useTransition();
   const [error, setError] = useState<string>();
@@ -193,11 +209,13 @@ export function EditorCotizacion({ id, inicial, clientes, proveedores, hoy, avis
             </Campo>
             <Campo etiqueta="Tipo de servicio">
               <Selector value={f.tipoServicio} onChange={(e) => set("tipoServicio", e.target.value as typeof f.tipoServicio)}>
-                {Object.entries(TIPOS_SERVICIO).map(([v, l]) => (
-                  <option key={v} value={v}>
-                    {l}
-                  </option>
-                ))}
+                {Object.entries(TIPOS_SERVICIO)
+                  .filter(([v]) => servicios.length === 0 || servicios.includes(v) || v === f.tipoServicio)
+                  .map(([v, l]) => (
+                    <option key={v} value={v}>
+                      {l}
+                    </option>
+                  ))}
               </Selector>
             </Campo>
             <Campo etiqueta="Incoterm">
@@ -208,10 +226,15 @@ export function EditorCotizacion({ id, inicial, clientes, proveedores, hoy, avis
               </Selector>
             </Campo>
             <Campo etiqueta="Origen" ayuda="Puerto, aeropuerto o ciudad">
-              <Entrada value={f.origen} onChange={(e) => set("origen", e.target.value)} placeholder="Ningbo, China" />
+              <Entrada value={f.origen} onChange={(e) => set("origen", e.target.value)} placeholder="Ningbo, China" list="lugares" autoComplete="off" />
             </Campo>
             <Campo etiqueta="Destino">
-              <Entrada value={f.destino} onChange={(e) => set("destino", e.target.value)} placeholder="Rionegro, Antioquia" />
+              <Entrada value={f.destino} onChange={(e) => set("destino", e.target.value)} placeholder="Rionegro, Antioquia" list="lugares" autoComplete="off" />
+              <datalist id="lugares">
+                {lugares.map((l) => (
+                  <option key={l} value={l} />
+                ))}
+              </datalist>
             </Campo>
           </div>
         </Tarjeta>
@@ -258,6 +281,13 @@ export function EditorCotizacion({ id, inicial, clientes, proveedores, hoy, avis
                     </p>
                   )}
                 </div>
+                <datalist id={`conceptos-${b}`}>
+                  {conceptosCatalogo
+                    .filter((x) => !x.bloque || x.bloque === b)
+                    .map((x) => (
+                      <option key={x.nombre} value={x.nombre} />
+                    ))}
+                </datalist>
                 <div className="space-y-3">
                   {conceptos
                     .filter((c) => c.bloque === b)
@@ -278,7 +308,19 @@ export function EditorCotizacion({ id, inicial, clientes, proveedores, hoy, avis
                               value={c.descripcion}
                               placeholder="Descripción del concepto"
                               aria-label="Descripción"
-                              onChange={(e) => actualizar(c.clave, { descripcion: e.target.value })}
+                              list={`conceptos-${b}`}
+                              autoComplete="off"
+                              onChange={(e) => {
+                                const desc = e.target.value;
+                                const cat = conceptosCatalogo.find((x) => x.nombre === desc);
+                                // Al elegir del catálogo en una fila nueva, se traen moneda y unidad.
+                                actualizar(
+                                  c.clave,
+                                  cat && c.costoUnitario === 0 && c.ventaUnitaria === 0
+                                    ? { descripcion: desc, moneda: cat.moneda ?? c.moneda, unidad: cat.unidad ?? c.unidad, paraTerceros: cat.paraTerceros ?? c.paraTerceros }
+                                    : { descripcion: desc },
+                                );
+                              }}
                             />
                             <Selector
                               className="sm:col-span-5"
@@ -432,7 +474,22 @@ export function EditorCotizacion({ id, inicial, clientes, proveedores, hoy, avis
                   <option>USD</option>
                 </Selector>
               </Campo>
-              <Campo etiqueta="TRM">
+              <Campo
+                etiqueta="TRM"
+                ayuda={
+                  trmDia?.oficial ? (
+                    f.trm === trmDia.valor ? (
+                      `Oficial del ${trmDia.fecha.split("-").reverse().join("/")}`
+                    ) : (
+                      <button type="button" className="text-brand-fg hover:underline" onClick={() => set("trm", trmDia.valor)}>
+                        Usar la del día ({trmDia.valor.toLocaleString("es-CO")})
+                      </button>
+                    )
+                  ) : trmDia ? (
+                    "Sin conexión a la TRM oficial: revísala"
+                  ) : undefined
+                }
+              >
                 <Entrada type="number" min={1} step="any" className="tabular" value={f.trm} onChange={(e) => set("trm", num(e.target.value))} />
               </Campo>
             </div>

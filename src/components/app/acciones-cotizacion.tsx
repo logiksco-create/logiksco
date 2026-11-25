@@ -20,10 +20,12 @@ export function BotonDuplicar({
   id,
   compacto,
   className,
+  etiqueta = "Duplicar",
 }: {
   id: string;
   compacto?: boolean;
   className?: string;
+  etiqueta?: string;
 }) {
   const [pendiente, iniciar] = useTransition();
   const [error, setError] = useState<string>();
@@ -43,7 +45,7 @@ export function BotonDuplicar({
         }
       >
         {pendiente ? <LoaderCircle className="animate-spin" /> : <Copy />}
-        {!compacto && "Duplicar"}
+        {!compacto && etiqueta}
       </Boton>
       {error && !compacto && <Error mensaje={error} />}
     </>
