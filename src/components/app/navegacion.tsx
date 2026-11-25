@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   Bell,
   Building2,
@@ -114,6 +115,19 @@ export function NavegacionMovil({
   const abierto = abiertoEn === ruta;
   const setAbierto = (v: boolean) => setAbiertoEn(v ? ruta : null);
 
+  // Mientras está abierto: sin scroll de fondo y Escape cierra.
+  useEffect(() => {
+    if (!abierto) return;
+    const previo = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const alTeclear = (e: KeyboardEvent) => e.key === "Escape" && setAbiertoEn(null);
+    window.addEventListener("keydown", alTeclear);
+    return () => {
+      document.body.style.overflow = previo;
+      window.removeEventListener("keydown", alTeclear);
+    };
+  }, [abierto]);
+
   return (
     <>
       <button
@@ -124,10 +138,13 @@ export function NavegacionMovil({
       >
         <Menu className="size-5" />
       </button>
-      {abierto && (
-        <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true">
+      {abierto &&
+        // Portal al <body>: la barra superior usa backdrop-filter, que vuelve
+        // a sus hijos `fixed` relativos a ella y recortaba el menú.
+        createPortal(
+        <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-label="Menú">
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setAbierto(false)} />
-          <div className="animate-entrar absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col bg-[#0a0f1f]">
+          <div className="animate-entrar absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col overflow-y-auto bg-[#0a0f1f]">
             <div className="flex h-16 items-center justify-between px-5">
               <Logo claro />
               <button
@@ -142,7 +159,8 @@ export function NavegacionMovil({
             <Enlaces alertas={alertas} alNavegar={() => setAbierto(false)} />
             <div className="border-t border-white/[0.06] p-3">{pie}</div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </>
   );
