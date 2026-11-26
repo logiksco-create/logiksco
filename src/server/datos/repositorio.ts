@@ -14,6 +14,7 @@ import type {
   CuentaFe,
   DatosFiscales,
   DatosFacturacion,
+  Presentacion,
   EstadoBotFe,
   TrabajoFe,
   Formulario170,
@@ -121,7 +122,7 @@ export interface Repositorio {
     cambios: Partial<
       Pick<
         Factura,
-        "estado" | "megafocoId" | "numero" | "cufe" | "pdfUrl" | "xmlUrl" | "error" | "trmReferencia" | "tipoPago" | "metodoPago" | "tipoOperacion" | "vencimiento"
+        "estado" | "megafocoId" | "numero" | "cufe" | "pdfUrl" | "xmlUrl" | "error" | "trmReferencia" | "tipoPago" | "metodoPago" | "tipoOperacion" | "vencimiento" | "presentacion"
       >
     >,
   ): Promise<void>;
@@ -133,6 +134,8 @@ export interface Repositorio {
   desconectarFe(): Promise<void>;
   probarConexionFe(): Promise<void>;
   guardarTextosFe(t: { resolucion: string; condiciones: string }): Promise<void>;
+  /** Monedas que ve el cliente por defecto en facturas en USD. */
+  guardarPresentacionFe(p: Presentacion): Promise<void>;
   /** Congela los valores aprobados y encola la emisión (o la prueba sin emitir). */
   encolarEmision(facturaId: string, d: { payload: PayloadEmision; dryRun: boolean; enviarAlEmitir: boolean }): Promise<void>;
   /** Trabajos del bot (de una factura, o los de conexión si no se indica). */

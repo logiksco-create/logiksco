@@ -18,7 +18,7 @@ import {
   X,
 } from "lucide-react";
 import { FINPPI, TEXTO_CONSENTIMIENTO } from "@/domain/einvoice";
-import type { DatosFiscales } from "@/domain/types";
+import type { DatosFiscales, Presentacion } from "@/domain/types";
 import {
   conectarFinppi,
   desconectarFinppi,
@@ -28,6 +28,8 @@ import {
   guardarDatosFiscales,
   guardarResolucion,
   probarConexionFinppi,
+  cambiarPresentacionEmpresa,
+  cambiarPresentacionFactura,
 } from "@/server/acciones/fe";
 import { AreaTexto, Boton, Campo, Entrada, Insignia, Selector } from "@/components/ui";
 import { cn } from "@/lib/formato";
@@ -418,7 +420,7 @@ export function BotonEmitir({ facturaId, resumen, reintento }: { facturaId: stri
               <label className="flex items-start gap-2.5">
                 <input type="checkbox" className="mt-0.5 size-4 accent-[var(--brand)]" checked={enviar} onChange={(e) => setEnviar(e.target.checked)} />
                 <span>
-                  Al quedar emitida, enviar al cliente el PDF de LOGIKS{resumen.moneda === "USD" ? " en dólares" : ""} y el original de la DIAN.
+                  Al quedar emitida, enviar al cliente el PDF de LOGIKS y el archivo de la DIAN.
                 </span>
               </label>
               <label className="flex items-start gap-2.5 rounded-lg border border-border p-3">
@@ -603,5 +605,76 @@ export function EstadoBot({ latidoEl, pausado, demo }: { latidoEl?: string; paus
     <Insignia tono="exito" punto>Bot en línea</Insignia>
   ) : (
     <Insignia tono="neutro" punto>Bot sin conexión</Insignia>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Monedas que ve el cliente                                           */
+/* ------------------------------------------------------------------ */
+
+const OPCIONES_PRESENTACION: { valor: Presentacion; titulo: string; detalle: string }[] = [
+  { valor: "usd", titulo: "Solo USD", detalle: "El cliente no ve pesos" },
+  { valor: "ambas", titulo: "USD y COP", detalle: "Con el equivalente fiscal" },
+  { valor: "cop", titulo: "Solo COP", detalle: "Valores en pesos" },
+];
+
+/**
+ * Selector de cómo se presenta al cliente una factura en dólares. Se usa
+ * por factura y como valor por defecto de la empresa.
+ */
+export function SelectorPresentacion({
+  valor,
+  facturaId,
+  editable,
+  etiqueta = "El cliente ve el PDF en",
+}: {
+  valor: Presentacion;
+  /** Sin factura, guarda el valor por defecto de la empresa. */
+  facturaId?: string;
+  editable: boolean;
+  etiqueta?: string;
+}) {
+  const [actual, setActual] = useState(valor);
+  const [r, setR] = useState<R>(null);
+  const [pendiente, iniciar] = useTransition();
+  const router = useRouter();
+  const elegir = (v: Presentacion) => {
+    if (!editable || v === actual) return;
+    const anterior = actual;
+    setActual(v);
+    iniciar(async () => {
+      const x = facturaId ? await cambiarPresentacionFactura(facturaId, v) : await cambiarPresentacionEmpresa(v);
+      if (!x?.ok) setActual(anterior);
+      setR(x?.ok && facturaId ? null : x);
+      router.refresh();
+    });
+  };
+  return (
+    <div className="space-y-1.5">
+      <p className="flex items-center gap-2 text-[13px] font-medium">
+        {etiqueta}
+        {pendiente && <LoaderCircle className="size-3.5 animate-spin text-subtle" />}
+      </p>
+      <div role="radiogroup" aria-label={etiqueta} className="grid grid-cols-3 gap-1 rounded-lg border border-border bg-surface-2 p-1">
+        {OPCIONES_PRESENTACION.map((o) => (
+          <button
+            key={o.valor}
+            type="button"
+            role="radio"
+            aria-checked={actual === o.valor}
+            disabled={!editable}
+            onClick={() => elegir(o.valor)}
+            className={cn(
+              "rounded-md px-2 py-1.5 text-left transition-colors disabled:cursor-default",
+              actual === o.valor ? "bg-surface shadow-sm ring-1 ring-border" : "text-muted hover:text-fg",
+            )}
+          >
+            <span className="block text-[12.5px] font-medium">{o.titulo}</span>
+            <span className="block text-[11px] text-subtle">{o.detalle}</span>
+          </button>
+        ))}
+      </div>
+      <Mensaje r={r} />
+    </div>
   );
 }

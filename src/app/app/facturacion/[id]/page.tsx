@@ -21,9 +21,10 @@ import {
   totalesCop,
   totalesOriginales,
   urlDian,
+  presentacionEfectiva,
 } from "@/domain/einvoice";
 import { diasEntre, hoyISO } from "@/domain/fechas";
-import { ESTADOS_CUENTA_FE, ESTADOS_TRABAJO_FE, type TrabajoFe } from "@/domain/types";
+import { ESTADOS_CUENTA_FE, ESTADOS_TRABAJO_FE, PRESENTACIONES, type TrabajoFe } from "@/domain/types";
 import { Encabezado } from "@/components/app/encabezado";
 import { EditorPrefactura } from "@/components/app/facturacion";
 import {
@@ -33,6 +34,7 @@ import {
   CondicionesFe,
   EstadoBot,
   RefrescoEnVivo,
+  SelectorPresentacion,
 } from "@/components/app/factura-electronica";
 import { EstadoFacturaBadge } from "@/components/estado-factura";
 import { Insignia, Tarjeta, TarjetaEncabezado, clasesBoton } from "@/components/ui";
@@ -101,6 +103,7 @@ export default async function DetalleFactura({ params }: PageProps<"/app/factura
   ]);
   const contable = tieneRol(repo, "contabilidad");
   const editable = contable && EDITABLE.includes(f.estado);
+  const puedePresentar = tieneRol(repo, "contabilidad", "comercial");
   const enProceso = EN_PROCESO.includes(f.estado) || trabajos.some((j) => j.estado === "en_cola" || j.estado === "corriendo");
   // Recién emitida y con envío automático pendiente: seguir mirando un par de minutos.
   // eslint-disable-next-line react-hooks/purity -- marca de tiempo del render en el servidor
@@ -132,6 +135,7 @@ export default async function DetalleFactura({ params }: PageProps<"/app/factura
     }),
   ];
   const plazo = f.vencimiento ? Math.max(0, diasEntre(hoy, f.vencimiento)) : cliente?.acuerdo?.plazoPagoDias ?? 0;
+  const modo = presentacionEfectiva(f, cuenta);
   const trmTexto = f.trmReferencia?.toLocaleString("es-CO", { minimumFractionDigits: 2 });
 
   return (
@@ -248,9 +252,10 @@ export default async function DetalleFactura({ params }: PageProps<"/app/factura
                     )}
                   </div>
                 )}
+                {f.moneda === "USD" && <SelectorPresentacion facturaId={f.id} valor={modo} editable={puedePresentar} />}
                 <div className="grid grid-cols-1 gap-2">
                   <a href={`/app/facturacion/${f.id}/pdf`} target="_blank" className={clasesBoton({ variante: "secundario" })}>
-                    <FileText /> PDF LOGIKS {f.moneda === "USD" ? "en dólares" : ""}
+                    <FileText /> PDF LOGIKS {f.moneda === "USD" ? `· ${PRESENTACIONES[modo].toLowerCase()}` : ""}
                   </a>
                   {f.pdfFinppiRuta && (
                     <a href={`/app/facturacion/${f.id}/original?tipo=pdf`} target="_blank" className={clasesBoton({ variante: "secundario" })}>
@@ -305,6 +310,7 @@ export default async function DetalleFactura({ params }: PageProps<"/app/factura
                     tipoOperacion: f.tipoOperacion ?? "Estándar",
                   }}
                 />
+                {f.moneda === "USD" && <SelectorPresentacion facturaId={f.id} valor={modo} editable={puedePresentar} />}
                 <a href={`/app/facturacion/${f.id}/pdf`} target="_blank" className={cn(clasesBoton({ variante: "secundario" }), "w-full")}>
                   <FileText /> Vista previa del PDF
                 </a>

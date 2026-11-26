@@ -453,6 +453,8 @@ export interface Factura {
   enviarAlEmitir?: boolean;
   /** Emisión simulada (modo demo): no es válida ante la DIAN. */
   simulada?: boolean;
+  /** Monedas que ve el cliente en el PDF de LOGIKS; vacío = la de la empresa. */
+  presentacion?: Presentacion;
 }
 
 /* ---------------- Facturación electrónica (Finppi) ---------------- */
@@ -487,7 +489,21 @@ export interface CuentaFe {
   resolucion?: string;
   /** Condiciones de pago y notas legales (pie del PDF). */
   condiciones?: string;
+  /** Monedas que ve el cliente en facturas en USD (por defecto de la empresa). */
+  presentacion?: Presentacion;
 }
+
+/**
+ * Cómo se presenta al cliente una factura negociada en dólares:
+ * solo USD, USD con su equivalente en COP, o solo COP. No cambia lo que va a
+ * la DIAN (siempre en pesos).
+ */
+export const PRESENTACIONES = {
+  usd: "Solo dólares",
+  ambas: "Dólares y pesos",
+  cop: "Solo pesos",
+} as const;
+export type Presentacion = keyof typeof PRESENTACIONES;
 
 export const ESTADOS_TRABAJO_FE = {
   en_cola: "En cola",

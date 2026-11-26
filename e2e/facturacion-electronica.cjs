@@ -80,6 +80,17 @@ let pagina;
   if (SALIDA) fs.writeFileSync(`${SALIDA}/factura.pdf`, await r.body());
   paso('PDF de la factura generado');
 
+  // 5b. El usuario elige qué monedas ve el cliente (por defecto solo USD).
+  for (const [boton, nombre] of [['USD y COP', 'ambas'], ['Solo COP', 'cop'], ['Solo USD', 'usd']]) {
+    await p.getByRole('radio', { name: new RegExp(boton) }).click();
+    await p.getByRole('radio', { name: new RegExp(boton), checked: true }).waitFor();
+    await p.waitForTimeout(800);
+    const x = await p.request.get(`${B}/app/facturacion/${id}/pdf`);
+    if (x.status() !== 200) throw new Error('PDF ' + nombre);
+    if (SALIDA) fs.writeFileSync(`${SALIDA}/factura-${nombre}.pdf`, await x.body());
+  }
+  paso('presentación: solo USD, USD y COP, solo COP');
+
   // 6. Enviada al cliente (queda en su trazabilidad).
   await p.getByText(/Enviada al cliente/).waitFor();
   await p.getByRole('button', { name: 'Reenviar al cliente' }).click();

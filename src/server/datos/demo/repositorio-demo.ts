@@ -14,6 +14,7 @@ import type {
   DatosFiscales,
   EstadoBotFe,
   TrabajoFe,
+  Presentacion,
   Formulario170,
   Hito,
   Rol,
@@ -493,6 +494,7 @@ export class DemoRepositorio implements Repositorio {
       instantanea: s.cuentaFe?.instantanea ?? {},
       resolucion: s.cuentaFe?.resolucion,
       condiciones: s.cuentaFe?.condiciones,
+      presentacion: s.cuentaFe?.presentacion,
     };
     this.healthcheckSimulado();
   }
@@ -506,6 +508,12 @@ export class DemoRepositorio implements Repositorio {
   async probarConexionFe() {
     if (!estado().cuentaFe?.tieneCredenciales) throw new ErrorNegocio("Primero guarda las credenciales de Finppi");
     this.healthcheckSimulado();
+  }
+
+  async guardarPresentacionFe(p: Presentacion) {
+    const s = estado();
+    s.cuentaFe ??= { estado: "desconectada", tieneCredenciales: false, instantanea: {} };
+    s.cuentaFe.presentacion = p;
   }
 
   async guardarTextosFe(t: { resolucion: string; condiciones: string }) {

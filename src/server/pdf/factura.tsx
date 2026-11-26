@@ -2,7 +2,7 @@ import "server-only";
 import { Document, Image, Page, Path, Svg, Text, View, renderToBuffer } from "@react-pdf/renderer";
 import type { Cotizacion, CuentaFe, Empresa, Factura, Operacion, Tercero } from "@/domain/types";
 import { TIPOS_SERVICIO } from "@/domain/types";
-import { esCufe, lineasEnCop, pctIva, totalesCop, totalesOriginales, urlDian, type LineaCop } from "@/domain/einvoice";
+import { esCufe, lineasEnCop, presentacionEfectiva, pctIva, totalesCop, totalesOriginales, urlDian, type LineaCop } from "@/domain/einvoice";
 import { enLetras } from "@/domain/letras";
 import { fecha, fechaHora } from "@/lib/formato";
 import { logoParaPdf } from "./logo";
@@ -72,12 +72,22 @@ export async function pdfFactura(d: DatosPdfFactura) {
   const { f, empresa, cliente } = d;
   const m = marca(empresa);
   const logo = await logoParaPdf(empresa.logoUrl);
-  const enUsd = f.moneda === "USD";
-  const trm = enUsd ? f.trmReferencia ?? f.trm : 1;
-  const lineas = lineasEnCop(f.lineas, f.moneda, trm);
+  const negociadaUsd = f.moneda === "USD";
+  const trm = negociadaUsd ? f.trmReferencia ?? f.trm : 1;
+  // Qué ve el cliente: solo USD, USD y COP, o solo COP (elige la empresa o la factura).
+  const modo = presentacionEfectiva(f, d.cuenta);
+  const soloCop = negociadaUsd && modo === "cop";
+  const muestraPesos = !negociadaUsd || modo !== "usd";
+  /** Columna COP adicional al lado de la moneda negociada. */
+  const enUsd = negociadaUsd && modo === "ambas";
+  const monedaVista = soloCop ? "COP" : f.moneda;
+  const base = lineasEnCop(f.lineas, f.moneda, trm);
+  const lineas: LineaCop[] = soloCop
+    ? base.map((l) => ({ ...l, precioOriginal: l.precioCop, subtotalOriginal: l.subtotalCop, ivaOriginal: l.ivaCop }))
+    : base;
   const tc = totalesCop(lineas);
   const to = totalesOriginales(lineas);
-  const mon = (n: number) => (enUsd ? USD.format(n) : COP.format(n));
+  const mon = (n: number) => (monedaVista === "USD" ? USD.format(n) : COP.format(n));
   const emitida = f.estado === "emitida" && !!f.numero;
   const cufe = esCufe(f.cufe) ? f.cufe : undefined;
   const fiscal = cliente.fiscal ?? {};
@@ -121,7 +131,9 @@ export async function pdfFactura(d: DatosPdfFactura) {
   ];
 
   const generada = f.fechaValidacion ?? f.creadoEl;
-  const anchoMon = enUsd ? 50 : 72;
+  const anchoMon = enUsd ? 50 : monedaVista === "USD" ? 64 : 72;
+  /** Ancho de la columna principal de totales (los pesos son más largos). */
+  const wPrim = !enUsd && monedaVista === "COP" ? 86 : 62;
 
   return renderToBuffer(
     <Document title={`Factura ${f.numero ?? "prefactura"}`} author={empresa.razonSocial} creator="LOGIKS.CO" language="es-CO">
@@ -230,11 +242,13 @@ export async function pdfFactura(d: DatosPdfFactura) {
               <View style={{ flex: 1 }} />
             )}
             <View style={{ width: 120, alignItems: "flex-end" }}>
-              <Text style={[e.etiqueta, { color: claro.etiqueta }]}>{enUsd ? "TRM de referencia" : "Moneda"}</Text>
+              <Text style={[e.etiqueta, { color: claro.etiqueta }]}>{negociadaUsd && muestraPesos ? "TRM de referencia" : "Moneda"}</Text>
               <Text style={{ fontFamily: "Grotesk", fontWeight: 700, fontSize: 14, color: "#FFFFFF", marginTop: 2 }}>
-                {enUsd ? COP.format(trm) : "COP"}
+                {negociadaUsd && muestraPesos ? COP.format(trm) : monedaVista}
               </Text>
-              <Text style={{ fontSize: 6.8, color: claro.texto, marginTop: 1 }}>{enUsd ? "Factura en USD · DIAN en COP" : "Pesos colombianos"}</Text>
+              <Text style={{ fontSize: 6.8, color: claro.texto, marginTop: 1 }}>
+                {!negociadaUsd ? "Pesos colombianos" : modo === "usd" ? "Dólares estadounidenses" : modo === "cop" ? "Negociada en USD · valores en COP" : "Factura en USD · DIAN en COP"}
+              </Text>
             </View>
           </View>
           {merc && (merc.descripcion || merc.piezas || merc.pesoKg) ? (
@@ -294,8 +308,8 @@ export async function pdfFactura(d: DatosPdfFactura) {
                 ["Código", 56, "left"],
                 ["U/M", 24, "left"],
                 ["Descripción", 0, "left"],
-                [`Unitario ${f.moneda}`, anchoMon + 4, "right"],
-                [`Total ${f.moneda}`, anchoMon + 6, "right"],
+                [`Unitario ${monedaVista}`, anchoMon + 4, "right"],
+                [`Total ${monedaVista}`, anchoMon + 6, "right"],
                 ...(enUsd ? ([["Total COP", 74, "right"]] as const) : []),
               ] as const
             ).map(([t, w, a]) => (
@@ -367,7 +381,7 @@ export async function pdfFactura(d: DatosPdfFactura) {
             </View>
             <View style={{ marginTop: 6, borderLeftWidth: 2, borderLeftColor: m.color, paddingLeft: 7 }}>
               <Text style={e.etiqueta}>Son</Text>
-              <Text style={{ fontFamily: "Manrope", fontWeight: 700, fontSize: 7.8, color: T.tinta, marginTop: 1.5, lineHeight: 1.35 }}>{enLetras(to.total, f.moneda)}</Text>
+              <Text style={{ fontFamily: "Manrope", fontWeight: 700, fontSize: 7.8, color: T.tinta, marginTop: 1.5, lineHeight: 1.35 }}>{enLetras(to.total, monedaVista)}</Text>
               {enUsd && (
                 <Text style={{ fontSize: 6.6, color: T.suave, marginTop: 2, lineHeight: 1.35 }}>
                   Equivalente fiscal: {enLetras(tc.total, "COP")}
@@ -377,7 +391,8 @@ export async function pdfFactura(d: DatosPdfFactura) {
             <View style={{ marginTop: 7 }}>
               <Text style={[e.etiqueta, { marginBottom: 2 }]}>Observaciones y condiciones</Text>
               <Text style={{ fontSize: 6.1, color: T.texto, lineHeight: 1.35 }}>
-                {enUsd ? `Factura negociada en dólares; ante la DIAN se emitió en pesos con la TRM de referencia ${COP.format(trm)}. ` : ""}
+                {negociadaUsd && muestraPesos ? `Factura negociada en dólares; ante la DIAN se emitió en pesos con la TRM de referencia ${COP.format(trm)}. ` : ""}
+                {negociadaUsd && !muestraPesos ? "Valores en dólares estadounidenses. " : ""}
                 {d.cuenta?.condiciones ?? ""}
               </Text>
               <Text style={{ fontSize: 5.8, color: T.suave, lineHeight: 1.35, marginTop: 2 }}>
@@ -391,7 +406,7 @@ export async function pdfFactura(d: DatosPdfFactura) {
           <View style={{ borderRadius: 10, borderWidth: 1, borderColor: T.linea, overflow: "hidden" }}>
             <View style={{ flexDirection: "row", paddingHorizontal: 10, paddingTop: 6, paddingBottom: 2 }}>
               <Text style={[e.etiqueta, { flex: 1, fontSize: 5.8 }]}> </Text>
-              <Text style={[e.etiqueta, { width: 62, textAlign: "right", fontSize: 5.8, color: m.oscuro }]}>{f.moneda}</Text>
+              <Text style={[e.etiqueta, { width: wPrim, textAlign: "right", fontSize: 5.8, color: m.oscuro }]}>{monedaVista}</Text>
               {enUsd && (
                 <View style={{ width: 82, flexDirection: "row", justifyContent: "flex-end", alignItems: "center" }}>
                   <Flecha color={m.color} ancho={14} />
@@ -403,7 +418,7 @@ export async function pdfFactura(d: DatosPdfFactura) {
               estilo === "pagar" ? (
                 <View key={k} style={{ flexDirection: "row", alignItems: "center", backgroundColor: T.tinta, paddingHorizontal: 10, paddingVertical: 6, marginTop: 3 }}>
                   <Text style={{ flex: 1, fontFamily: "Grotesk", fontWeight: 700, fontSize: 9.5, color: "#FFFFFF" }}>Valor a pagar</Text>
-                  <Text style={{ width: 62, textAlign: "right", fontFamily: "Grotesk", fontWeight: 700, fontSize: 10.5, color: "#FFFFFF" }}>{mon(a)}</Text>
+                  <Text style={{ width: wPrim, textAlign: "right", fontFamily: "Grotesk", fontWeight: 700, fontSize: 10.5, color: "#FFFFFF" }}>{mon(a)}</Text>
                   {enUsd && <Text style={{ width: 82, textAlign: "right", fontFamily: "Mono", fontWeight: 600, fontSize: 7.4, color: m.suave }}>{COP.format(c)}</Text>}
                 </View>
               ) : (
@@ -417,7 +432,7 @@ export async function pdfFactura(d: DatosPdfFactura) {
                   }}
                 >
                   <Text style={{ flex: 1, fontSize: estilo ? 8 : 7.4, color: estilo ? T.tinta : T.suave, fontWeight: estilo ? 700 : 400 }}>{k}</Text>
-                  <Text style={{ width: 62, textAlign: "right", fontFamily: "Mono", fontSize: 7.4, fontWeight: estilo ? 600 : 400, color: T.tinta }}>{mon(a)}</Text>
+                  <Text style={{ width: wPrim, textAlign: "right", fontFamily: "Mono", fontSize: 7.4, fontWeight: estilo ? 600 : 400, color: T.tinta }}>{mon(a)}</Text>
                   {enUsd && <Text style={{ width: 82, textAlign: "right", fontFamily: "Mono", fontSize: 7, color: T.suave }}>{COP.format(c)}</Text>}
                 </View>
               ),

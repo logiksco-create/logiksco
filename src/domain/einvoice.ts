@@ -9,7 +9,7 @@
  * Este módulo es puro (sin dependencias de ejecución) para que lo use tanto
  * la aplicación como el worker del bot.
  */
-import type { DatosFiscales, IvaFinppi, LineaFactura, Moneda } from "./types";
+import type { DatosFiscales, IvaFinppi, LineaFactura, Moneda, Presentacion } from "./types";
 
 /* ------------------------------------------------------------------ */
 /* Catálogos exactos de Finppi (Anexo A.7 y A.8). El bot elige por texto. */
@@ -457,4 +457,9 @@ export function bloqueosEmision(d: {
   if (d.fecha > d.hoy) b.push("La fecha de la factura no puede ser futura.");
   if (d.vencimiento && d.vencimiento < d.fecha) b.push("El vencimiento no puede ser anterior a la fecha.");
   return b;
+}
+
+/** Presentación al cliente: la de la factura, si no la de la empresa; por defecto solo USD. */
+export function presentacionEfectiva(f: { presentacion?: Presentacion }, cuenta?: { presentacion?: Presentacion } | null): Presentacion {
+  return f.presentacion ?? cuenta?.presentacion ?? "usd";
 }

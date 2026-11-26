@@ -162,3 +162,12 @@ describe("valor en letras", () => {
     expect(enLetras(101, "USD")).toBe("CIENTO UN DÓLARES");
   });
 });
+
+import { presentacionEfectiva } from "./einvoice";
+describe("presentación al cliente", () => {
+  it("la factura manda; si no, la empresa; por defecto solo USD", () => {
+    expect(presentacionEfectiva({}, null)).toBe("usd");
+    expect(presentacionEfectiva({}, { presentacion: "ambas" })).toBe("ambas");
+    expect(presentacionEfectiva({ presentacion: "cop" }, { presentacion: "ambas" })).toBe("cop");
+  });
+});

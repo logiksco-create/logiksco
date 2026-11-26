@@ -17,6 +17,7 @@ import type {
   DatosFiscales,
   EstadoBotFe,
   TrabajoFe,
+  Presentacion,
   Formulario170,
   Hito,
   Operacion,
@@ -270,6 +271,7 @@ const mapFactura = (r: Fila): Factura => ({
   enviadaClienteEl: r.enviada_cliente_el ?? undefined,
   enviarAlEmitir: r.enviar_al_emitir ?? true,
   simulada: r.simulada ?? false,
+  presentacion: r.presentacion ?? undefined,
 });
 
 const mapTrabajo = (r: Fila): TrabajoFe => ({
@@ -937,6 +939,7 @@ export class SupabaseRepositorio implements Repositorio {
       metodo_pago: c.metodoPago,
       tipo_operacion: c.tipoOperacion,
       vencimiento: c.vencimiento,
+      presentacion: c.presentacion,
       megafoco_id: c.megafocoId,
       numero: c.numero,
       cufe: c.cufe,
@@ -977,6 +980,7 @@ export class SupabaseRepositorio implements Repositorio {
       instantanea: data.instantanea ?? {},
       resolucion: data.resolucion ?? undefined,
       condiciones: data.condiciones ?? undefined,
+      presentacion: data.presentacion ?? undefined,
     };
   }
 
@@ -997,6 +1001,11 @@ export class SupabaseRepositorio implements Repositorio {
 
   async probarConexionFe() {
     const { error } = await this.db.rpc("fe_probar_conexion", { p_empresa: this.empresa.id });
+    falla(error);
+  }
+
+  async guardarPresentacionFe(p: Presentacion) {
+    const { error } = await this.db.rpc("fe_guardar_presentacion", { p_empresa: this.empresa.id, p_presentacion: p });
     falla(error);
   }
 

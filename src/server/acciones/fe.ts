@@ -246,3 +246,25 @@ export async function enviarFacturaCliente(facturaId: string): Promise<R> {
     return r.enviado ? `Enviada a ${r.para.join(", ")}` : `Registrada para ${r.para.join(", ")} (el correo aún no está configurado)`;
   });
 }
+
+const presentacion = z.enum(["usd", "ambas", "cop"], "Elige cómo se muestra la factura");
+
+/** Monedas que ve el cliente en el PDF de esta factura (no cambia lo que va a la DIAN). */
+export async function cambiarPresentacionFactura(facturaId: string, valor: string): Promise<R> {
+  return intentar(async () => {
+    const repo = await contexto();
+    if (!tieneRol(repo, "contabilidad", "comercial")) throw new ErrorNegocio("Tu rol no permite cambiar la factura");
+    await repo.actualizarFactura(z.string().min(1).parse(facturaId), { presentacion: presentacion.parse(valor) });
+    return "Presentación actualizada";
+  });
+}
+
+/** Valor por defecto de la empresa para las facturas en USD. */
+export async function cambiarPresentacionEmpresa(valor: string): Promise<R> {
+  return intentar(async () => {
+    const repo = await contexto();
+    if (!tieneRol(repo, "contabilidad")) throw new ErrorNegocio("Solo Contabilidad o el Administrador cambian esto");
+    await repo.guardarPresentacionFe(presentacion.parse(valor));
+    return "Guardado para las próximas facturas";
+  });
+}

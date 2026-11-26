@@ -10,6 +10,7 @@ import {
   FormConexionFinppi,
   FormResolucion,
   RefrescoEnVivo,
+  SelectorPresentacion,
 } from "@/components/app/factura-electronica";
 import { Insignia, Tarjeta, TarjetaEncabezado, clasesBoton } from "@/components/ui";
 import { fechaHora } from "@/lib/formato";
@@ -151,6 +152,14 @@ export default async function ConfiguracionFe() {
           <Tarjeta>
             <TarjetaEncabezado titulo="Textos de la factura" descripcion="Se imprimen en tu PDF de factura LOGIKS" />
             <div className="p-5 pt-0">
+              <div className="mb-5">
+                <SelectorPresentacion
+                  valor={cuenta?.presentacion ?? "usd"}
+                  editable={contable}
+                  etiqueta="En facturas en dólares, el cliente ve"
+                />
+                <p className="mt-1.5 text-xs text-subtle">Por defecto de la empresa; cada factura puede cambiarlo. A la DIAN siempre va en pesos.</p>
+              </div>
               <FormResolucion texto={cuenta?.resolucion ?? ""} condiciones={cuenta?.condiciones ?? ""} editable={contable} />
             </div>
           </Tarjeta>
