@@ -5,6 +5,10 @@ const tono: Record<EstadoFactura, Tono> = {
   borrador: "neutro",
   aprobada: "info",
   en_cola: "marca",
+  enviando: "marca",
+  fallida: "peligro",
+  estado_desconocido: "alerta",
+  revision: "alerta",
   emitida: "exito",
   rechazada: "peligro",
 };

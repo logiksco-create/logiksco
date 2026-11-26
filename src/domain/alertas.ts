@@ -148,12 +148,15 @@ export function calcularAlertas(e: EntradaAlertas): Alerta[] {
 
   // RF-49: rechazos de Finppi van a Contabilidad con el error.
   for (const f of e.facturas ?? []) {
-    if (f.estado !== "rechazada" && !f.error) continue;
+    const revisar = f.estado === "revision" || f.estado === "estado_desconocido";
+    if (f.estado === "emitida" || (f.estado !== "rechazada" && f.estado !== "fallida" && !revisar && !f.error)) continue;
     alertas.push({
       id: `factura-${f.id}`,
       tipo: "factura_rechazada",
       severidad: "alta",
-      titulo: `Factura de ${nombre(f.clienteId)} ${f.estado === "rechazada" ? "rechazada" : "con error de envío"}`,
+      titulo: `Factura de ${nombre(f.clienteId)} ${
+        f.estado === "rechazada" ? "rechazada" : revisar ? "requiere revisión" : f.estado === "fallida" ? "no se emitió" : "con error de envío"
+      }`,
       detalle: f.error ?? "Revisa la prefactura y vuelve a enviarla.",
       href: `/app/facturacion/${f.id}`,
       fecha: hoy,

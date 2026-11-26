@@ -7,10 +7,13 @@ import { etiquetaLugar } from "@/domain/catalogo";
 export async function datosEditor(repo: Repositorio) {
   const [terceros, catalogo] = await Promise.all([repo.terceros(), repo.catalogo()]);
   return {
-    lugares: [...new Set(catalogo.filter((e) => e.tipo !== "concepto" && e.tipo !== "contenedor").map(etiquetaLugar))],
+    lugares: [...new Set(catalogo.filter((e) => e.tipo !== "concepto" && e.tipo !== "contenedor" && e.tipo !== "producto_finppi").map(etiquetaLugar))],
     conceptos: catalogo
       .filter((e) => e.tipo === "concepto")
       .map((e) => ({ nombre: e.nombre, ...e.datos })),
+    productosFinppi: catalogo
+      .filter((e) => e.tipo === "producto_finppi" && e.codigo)
+      .map((e) => ({ codigo: e.codigo!, nombre: e.nombre, iva: e.datos.iva })),
     servicios: repo.empresa.servicios ?? [],
     hoy: hoyISO(),
     clientes: terceros.filter((t) => t.tipo !== "proveedor"),

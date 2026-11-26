@@ -4,14 +4,15 @@ import { FormEmpresa, GestionUsuarios } from "@/components/app/configuracion";
 import { FormMegafoco } from "@/components/app/facturacion";
 import { SubidorLogo } from "@/components/app/subidor-logo";
 import Link from "next/link";
-import { ListTree } from "lucide-react";
-import { Tarjeta, TarjetaEncabezado, clasesBoton } from "@/components/ui";
+import { ListTree, ReceiptText } from "lucide-react";
+import { ESTADOS_CUENTA_FE } from "@/domain/types";
+import { Insignia, Tarjeta, TarjetaEncabezado, clasesBoton } from "@/components/ui";
 
 export const metadata = { title: "Configuración" };
 
 export default async function Configuracion() {
   const repo = await contexto();
-  const [usuarios, megafoco] = await Promise.all([repo.usuarios(), repo.megafocoConectado()]);
+  const [usuarios, megafoco, cuentaFe] = await Promise.all([repo.usuarios(), repo.megafocoConectado(), repo.cuentaFe()]);
   const admin = repo.usuario.roles.includes("admin");
 
   return (
@@ -35,7 +36,28 @@ export default async function Configuracion() {
             <FormEmpresa empresa={repo.empresa} editable={admin} />
           </Tarjeta>
           <Tarjeta>
-            <TarjetaEncabezado titulo="Megafoco" descripcion="Contabilidad y factura electrónica" />
+            <TarjetaEncabezado
+              titulo="Facturación electrónica"
+              descripcion="Conexión con Finppi para emitir ante la DIAN con un clic"
+              accion={
+                <Insignia tono={cuentaFe?.estado === "activa" ? "exito" : cuentaFe?.tieneCredenciales ? "alerta" : "neutro"} punto>
+                  {cuentaFe ? ESTADOS_CUENTA_FE[cuentaFe.estado] : "Sin conectar"}
+                </Insignia>
+              }
+            />
+            <div className="flex flex-wrap items-center justify-between gap-3 px-5 pb-5">
+              <p className="text-[13px] text-muted">
+                {cuentaFe?.instantanea.proximaFactura
+                  ? `Próxima factura: ${cuentaFe.instantanea.proximaFactura}`
+                  : "Conecta tu cuenta de Finppi y define tus productos."}
+              </p>
+              <Link href="/app/configuracion/facturacion-electronica" className={clasesBoton({ variante: "secundario", tamano: "sm" })}>
+                <ReceiptText /> Configurar
+              </Link>
+            </div>
+          </Tarjeta>
+          <Tarjeta>
+            <TarjetaEncabezado titulo="Megafoco" descripcion="Contabilidad (opcional)" />
             <FormMegafoco conectado={megafoco} editable={admin} />
           </Tarjeta>
         </div>

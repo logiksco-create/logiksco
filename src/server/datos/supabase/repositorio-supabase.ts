@@ -13,6 +13,10 @@ import type {
   EntradaCatalogo,
   EstadoCotizacion,
   Factura,
+  CuentaFe,
+  DatosFiscales,
+  EstadoBotFe,
+  TrabajoFe,
   Formulario170,
   Hito,
   Operacion,
@@ -21,6 +25,7 @@ import type {
   TipoCatalogo,
   Usuario,
 } from "@/domain/types";
+import type { PayloadEmision } from "@/domain/einvoice";
 import { duplicarCotizacion, puedeTransicionar } from "@/domain/cotizacion";
 import { estadoSegunHitos, hitosDe } from "@/domain/operacion";
 import { habilitadoParaDO, situacion170, vigenciaAlAprobar } from "@/domain/cumplimiento";
@@ -77,6 +82,7 @@ const mapTercero = (r: Fila): Tercero => ({
   nit: r.nit,
   razonSocial: r.razon_social,
   ciudad: r.ciudad ?? "",
+  fiscal: r.fiscal && Object.keys(r.fiscal).length ? r.fiscal : undefined,
   contactos: (r.contactos ?? []).map((k: Fila) => ({
     id: k.id,
     nombre: k.nombre,
@@ -108,6 +114,8 @@ const mapConcepto = (r: Fila): Concepto => ({
   ventaUnitaria: Number(r.venta_unitaria ?? r.venta),
   vigenciaTarifa: r.vigencia_tarifa ?? undefined,
   paraTerceros: r.para_terceros,
+  productoFinppi: r.producto_finppi ?? undefined,
+  ivaFinppi: r.iva_finppi ?? undefined,
 });
 
 const mapCotizacion = (r: Fila): Cotizacion => ({
@@ -133,6 +141,7 @@ const mapCotizacion = (r: Fila): Cotizacion => ({
   estado: r.estado,
   terminos: r.terminos,
   origenId: r.origen_id ?? undefined,
+  facturacion: r.facturacion ?? undefined,
   tokenPublico: "", // solo se conoce al emitir el enlace
   historial: (r.historial ?? []).map((h: Fila) => ({
     fecha: h.creado_el,
@@ -198,6 +207,7 @@ const aFilaCotizacion = (d: DatosCotizacion) => ({
   moneda_presentacion: d.monedaPresentacion,
   vigente_hasta: d.vigenteHasta,
   terminos: d.terminos,
+  facturacion: d.facturacion ?? null,
   conceptos: d.conceptos.map((c) => ({
     bloque: c.bloque,
     descripcion: c.descripcion,
@@ -209,6 +219,8 @@ const aFilaCotizacion = (d: DatosCotizacion) => ({
     venta_unitaria: c.ventaUnitaria,
     vigencia_tarifa: c.vigenciaTarifa ?? "",
     para_terceros: c.paraTerceros ?? false,
+    producto_finppi: c.productoFinppi ?? "",
+    iva_finppi: c.ivaFinppi ?? "",
   })),
 });
 
@@ -242,6 +254,38 @@ const mapFactura = (r: Fila): Factura => ({
   pdfUrl: r.pdf_url ?? undefined,
   xmlUrl: r.xml_url ?? undefined,
   error: r.error ?? undefined,
+  trmReferencia: r.trm_referencia != null ? Number(r.trm_referencia) : undefined,
+  tipoPago: r.tipo_pago ?? undefined,
+  metodoPago: r.metodo_pago ?? undefined,
+  tipoOperacion: r.tipo_operacion ?? undefined,
+  vencimiento: r.vencimiento ?? undefined,
+  referencia: r.referencia ?? undefined,
+  numeroEsperado: r.numero_esperado ?? undefined,
+  fechaValidacion: r.fecha_validacion ?? undefined,
+  totalCop: r.total_cop != null ? Number(r.total_cop) : undefined,
+  pdfFinppiRuta: r.pdf_finppi_path ?? undefined,
+  pdfFinppiSha256: r.pdf_finppi_sha256 ?? undefined,
+  xmlRuta: r.xml_path ?? undefined,
+  errorCodigo: r.error_codigo ?? undefined,
+  enviadaClienteEl: r.enviada_cliente_el ?? undefined,
+  enviarAlEmitir: r.enviar_al_emitir ?? true,
+  simulada: r.simulada ?? false,
+});
+
+const mapTrabajo = (r: Fila): TrabajoFe => ({
+  id: r.id,
+  facturaId: r.factura_id ?? undefined,
+  tipo: r.tipo,
+  estado: r.estado,
+  dryRun: r.dry_run,
+  creadoEl: r.creado_el,
+  terminadoEl: r.terminado_el ?? undefined,
+  errorCodigo: r.error_codigo ?? undefined,
+  error: r.error ?? undefined,
+  resultado: r.resultado ?? {},
+  logs: [...(r.fe_job_logs ?? [])]
+    .sort((a: Fila, b: Fila) => a.id - b.id)
+    .map((l: Fila) => ({ paso: l.paso, nivel: l.nivel, mensaje: l.mensaje, creadoEl: l.creado_el })),
 });
 
 const mapArchivo = (r: Fila): Archivo => ({
@@ -879,7 +923,7 @@ export class SupabaseRepositorio implements Repositorio {
       .from("facturas")
       .update({ conceptos: lineas })
       .eq("id", id)
-      .eq("estado", "borrador")
+      .in("estado", ["borrador", "aprobada", "fallida", "rechazada"])
       .select("id");
     falla(error);
     if (!data?.length) throw new ErrorNegocio("Solo se edita una prefactura en borrador");
@@ -888,6 +932,11 @@ export class SupabaseRepositorio implements Repositorio {
   async actualizarFactura(id: string, c: Partial<Factura>) {
     const fila: Fila = {
       estado: c.estado,
+      trm_referencia: c.trmReferencia,
+      tipo_pago: c.tipoPago,
+      metodo_pago: c.metodoPago,
+      tipo_operacion: c.tipoOperacion,
+      vencimiento: c.vencimiento,
       megafoco_id: c.megafocoId,
       numero: c.numero,
       cufe: c.cufe,
@@ -898,6 +947,115 @@ export class SupabaseRepositorio implements Repositorio {
     };
     for (const k of Object.keys(fila)) if (fila[k] === undefined) delete fila[k];
     const { error } = await this.db.from("facturas").update(fila).eq("id", id);
+    falla(error);
+  }
+
+  /* ---------- Facturación electrónica (Finppi) ---------- */
+
+  async guardarDatosFiscales(terceroId: string, fiscal: DatosFiscales) {
+    const { data, error } = await this.db
+      .from("terceros")
+      .update({ fiscal, direccion: fiscal.direccion })
+      .eq("id", terceroId)
+      .eq("empresa_id", this.empresa.id)
+      .select("id");
+    falla(error);
+    if (!data?.length) throw new ErrorNegocio("No tienes permiso para editar este cliente");
+  }
+
+  async cuentaFe(): Promise<CuentaFe | null> {
+    const { data, error } = await this.db.from("fe_cuentas").select("*").eq("empresa_id", this.empresa.id).maybeSingle();
+    falla(error);
+    if (!data) return null;
+    return {
+      estado: data.estado,
+      tieneCredenciales: data.tiene_credenciales,
+      usuarioPista: data.usuario_pista ?? undefined,
+      consentimientoEl: data.consentimiento_el ?? undefined,
+      consentimientoVersion: data.consentimiento_version ?? undefined,
+      ultimoLoginOk: data.ultimo_login_ok ?? undefined,
+      instantanea: data.instantanea ?? {},
+      resolucion: data.resolucion ?? undefined,
+    };
+  }
+
+  async guardarCredencialesFe(usuario: string, clave: string, version: string) {
+    const { error } = await this.db.rpc("fe_guardar_credenciales", {
+      p_empresa: this.empresa.id,
+      p_usuario: usuario,
+      p_clave: clave,
+      p_version: version,
+    });
+    falla(error);
+  }
+
+  async desconectarFe() {
+    const { error } = await this.db.rpc("fe_desconectar", { p_empresa: this.empresa.id });
+    falla(error);
+  }
+
+  async probarConexionFe() {
+    const { error } = await this.db.rpc("fe_probar_conexion", { p_empresa: this.empresa.id });
+    falla(error);
+  }
+
+  async guardarResolucionFe(texto: string) {
+    const { error } = await this.db.rpc("fe_guardar_resolucion", { p_empresa: this.empresa.id, p_texto: texto });
+    falla(error);
+  }
+
+  async encolarEmision(facturaId: string, d: { payload: PayloadEmision; dryRun: boolean; enviarAlEmitir: boolean }) {
+    const { error } = await this.db.rpc("fe_encolar_emision", {
+      p_factura: facturaId,
+      p_payload: d.payload,
+      p_dry_run: d.dryRun,
+      p_referencia: d.payload.referencia,
+      p_total_cop: d.payload.totales.total,
+      p_enviar_al_emitir: d.enviarAlEmitir,
+    });
+    if (error?.code === "23505") throw new ErrorNegocio("Ya hay un trabajo en curso para esta factura");
+    falla(error);
+  }
+
+  async trabajosFe(facturaId?: string) {
+    let q = this.db
+      .from("fe_jobs")
+      .select("*, fe_job_logs(*)")
+      .eq("empresa_id", this.empresa.id)
+      .order("creado_el", { ascending: false })
+      .limit(20);
+    q = facturaId ? q.eq("factura_id", facturaId) : q.eq("tipo", "healthcheck");
+    const { data, error } = await q;
+    falla(error);
+    return (data ?? []).map(mapTrabajo);
+  }
+
+  async estadoBotFe(): Promise<EstadoBotFe> {
+    const { data } = await this.db.from("fe_sistema").select("*").eq("id", 1).maybeSingle();
+    return { latidoEl: data?.latido_el ?? undefined, pausado: data?.pausado ?? false, motivo: data?.motivo ?? undefined };
+  }
+
+  async descargarArchivoFe(facturaId: string, tipo: "pdf" | "xml"): Promise<Descarga | null> {
+    const f = await this.factura(facturaId);
+    const ruta = tipo === "pdf" ? f?.pdfFinppiRuta : f?.xmlRuta;
+    if (!f || !ruta) return null;
+    if (!ruta.startsWith(`${this.empresa.id}/fe/${f.id}/`)) throw new ErrorNegocio("Archivo no válido");
+    const { data, error } = await this.servicio().storage.from(BUCKET).download(ruta);
+    if (error || !data) throw new ErrorNegocio("No se pudo descargar el archivo de Finppi");
+    const bytes = new Uint8Array(await data.arrayBuffer());
+    return {
+      nombre: `${f.numero ?? "factura"}${tipo === "pdf" ? ".pdf" : ".xml"}`,
+      mime: tipo === "pdf" ? "application/pdf" : "application/xml",
+      bytes,
+    };
+  }
+
+  async marcarFacturaEnviada(facturaId: string) {
+    const { error } = await this.servicio()
+      .from("facturas")
+      .update({ enviada_cliente_el: new Date().toISOString() })
+      .eq("id", facturaId)
+      .eq("empresa_id", this.empresa.id);
     falla(error);
   }
 

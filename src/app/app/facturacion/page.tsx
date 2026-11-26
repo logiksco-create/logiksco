@@ -5,7 +5,6 @@ import { cargarTodo } from "@/server/consultas";
 import { pendientesPorCliente, totalesFactura } from "@/domain/facturacion";
 import { utilidadOperacion } from "@/domain/operacion";
 import { ESTADOS_DO } from "@/domain/types";
-import { modoDemo } from "@/lib/env";
 import { Encabezado } from "@/components/app/encabezado";
 import { GenerarPrefactura } from "@/components/app/facturacion";
 import { EstadoFacturaBadge } from "@/components/estado-factura";
@@ -18,7 +17,7 @@ export default async function Facturacion() {
   const repo = await contexto();
   const { operaciones, facturas, terceros, hoy } = await cargarTodo(repo);
   const contable = tieneRol(repo, "contabilidad");
-  const conectado = await repo.megafocoConectado();
+  const cuentaFe = await repo.cuentaFe();
   const clientes = terceros.filter((t) => t.tipo === "cliente");
   const pendientes = pendientesPorCliente(operaciones, facturas, clientes, hoy);
   const nombre = (id: string) => terceros.find((t) => t.id === id)?.razonSocial ?? "—";
@@ -27,14 +26,14 @@ export default async function Facturacion() {
     <>
       <Encabezado
         titulo="Facturación"
-        descripcion="Prefactura desde los DO, envío a Megafoco y emisión electrónica con el bot de Finppi."
+        descripcion="Prefactura desde los DO y factura electrónica en USD o COP con un clic: el bot la emite en Finppi y llega a la DIAN."
       />
 
-      {!modoDemo && !conectado && (
+      {cuentaFe?.estado !== "activa" && (
         <div className="mb-6 rounded-xl border border-warning/30 bg-warning-soft p-4 text-[13.5px] text-warning">
-          Megafoco no está conectado. El Administrador puede pegar la llave de API en{" "}
-          <Link href="/app/configuracion" className="font-semibold underline">
-            Configuración
+          La cuenta de Finppi no está activa. El Administrador la conecta en{" "}
+          <Link href="/app/configuracion/facturacion-electronica" className="font-semibold underline">
+            Configuración → Facturación electrónica
           </Link>
           .
         </div>

@@ -40,6 +40,7 @@ export default async function EditarCotizacion({ params, searchParams }: PagePro
         trmDia={trm}
         lugares={d.lugares}
         conceptosCatalogo={d.conceptos}
+        productosFinppi={d.productosFinppi}
         servicios={d.servicios}
         clientes={d.clientes}
         proveedores={d.proveedores}
@@ -61,6 +62,7 @@ export default async function EditarCotizacion({ params, searchParams }: PagePro
           monedaPresentacion: q.monedaPresentacion,
           vigenteHasta: q.vigenteHasta,
           terminos: q.terminos,
+          facturacion: q.facturacion,
         }}
       />
     </>

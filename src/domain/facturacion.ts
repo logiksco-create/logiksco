@@ -1,6 +1,7 @@
 import type { Factura, LineaFactura, Moneda, Operacion, Tercero } from "./types";
 import { convertir } from "./cotizacion";
 import { diasEntre, sumarMeses } from "./fechas";
+import { pctIva } from "./einvoice";
 
 /**
  * Prefacturación (RF-45, RF-46). LOGIKS arma la prefactura y Megafoco la
@@ -66,7 +67,9 @@ export function lineasDesdeOperaciones(ops: Operacion[], moneda: Moneda): LineaF
       tipo: c.paraTerceros ? ("terceros" as const) : ("propio" as const),
       cantidad: c.cantidad,
       valorUnitario: Math.round(convertir(c.ventaUnitaria, c.moneda, moneda, o.trm) * 100) / 100,
-      ivaPct: c.paraTerceros ? 0 : IVA_PROPIO_SUGERIDO,
+      ivaPct: c.ivaFinppi ? pctIva(c.ivaFinppi) : c.paraTerceros ? 0 : IVA_PROPIO_SUGERIDO,
+      productoFinppi: c.productoFinppi,
+      ivaFinppi: c.ivaFinppi ?? (c.paraTerceros ? ("Ninguno" as const) : ("IVA-19" as const)),
     })),
   );
 }

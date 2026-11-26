@@ -29,6 +29,16 @@ export function AgregarCatalogo({ tipo }: { tipo: TipoCatalogo }) {
         {(tipo === "puerto" || tipo === "aeropuerto" || tipo === "contenedor") && (
           <Entrada name="codigo" placeholder="Código" className="w-28 font-mono uppercase" maxLength={10} />
         )}
+        {tipo === "producto_finppi" && (
+          <>
+            <Entrada name="codigo" placeholder="Código en Finppi" required className="w-36 font-mono" maxLength={30} />
+            <Selector name="iva" defaultValue="IVA-19" className="w-32" aria-label="IVA por defecto">
+              {["IVA-19", "IVA-5", "IVA-0", "Ninguno"].map((v) => (
+                <option key={v}>{v}</option>
+              ))}
+            </Selector>
+          </>
+        )}
         {tipo === "concepto" && (
           <Selector name="bloque" defaultValue="otros" className="w-48" aria-label="Bloque">
             {Object.entries(BLOQUES).map(([v, l]) => (

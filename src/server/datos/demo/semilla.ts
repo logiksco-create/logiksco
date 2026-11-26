@@ -8,7 +8,9 @@ import type {
   Factura,
   Formulario170,
   Operacion,
+  CuentaFe,
   Tercero,
+  TrabajoFe,
   Usuario,
 } from "@/domain/types";
 import { HITOS_POR_TIPO } from "@/domain/operacion";
@@ -34,6 +36,9 @@ export interface EstadoDemo {
   llaveMegafoco?: string;
   accesosPortal: { terceroId: string; usuarioId: string; nombre: string; correo: string }[];
   catalogoPropio: EntradaCatalogo[];
+  cuentaFe?: CuentaFe;
+  trabajosFe: TrabajoFe[];
+  ultimoConsecutivoFe: number;
 }
 
 export interface ArchivoDemo {
@@ -95,7 +100,25 @@ export function crearSemilla(hoy = hoyISO()): EstadoDemo {
     acuerdo,
   });
 
-  const corteCercano = Math.min(28, Number(hoy.slice(8, 10)) + 1);
+  // Cliente en USD con los datos fiscales completos para Finppi.
+  const fiscalFlores: Tercero["fiscal"] = {
+    tipoPersona: "Juridica",
+    tipoDocumento: "Nit",
+    numeroDocumento: "800333444",
+    nombres: "Flores La Montaña SAS",
+    apellidos: "Flores La Montaña SAS",
+    email: "andres@floreslamontana.co",
+    celular: "3000000000",
+    regimen: "Responsable de iva",
+    responsabilidadFiscal: "No aplica (ninguna de las anteriores)",
+    pais: "Colombia",
+    ciudad: "LA CEJA / Antioquia",
+    direccion: "Vereda San José, km 3",
+    telefono: "6045550000",
+  };
+
+  // Corte hoy: Flores (USD) tiene DO listos para facturar y la alerta de corte.
+  const corteCercano = Math.min(28, Number(hoy.slice(8, 10)));
 
   const terceros: Tercero[] = [
     t("t-agro", "cliente", "900.111.222-3", "Agroindustrias del Oriente SAS", "Rionegro", ["Laura Ospina", "Jefe de comercio exterior", "laura@agrooriente.co"], { diaCorte: 25, plazoPagoDias: 30, moneda: "COP" }),
@@ -109,6 +132,7 @@ export function crearSemilla(hoy = hoyISO()): EstadoDemo {
     t("p-ningbo", "proveedor", "CN-91330200", "Ningbo Global Logistics", "Ningbo"),
     t("p-agencia", "proveedor", "860.000.004-4", "Agencia de Aduanas Nexo SAS", "Medellín"),
   ];
+  terceros.find((x) => x.id === "t-flores")!.fiscal = fiscalFlores;
 
   let cid = 0;
   const c = (p: Partial<Concepto> & Pick<Concepto, "bloque" | "descripcion" | "costoUnitario" | "ventaUnitaria">): Concepto => ({
@@ -128,9 +152,9 @@ export function crearSemilla(hoy = hoyISO()): EstadoDemo {
   ];
 
   const aereoConceptos = (): Concepto[] => [
-    c({ bloque: "origen", descripcion: "Manejo en finca y documentación", moneda: "COP", costoUnitario: 180_000, ventaUnitaria: 260_000 }),
-    c({ bloque: "flete", descripcion: "Flete aéreo MDE → MIA", proveedorId: "p-avianca", proveedorNombre: "Avianca Cargo", unidad: "kg", cantidad: 1200, costoUnitario: 1.45, ventaUnitaria: 1.78, vigenciaTarifa: d(6) }),
-    c({ bloque: "otros", descripcion: "Certificado fitosanitario ICA", moneda: "COP", costoUnitario: 95_000, ventaUnitaria: 95_000, paraTerceros: true }),
+    c({ bloque: "origen", descripcion: "Manejo en finca y documentación", moneda: "COP", costoUnitario: 180_000, ventaUnitaria: 260_000, productoFinppi: "SRV-MAN", ivaFinppi: "IVA-19" }),
+    c({ bloque: "flete", descripcion: "Flete aéreo MDE → MIA", proveedorId: "p-avianca", proveedorNombre: "Avianca Cargo", unidad: "kg", cantidad: 1200, costoUnitario: 1.45, ventaUnitaria: 1.78, vigenciaTarifa: d(6), productoFinppi: "SRV-FLT", ivaFinppi: "IVA-0" }),
+    c({ bloque: "otros", descripcion: "Certificado fitosanitario ICA", moneda: "COP", costoUnitario: 95_000, ventaUnitaria: 95_000, paraTerceros: true, productoFinppi: "TER-REE", ivaFinppi: "Ninguno" }),
   ];
 
   const terminos =
@@ -160,7 +184,7 @@ export function crearSemilla(hoy = hoyISO()): EstadoDemo {
 
   const cotizaciones: Cotizacion[] = [
     q({ id: "q-1", consecutivo: C(1), clienteId: "t-agro", estado: "aceptada", conceptos: fclConceptos(d(3)), fechaEmision: d(-28), vigenteHasta: d(-13) }),
-    q({ id: "q-2", consecutivo: C(2), clienteId: "t-flores", estado: "aceptada", tipoServicio: "aereo", incoterm: "FCA", origen: "Rionegro (MDE)", destino: "Miami (MIA)", mercancia: { descripcion: "Flores frescas cortadas", piezas: 80, pesoKg: 1200, volumenM3: 7.2 }, conceptos: aereoConceptos(), monedaPresentacion: "USD", fechaEmision: d(-20), vigenteHasta: d(-12) }),
+    q({ id: "q-2", consecutivo: C(2), clienteId: "t-flores", estado: "aceptada", tipoServicio: "aereo", incoterm: "FCA", origen: "Rionegro (MDE)", destino: "Miami (MIA)", mercancia: { descripcion: "Flores frescas cortadas", piezas: 80, pesoKg: 1200, volumenM3: 7.2 }, conceptos: aereoConceptos(), monedaPresentacion: "USD", fechaEmision: d(-20), vigenteHasta: d(-12), facturacion: { monedaFactura: "USD", tipoPago: "Crédito", plazoDias: 15, metodoPago: "Transferencia Crédito Bancario", tipoOperacion: "Estándar" } }),
     q({ id: "q-3", consecutivo: C(3), clienteId: "t-muebles", estado: "aceptada", tipoServicio: "maritimo_lcl", origen: "Shanghái, China", destino: "Envigado, Antioquia", mercancia: { descripcion: "Herrajes y componentes para muebles", piezas: 40, pesoKg: 3200, volumenM3: 14 }, conceptos: fclConceptos(d(60)).map((x) => (x.bloque === "flete" ? { ...x, descripcion: "Flete LCL Shanghái → Cartagena", unidad: "m3", cantidad: 14, costoUnitario: 62, ventaUnitaria: 85 } : x)), fechaEmision: d(-40), vigenteHasta: d(-30) }),
     q({ id: "q-4", consecutivo: C(4), clienteId: "t-textiles", estado: "vista", conceptos: fclConceptos(d(25)), mercancia: { descripcion: "Telares industriales", piezas: 6, pesoKg: 21_000, volumenM3: 118, contenedores: [{ tipo: "40HC", cantidad: 2 }] }, fechaEmision: d(-6), vigenteHasta: d(2), historial: [{ fecha: `${d(-6)}T15:00:00.000Z`, usuario: "Diego Restrepo", accion: "Creada" }, { fecha: `${d(-6)}T15:10:00.000Z`, usuario: "Diego Restrepo", accion: "Enviada a mateo@textilesrionegro.co" }, { fecha: `${d(-5)}T13:22:00.000Z`, usuario: "Cliente", accion: "Abierta por el cliente" }] }),
     q({ id: "q-5", consecutivo: C(5), clienteId: "t-tecno", estado: "enviada", tipoServicio: "aereo", incoterm: "EXW", origen: "Hamburgo (HAM)", destino: "Rionegro (MDE)", mercancia: { descripcion: "Equipos médicos", piezas: 12, pesoKg: 640, volumenM3: 4.1 }, conceptos: aereoConceptos().map((x) => (x.bloque === "flete" ? { ...x, descripcion: "Flete aéreo HAM → MDE", cantidad: 640, costoUnitario: 3.9, ventaUnitaria: 4.6 } : x)), fechaEmision: d(-3), vigenteHasta: d(12) }),
@@ -267,8 +291,23 @@ export function crearSemilla(hoy = hoyISO()): EstadoDemo {
     secuencias: { cotizacion: cotizaciones.length, do: operaciones.length },
     archivos: [],
     facturas: [],
+    trabajosFe: [] as TrabajoFe[],
+    ultimoConsecutivoFe: 0,
+    cuentaFe: {
+      estado: "activa",
+      tieneCredenciales: true,
+      usuarioPista: "fa***@oikor.co",
+      consentimientoEl: d(-3) + "T15:00:00.000Z",
+      consentimientoVersion: "1.0",
+      ultimoLoginOk: d(-1) + "T13:00:00.000Z",
+      instantanea: { razonSocial: empresa.razonSocial, nit: "901456789", proximaFactura: "SETT1", leidoEl: d(-1) + "T13:00:00.000Z", clientes: 3, productos: 3 },
+      resolucion: "Resolución DIAN de prueba (modo demo). Numeración SETT1 a SETT5000000.",
+    } satisfies CuentaFe,
     catalogoPropio: [
       { id: "cat-1", tipo: "concepto", nombre: "Manejo de carga refrigerada", base: false, datos: { bloque: "origen", moneda: "COP", unidad: "embarque" } },
+      { id: "cat-fe1", tipo: "producto_finppi", nombre: "Agenciamiento y manejo de carga", codigo: "SRV-MAN", base: false, datos: { iva: "IVA-19" } },
+      { id: "cat-fe2", tipo: "producto_finppi", nombre: "Flete internacional", codigo: "SRV-FLT", base: false, datos: { iva: "IVA-0" } },
+      { id: "cat-fe3", tipo: "producto_finppi", nombre: "Reembolso de gastos a terceros", codigo: "TER-REE", base: false, datos: { iva: "Ninguno" } },
     ],
     accesosPortal: [
       { terceroId: "t-agro", usuarioId: "c-laura", nombre: "Laura Ospina", correo: "laura@agrooriente.co" },

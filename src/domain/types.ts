@@ -43,6 +43,7 @@ export const TIPOS_CATALOGO = {
   ciudad: "Ciudades",
   contenedor: "Contenedores",
   concepto: "Conceptos",
+  producto_finppi: "Productos Finppi",
 } as const;
 export type TipoCatalogo = keyof typeof TIPOS_CATALOGO;
 
@@ -53,7 +54,7 @@ export interface EntradaCatalogo {
   codigo?: string;
   /** Base de LOGIKS (no editable) o propia de la empresa. */
   base: boolean;
-  datos: { pais?: string; bloque?: Bloque; moneda?: Moneda; unidad?: Unidad; paraTerceros?: boolean };
+  datos: { pais?: string; bloque?: Bloque; moneda?: Moneda; unidad?: Unidad; paraTerceros?: boolean; iva?: IvaFinppi };
 }
 
 export interface Usuario {
@@ -90,10 +91,28 @@ export interface AcuerdoComercial {
   condiciones?: string;
 }
 
+/** Datos que Finppi/DIAN exigen del cliente (PRD Finppi §9A.2, §9C.2). */
+export interface DatosFiscales {
+  tipoPersona: "Natural" | "Juridica";
+  tipoDocumento: string; // texto exacto de Finppi
+  numeroDocumento: string; // sin dígito de verificación ni puntos
+  nombres: string; // en jurídica: razón social
+  apellidos: string;
+  email: string; // uno o varios separados por coma
+  celular: string;
+  regimen: string;
+  responsabilidadFiscal: string;
+  pais: string;
+  ciudad: string; // "MUNICIPIO / Departamento", ej. "LA CEJA / Antioquia"
+  direccion: string;
+  telefono: string;
+}
+
 export interface Tercero {
   id: string;
   empresaId: string;
   tipo: TipoTercero;
+  fiscal?: Partial<DatosFiscales>;
   nit: string;
   razonSocial: string;
   ciudad: string;
@@ -151,6 +170,21 @@ export interface Concepto {
   vigenciaTarifa?: string;
   /** Ingreso recibido para terceros (gasto pagado por cuenta del cliente). */
   paraTerceros?: boolean;
+  /** Código del producto o servicio en Finppi (aparece como «CÓDIGO - Nombre»). */
+  productoFinppi?: string;
+  /** IVA exacto de Finppi: Ninguno, IVA-0, IVA-5, IVA-19. */
+  ivaFinppi?: IvaFinppi;
+}
+
+export type IvaFinppi = "Ninguno" | "IVA-0" | "IVA-5" | "IVA-19";
+
+/** Condiciones de la futura factura electrónica, desde la cotización. */
+export interface DatosFacturacion {
+  monedaFactura: Moneda; // en lo que el operador factura (USD o COP)
+  tipoPago: "Contado" | "Crédito";
+  plazoDias: number;
+  metodoPago: string; // texto exacto de Finppi
+  tipoOperacion: string; // Estándar, Mandatos…
 }
 
 export interface Mercancia {
@@ -200,6 +234,8 @@ export interface Cotizacion {
   terminos: string;
   /** Si es un duplicado, id de la cotización de origen (RF-10). */
   origenId?: string;
+  /** Condiciones de facturación electrónica (Finppi). */
+  facturacion?: DatosFacturacion;
   tokenPublico: string;
   historial: EventoHistorial[];
 }
@@ -354,6 +390,10 @@ export const ESTADOS_FACTURA = {
   borrador: "Prefactura",
   aprobada: "Aprobada",
   en_cola: "En cola de emisión",
+  enviando: "Emitiendo en Finppi",
+  fallida: "No se emitió",
+  estado_desconocido: "En verificación",
+  revision: "Requiere revisión",
   emitida: "Emitida",
   rechazada: "Rechazada",
 } as const;
@@ -366,8 +406,11 @@ export interface LineaFactura {
   tipo: "propio" | "terceros";
   cantidad: number;
   valorUnitario: number;
-  /** Porcentaje de IVA de la línea (lo valida el contador en Megafoco). */
+  /** Porcentaje de IVA de la línea (lo valida el contador). */
   ivaPct: number;
+  /** Producto en Finppi e IVA exacto para la factura electrónica. */
+  productoFinppi?: string;
+  ivaFinppi?: IvaFinppi;
 }
 
 export interface Factura {
@@ -386,4 +429,88 @@ export interface Factura {
   pdfUrl?: string;
   xmlUrl?: string;
   error?: string;
+  /* ---- Facturación electrónica (Finppi) ---- */
+  /** TRM de referencia escrita por el operador para convertir a COP. */
+  trmReferencia?: number;
+  tipoPago?: "Contado" | "Crédito";
+  metodoPago?: string;
+  tipoOperacion?: string;
+  vencimiento?: string; // yyyy-mm-dd
+  /** Referencia única de LOGIKS que va en «Número de orden» de Finppi. */
+  referencia?: string;
+  /** Consecutivo que Finppi ofrecía al emitir (anti-saltos). */
+  numeroEsperado?: string;
+  fechaValidacion?: string; // ISO
+  totalCop?: number;
+  pdfFinppiRuta?: string;
+  pdfFinppiSha256?: string;
+  xmlRuta?: string;
+  errorCodigo?: string;
+  enviadaClienteEl?: string; // ISO
+  /** Enviar al cliente apenas quede emitida. */
+  enviarAlEmitir?: boolean;
+  /** Emisión simulada (modo demo): no es válida ante la DIAN. */
+  simulada?: boolean;
+}
+
+/* ---------------- Facturación electrónica (Finppi) ---------------- */
+
+export const ESTADOS_CUENTA_FE = {
+  pendiente: "Verificando",
+  activa: "Activa",
+  credenciales_invalidas: "Credenciales inválidas",
+  bloqueada: "Bloqueada",
+  empresa_distinta: "El NIT no coincide",
+  desconectada: "Desconectada",
+} as const;
+export type EstadoCuentaFe = keyof typeof ESTADOS_CUENTA_FE;
+
+export interface CuentaFe {
+  estado: EstadoCuentaFe;
+  tieneCredenciales: boolean;
+  usuarioPista?: string;
+  consentimientoEl?: string;
+  consentimientoVersion?: string;
+  ultimoLoginOk?: string;
+  /** Lectura del último healthcheck (§9D). */
+  instantanea: {
+    razonSocial?: string;
+    nit?: string;
+    proximaFactura?: string;
+    leidoEl?: string;
+    clientes?: number;
+    productos?: number;
+  };
+  /** Texto de la resolución DIAN que se imprime en el PDF de LOGIKS. */
+  resolucion?: string;
+}
+
+export const ESTADOS_TRABAJO_FE = {
+  en_cola: "En cola",
+  corriendo: "En curso",
+  ok: "Terminado",
+  fallido: "Falló",
+  desconocido: "En verificación",
+  revision: "Requiere revisión",
+  cancelado: "Cancelado",
+} as const;
+
+export interface TrabajoFe {
+  id: string;
+  facturaId?: string;
+  tipo: "emitir" | "healthcheck" | "reconciliar";
+  estado: keyof typeof ESTADOS_TRABAJO_FE;
+  dryRun: boolean;
+  creadoEl: string;
+  terminadoEl?: string;
+  errorCodigo?: string;
+  error?: string;
+  resultado: Record<string, unknown>;
+  logs: { paso: string; nivel: "info" | "aviso" | "error"; mensaje: string; creadoEl: string }[];
+}
+
+export interface EstadoBotFe {
+  latidoEl?: string;
+  pausado: boolean;
+  motivo?: string;
 }

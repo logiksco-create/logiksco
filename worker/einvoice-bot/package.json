@@ -1,0 +1,24 @@
+{
+  "name": "logiks-einvoice-bot",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Bot de facturación electrónica de LOGIKS.CO sobre Finppi (Playwright). Corre fuera de Vercel.",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "tsx src/main.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.86.0",
+    "playwright": "1.56.1",
+    "tsx": "^4.20.6",
+    "unpdf": "^1.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.9.3"
+  }
+}

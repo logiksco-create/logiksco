@@ -8,6 +8,8 @@ import { modoDemo } from "@/lib/env";
 import { contexto, tieneRol } from "../contexto";
 import { ErrorNegocio } from "../datos/errores";
 import { crearFacturaMegafoco, crearTerceroMegafoco, megafocoDisponible } from "../megafoco";
+import { vencimiento } from "@/domain/einvoice";
+import { hoyISO } from "@/domain/fechas";
 import { lineasDesdeOperaciones, operacionesFacturadas, payloadMegafoco } from "@/domain/facturacion";
 
 type R = { ok: true; mensaje?: string } | { ok: false; error: string };
@@ -44,13 +46,24 @@ export async function generarPrefactura(clienteId: string, operacionIds: string[
     if (elegidas.length !== ids.length || elegidas.some((o) => ya.has(o.id))) {
       throw new ErrorNegocio("Algún DO ya fue facturado o no pertenece al cliente");
     }
-    const moneda = cliente.acuerdo?.moneda ?? "COP";
+    // Las condiciones de facturación vienen de la cotización del primer DO.
+    const q = await repo.cotizacion(elegidas[0].cotizacionId);
+    const cond = q?.facturacion;
+    const moneda = cond?.monedaFactura ?? cliente.acuerdo?.moneda ?? "COP";
     const f = await repo.crearPrefactura({
       clienteId,
       moneda,
       trm: elegidas[0].trm,
       lineas: lineasDesdeOperaciones(elegidas, moneda),
       operaciones: ids,
+    });
+    const plazo = cond?.plazoDias ?? cliente.acuerdo?.plazoPagoDias ?? 0;
+    const tipoPago = cond?.tipoPago ?? (plazo > 0 ? "Crédito" : "Contado");
+    await repo.actualizarFactura(f.id, {
+      tipoPago,
+      metodoPago: cond?.metodoPago ?? "Acuerdo mutuo",
+      tipoOperacion: cond?.tipoOperacion ?? "Estándar",
+      vencimiento: vencimiento(hoyISO(), tipoPago, plazo),
     });
     nuevaId = f.id;
   });
@@ -65,6 +78,8 @@ const linea = z.object({
   cantidad: z.number().positive(),
   valorUnitario: z.number().min(0),
   ivaPct: z.number().min(0).max(100),
+  productoFinppi: z.preprocess((v) => (v === "" ? undefined : v), z.string().trim().max(30).optional()),
+  ivaFinppi: z.enum(["Ninguno", "IVA-0", "IVA-5", "IVA-19"]).optional(),
 });
 
 export async function guardarLineas(id: string, lineas: z.input<typeof linea>[]) {

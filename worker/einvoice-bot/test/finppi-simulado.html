@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Finppi (simulado para pruebas)</title>
+<style>
+  body { font-family: sans-serif; display: flex; margin: 0; }
+  nav { width: 200px; background: #eee; padding: 8px; }
+  main { flex: 1; padding: 12px; }
+  .sel { position: relative; display: inline-block; min-width: 220px; }
+  [class*="-control"] { border: 1px solid #999; min-height: 24px; padding: 2px; cursor: pointer; }
+  .menu { position: absolute; background: #fff; border: 1px solid #333; z-index: 5; max-height: 200px; overflow: auto; width: 100%; }
+  .menu div { padding: 3px; } .menu div:hover { background: #def; }
+  [role=dialog] { position: fixed; inset: 30% 30%; background: #fff; border: 2px solid #000; padding: 16px; z-index: 9; }
+  .campo { margin: 4px 0; }
+</style>
+</head>
+<body>
+<nav>
+  <div class="sidebar__category">Ingresos</div>
+  <a href="#" data-ir="/income/invoice">Facturas de venta</a><br>
+  <a href="#" data-ir="/income/invoice">Notas crédito</a><br>
+  <a href="#" data-ir="/income/invoice">Notas débito</a>
+</nav>
+<main id="app"></main>
+<script>
+/*
+ * Imitación mínima de Finppi para probar el adaptador del bot sin tocar la
+ * plataforma real. Sigue lo descrito en el PRD (Anexo A): etiquetas,
+ * atributos name, react-select con opciones id="react-select-N-option-i",
+ * modal de confirmación y listado con íconos XML/PDF.
+ */
+const S = JSON.parse(localStorage.getItem('sim') || 'null') || {
+  sesion: false, siguiente: 1, prefijo: 'SETT', facturas: [],
+  clientes: [{ doc: '800333444', nombre: 'Flores La Montaña SAS', dir: 'Vereda San José', tel: '6045550000' }],
+};
+const guardar = () => localStorage.setItem('sim', JSON.stringify(S));
+const app = document.getElementById('app');
+const ir = (ruta) => { location.href = ruta; };
+document.querySelectorAll('[data-ir]').forEach((a) => a.addEventListener('click', (e) => { e.preventDefault(); ir(a.dataset.ir); }));
+const PRODUCTOS = [['SRV-MAN', 'Agenciamiento y manejo de carga', 'IVA-19', 100000], ['SRV-FLT', 'Flete internacional', 'IVA-0', 50000], ['TER-REE', 'Reembolso de gastos a terceros', 'Ninguno', 0]];
+const PCT = { 'Ninguno': 0, 'IVA-0': 0, 'IVA-5': 5, 'IVA-19': 19 };
+const fmt = (n) => '$ ' + n.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+let selId = 0;
+
+/** Desplegable estilo react-select. */
+function selector(opciones, alCambiar, inicial = '') {
+  const id = ++selId;
+  const caja = document.createElement('div'); caja.className = 'sel';
+  const control = document.createElement('div'); control.className = 'css-13cymwt-control'; control.tabIndex = 0;
+  const valor = document.createElement('span'); valor.textContent = inicial; caja.valor = inicial;
+  const busca = document.createElement('input'); busca.style.width = '60px';
+  control.append(valor, busca); caja.append(control);
+  let menu = null;
+  const cerrar = () => { menu?.remove(); menu = null; busca.value = ''; };
+  const pintar = () => {
+    menu?.remove(); menu = document.createElement('div'); menu.className = 'menu';
+    const lista = (typeof opciones === 'function' ? opciones() : opciones).filter((o) => o.toLowerCase().includes(busca.value.toLowerCase()));
+    lista.forEach((o, i) => {
+      const d = document.createElement('div'); d.id = `react-select-${id}-option-${i}`; d.textContent = o;
+      d.addEventListener('mousedown', (e) => { e.preventDefault(); valor.textContent = o; caja.valor = o; cerrar(); alCambiar?.(o); });
+      menu.append(d);
+    });
+    caja.append(menu);
+  };
+  control.addEventListener('click', () => { document.querySelectorAll('.menu').forEach((m) => m.remove()); busca.focus(); pintar(); });
+  busca.addEventListener('input', pintar);
+  busca.addEventListener('keydown', (e) => { if (e.key === 'Escape') cerrar(); });
+  return caja;
+}
+
+function campo(etiqueta, el) {
+  const c = document.createElement('div'); c.className = 'campo';
+  const l = document.createElement('label'); l.textContent = etiqueta; c.append(l, el); return c;
+}
+const input = (name, valor = '') => { const i = document.createElement('input'); i.name = name; i.value = valor; return i; };
+
+/* ------------------------------- Login ------------------------------- */
+function login() {
+  app.innerHTML = `<form id="f"><input placeholder="Email"><input type="password" placeholder="Contraseña"><button type="submit">Ingresar</button><p id="err"></p></form>`;
+  document.querySelector('nav').style.display = 'none';
+  document.getElementById('f').addEventListener('submit', (e) => {
+    e.preventDefault();
+    if (document.querySelector('[type=password]').value === 'mala') { document.getElementById('err').textContent = 'Credenciales incorrectas'; return; }
+    S.sesion = true; guardar(); ir('/income/invoice');
+  });
+}
+
+/* ------------------------------- Listado ------------------------------- */
+function listado() {
+  app.innerHTML = `<h2>Factura de venta</h2><button class="btn btn-outline-secondary">Crear</button>
+    <input class="table__search-input" placeholder="Buscar documento"><p id="res"></p>
+    <table><thead><tr><th>#</th><th>Prefijo</th><th>Nota</th><th>Cliente</th><th>Fecha</th><th>Estado</th><th>Total</th><th>Opciones</th></tr></thead><tbody></tbody></table>`;
+  app.querySelector('button').addEventListener('click', () => ir('/income/invoice/edit'));
+  const pintar = (filtro = '') => {
+    const tb = app.querySelector('tbody'); tb.innerHTML = '';
+    const filas = S.facturas.filter((f) => !filtro || (f.prefijo + f.n).includes(filtro) || f.orden.includes(filtro));
+    document.getElementById('res').textContent = `${filas.length} resultados encontrados`;
+    for (const f of filas) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${f.n}</td><td>${f.prefijo}</td><td></td><td>${f.cliente}</td><td>${f.fecha}</td><td>Aceptada</td><td>${fmt(f.total)}</td>
+        <td><button title="Descargar XML">x</button><button title="Descargar PDF">p</button><button title="Duplicar">d</button><button title="Reenviar">r</button></td>`;
+      const [bx, bp, bd, br] = tr.querySelectorAll('button');
+      bx.onclick = () => { const a = document.createElement('a'); a.href = `${window.BASE_ARCHIVOS || ''}/__archivo/xml/${f.prefijo}${f.n}`; a.download = 'f.xml'; a.click(); };
+      bp.onclick = () => { const a = document.createElement('a'); a.href = `${window.BASE_ARCHIVOS || ''}/__archivo/pdf/${f.prefijo}${f.n}`; a.download = 'f.pdf'; a.click(); };
+      bd.onclick = br.onclick = () => { S.prohibido = true; guardar(); };
+      tb.append(tr);
+    }
+  };
+  const b = app.querySelector('.table__search-input');
+  b.addEventListener('keydown', (e) => { if (e.key === 'Enter') pintar(b.value.trim()); });
+  pintar();
+}
+
+/* ------------------------------- Formulario ------------------------------- */
+function formulario() {
+  app.innerHTML = '';
+  const form = document.createElement('form');
+  form.append(Object.assign(document.createElement('h3'), { textContent: 'OIKOR COLOMBIA SAS · NIT 901.456.789-1' }));
+  const numero = `${S.prefijo}${S.siguiente}`;
+  form.append(campo('Número*', selector([numero])));
+  form.append(campo('Tipo de factura', selector(['Factura de venta nacional', 'Factura de exportación'], null, 'Factura de venta nacional')));
+  form.append(campo('Moneda', selector(['COP - Peso colombiano', 'USD - Dólar estadounidense'], null, 'COP - Peso colombiano')));
+  const id = input('clientnationalID'), dir = input('clientaddress'), tel = input('clientnumber');
+  form.append(campo('Cliente', selector(() => S.clientes.map((c) => `${c.nombre} - ${c.doc}`), (o) => {
+    const c = S.clientes.find((x) => o.endsWith(x.doc)); id.value = c.doc; dir.value = c.dir; tel.value = c.tel;
+  })));
+  const mas = Object.assign(document.createElement('button'), { type: 'button', id: 'TooltipSearchInvoice-newCliente', textContent: '+' });
+  mas.onclick = panelCliente; form.append(mas, id, dir, tel, input('seller'));
+  form.append(campo('Fecha', input('date', new Date().toISOString().slice(0, 10))));
+  form.append(campo('Tipo de pago', selector(['Contado', 'Crédito'], null, 'Contado')));
+  form.append(campo('Expiración', input('expiration', new Date().toISOString().slice(0, 10))));
+  form.append(campo('Tipo de operación', selector(['Estándar', 'Mandatos', 'Servicios AIU', 'Cambiario', 'Transporte'], null, 'Estándar')));
+  form.append(campo('Método de pago', selector(['Acuerdo mutuo', 'Efectivo', 'Transferencia Crédito Bancario', 'Consignación bancaria'], null, 'Acuerdo mutuo')));
+  form.append(campo('Número de orden', input('orderID')));
+  const tabla = document.createElement('table'); tabla.innerHTML = '<tbody></tbody>'; const tb = tabla.querySelector('tbody');
+  const filas = [];
+  const totales = document.createElement('div');
+  const recalcular = () => {
+    let sub = 0, iva = 0;
+    for (const f of filas) { const b = Number(f.precio.value) * Number(f.cant.value); sub += b; iva += Math.round(b * PCT[f.iva.valor || 'Ninguno']) / 100; }
+    const t = Math.round((sub + iva) * 100) / 100;
+    const v = { 'Subtotal': sub, 'Descuento detalle (-)': 0, 'Descuentos globales (-)': 0, 'Subtotal base gravable': sub, 'INC (+)': 0, 'IVA (+)': iva, 'Retención en la Fuente (-)': 0, 'Rete IVA (-)': 0, 'Rete ICA (-)': NaN, 'Total': t };
+    totales.innerHTML = Object.entries(v).map(([k, x]) => `<div><span>${k}</span> <span>${Number.isNaN(x) ? '$NaN' : fmt(x)}</span></div>`).join('');
+    form.total = t;
+  };
+  const agregar = () => {
+    const n = filas.length; const tr = document.createElement('tr');
+    const precio = input(`items.${n}.unitPrice`, '0'), cant = input(`items.${n}.quantity`, '0');
+    const iva = selector(['Ninguno', 'IVA-0', 'IVA-5', 'IVA-19'], recalcular, 'IVA-0');
+    const prod = selector(PRODUCTOS.map((p) => `${p[0]} - ${p[1]}`), (o) => {
+      const p = PRODUCTOS.find((x) => o.startsWith(x[0] + ' - ')); precio.value = p[3]; cant.value = '0';
+      iva.querySelector('span').textContent = p[2]; iva.valor = p[2]; recalcular();
+    });
+    const celdas = [prod, input(`items.${n}.comment`), precio, cant, selector(['Ninguno'], null, 'Ninguno'), input(`items.${n}.discountPercentage`, '0'), iva, selector(['No aplica'], null, 'No aplica')];
+    for (const c of celdas) { const td = document.createElement('td'); td.append(c); tr.append(td); }
+    precio.addEventListener('input', recalcular); cant.addEventListener('input', recalcular);
+    filas.push({ precio, cant, iva }); tb.append(tr); recalcular();
+  };
+  agregar();
+  form.append(tabla, Object.assign(document.createElement('button'), { type: 'button', textContent: 'Añadir', onclick: agregar }), totales);
+  const enviar = Object.assign(document.createElement('button'), { type: 'submit', textContent: 'Enviar' });
+  const guardarB = Object.assign(document.createElement('button'), { type: 'submit', textContent: 'Guardar' });
+  guardarB.addEventListener('click', () => { S.prohibido = true; guardar(); });
+  form.append(enviar, guardarB);
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const m = document.createElement('div'); m.setAttribute('role', 'dialog');
+    m.innerHTML = `<p>Se enviará la factura ${numero} por ${form.total.toLocaleString('es-CO')} COP</p><button>Continuar</button><button>No, Cancelar</button>`;
+    const [c, x] = m.querySelectorAll('button');
+    x.onclick = () => m.remove();
+    c.onclick = () => {
+      const cliente = form.querySelector('.sel:nth-of-type(1)');
+      S.facturas.unshift({ n: S.siguiente, prefijo: S.prefijo, cliente: id.value, fecha: '2026-11-26', total: form.total, orden: form.querySelector('[name=orderID]').value });
+      S.siguiente += 1; guardar(); setTimeout(() => ir('/income/invoice'), 300);
+    };
+    document.body.append(m);
+  });
+  app.append(form);
+}
+
+function panelCliente() {
+  const p = document.createElement('div'); p.id = 'panel';
+  const campos = ['nationalID', 'name', 'lastname', 'contacts[0].email', 'contacts[0].phoneNumber.number', 'locations.0.name', 'locations.0.address.address_line1', 'locations.0.address.address_line2'];
+  p.append(campo('Tipo de persona', selector(['Natural', 'Juridica'])), campo('Tipo de documento', selector(['Cédula de ciudadanía', 'Nit'])));
+  for (const c of campos) p.append(input(c));
+  p.append(campo('Régimen', selector(['Responsable de iva', 'No responsable de iva'])), campo('Responsabilidad fiscal', selector(['No aplica (ninguna de las anteriores)', 'Gran contribuyente'])),
+    campo('País', selector(['Colombia', 'Ecuador'])), campo('Ciudad', selector(['LA CEJA / Antioquia', 'MEDELLÍN / Antioquia', 'RIONEGRO / Antioquia'])));
+  const crear = Object.assign(document.createElement('button'), { type: 'submit', textContent: 'Crear' });
+  crear.onclick = (e) => {
+    e.preventDefault();
+    const v = (n) => p.querySelector(`[name="${n}"]`).value;
+    S.clientes.push({ doc: v('nationalID'), nombre: v('name'), dir: v('locations.0.address.address_line1'), tel: v('contacts[0].phoneNumber.number') }); guardar();
+    p.innerHTML = 'Cliente creado';
+    setTimeout(() => p.remove(), 300);
+  };
+  p.append(crear); document.body.append(p);
+}
+
+/* ------------------------------- Rutas ------------------------------- */
+const ruta = location.pathname;
+if (!S.sesion || ruta === '/') login();
+else if (ruta === '/income/invoice/edit') formulario();
+else if (ruta === '/customers' || ruta === '/products') app.innerHTML = `<p>1 al ${ruta === '/customers' ? S.clientes.length : 3} de ${ruta === '/customers' ? S.clientes.length : 3}</p>`;
+else listado();
+</script>
+</body>
+</html>

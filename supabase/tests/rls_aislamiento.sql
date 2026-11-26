@@ -181,3 +181,55 @@ do $$ begin
   if (select count(*) from storage.objects where bucket_id = 'logos') <> 1 then raise exception 'FUGA: B subió un logo en la carpeta de A'; end if;
 end $$;
 \echo 'OK: logos solo los sube el admin de la empresa'
+
+-- Facturación electrónica (Finppi): credenciales ocultas, cola y campos fiscales protegidos.
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000a';
+select public.fe_guardar_credenciales(:'empresa_a', 'finppi@oikor.co', 'clave-de-prueba', '1.0') as job_hc \gset
+\set ON_ERROR_STOP off
+select count(*) from app.fe_secretos;              -- DEBE fallar: fuera de la API
+select public.fe_credenciales(:'empresa_a');       -- DEBE fallar: solo el worker
+insert into public.fe_jobs (empresa_id, tipo) values (:'empresa_a', 'emitir'); -- DEBE fallar
+\set ON_ERROR_STOP on
+do $$ begin
+  if (select usuario_pista from public.fe_cuentas) <> 'fi***@oikor.co' then raise exception 'pista inesperada'; end if;
+  if (select count(*) from public.fe_jobs where tipo = 'healthcheck') <> 1 then raise exception 'faltan healthcheck'; end if;
+end $$;
+insert into public.facturas (empresa_id, cliente_id, moneda, trm, conceptos)
+  values (:'empresa_a', :'cliente_a', 'USD', 4000, '[]') returning id as fac \gset
+\set ON_ERROR_STOP off
+-- Sin cuenta activa no se encola.
+select public.fe_encolar_emision(:'fac', '{}', false, 'LG-TEST01', 1000, true);
+-- Un usuario no puede marcarla emitida ni escribir el CUFE.
+update public.facturas set estado = 'emitida', cufe = repeat('a', 96) where id = :'fac';
+\set ON_ERROR_STOP on
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000b';
+do $$ begin
+  if (select count(*) from public.fe_cuentas) <> 0 then raise exception 'FUGA: B ve la cuenta Finppi de A'; end if;
+  if (select count(*) from public.fe_jobs) <> 0 then raise exception 'FUGA: B ve la cola de A'; end if;
+end $$;
+reset role;
+do $$ begin
+  if (select estado::text from public.facturas where cufe is null limit 1) <> 'borrador' then raise exception 'factura alterada'; end if;
+  if (select (public.fe_credenciales(empresa_id) ->> 'clave') from public.fe_cuentas) <> 'clave-de-prueba' then raise exception 'worker no lee credenciales'; end if;
+end $$;
+-- El worker reclama: primero el healthcheck; con la cuenta activa, encolar funciona.
+select id as reclamado from public.fe_reclamar_job('w1') \gset
+update public.fe_jobs set estado = 'ok' where id = :'reclamado';
+update public.fe_cuentas set estado = 'activa';
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000a';
+select public.fe_encolar_emision(:'fac', '{"referencia":"LG-TEST01"}', false, 'LG-TEST01', 1000, true) as job_em \gset
+\set ON_ERROR_STOP off
+select public.fe_encolar_emision(:'fac', '{}', false, 'LG-TEST02', 1000, true); -- DEBE fallar: ya en cola
+\set ON_ERROR_STOP on
+reset role;
+do $$ begin
+  if (select estado::text || referencia from public.facturas where referencia is not null) <> 'en_colaLG-TEST01' then raise exception 'encolado inesperado'; end if;
+end $$;
+select count(*) as reclamados from public.fe_reclamar_job('w1');
+select count(*) as segundo_reclamo from public.fe_reclamar_job('w2');
+do $$ begin
+  if (select count(*) from public.fe_jobs where estado = 'corriendo') <> 1 then raise exception 'debería haber 1 trabajo corriendo'; end if;
+end $$;
+\echo 'OK: facturación electrónica protegida'

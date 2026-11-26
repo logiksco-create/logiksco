@@ -18,9 +18,13 @@ import {
   UNIDADES,
   type Bloque,
   type Concepto,
+  type DatosFacturacion,
+  type IvaFinppi,
   type Moneda,
   type Tercero,
 } from "@/domain/types";
+import { FINPPI, faltantesFiscales, fiscalSugerido } from "@/domain/einvoice";
+import { CompletarDatosFiscales } from "@/components/app/factura-electronica";
 import { tarifasVencidas, totalesConcepto, totalesConceptos, totalesPorBloque } from "@/domain/cotizacion";
 import { guardarCotizacion, type EntradaCotizacion } from "@/server/acciones/app";
 import { AreaTexto, Boton, Campo, Entrada, Selector, Tarjeta } from "@/components/ui";
@@ -40,7 +44,17 @@ export interface PropsEditor {
   lugares?: string[];
   conceptosCatalogo?: { nombre: string; bloque?: Bloque; moneda?: Moneda; unidad?: Concepto["unidad"]; paraTerceros?: boolean }[];
   servicios?: string[];
+  /** Productos de Finppi de la empresa (código exacto + IVA por defecto). */
+  productosFinppi?: { codigo: string; nombre: string; iva?: IvaFinppi }[];
 }
+
+const facturacionPorDefecto = (c?: Tercero, moneda: Moneda = "COP"): DatosFacturacion => ({
+  monedaFactura: c?.acuerdo?.moneda ?? moneda,
+  tipoPago: c?.acuerdo?.plazoPagoDias ? "Crédito" : "Contado",
+  plazoDias: c?.acuerdo?.plazoPagoDias ?? 0,
+  metodoPago: "Acuerdo mutuo",
+  tipoOperacion: "Estándar",
+});
 
 let secuencia = 0;
 const clave = () => `k${++secuencia}`;
@@ -72,6 +86,7 @@ export function EditorCotizacion({
   lugares = [],
   conceptosCatalogo = [],
   servicios = [],
+  productosFinppi = [],
 }: PropsEditor) {
   const router = useRouter();
   const [pendiente, iniciar] = useTransition();
@@ -79,8 +94,15 @@ export function EditorCotizacion({
 
   const [f, setF] = useState(() => {
     const { conceptos: _ignorar, ...resto } = inicial;
-    return resto;
+    return {
+      ...resto,
+      facturacion:
+        resto.facturacion ??
+        facturacionPorDefecto(clientes.find((c) => c.id === resto.clienteId), resto.monedaPresentacion as Moneda),
+    };
   });
+  const fac = f.facturacion!;
+  const setFac = (cambio: Partial<DatosFacturacion>) => setF((p) => ({ ...p, facturacion: { ...p.facturacion!, ...cambio } }));
   const [conceptos, setConceptos] = useState<ConceptoEditable[]>(() =>
     inicial.conceptos.map((c) => ({ ...c, clave: clave() })),
   );
@@ -99,6 +121,7 @@ export function EditorCotizacion({
       contactoId: c?.contactos[0]?.id,
       // RF-10: al cambiar de cliente se aplican sus condiciones comerciales.
       monedaPresentacion: c?.acuerdo?.moneda ?? p.monedaPresentacion,
+      facturacion: { ...p.facturacion!, ...facturacionPorDefecto(c, c?.acuerdo?.moneda ?? p.monedaPresentacion), metodoPago: p.facturacion!.metodoPago, tipoOperacion: p.facturacion!.tipoOperacion },
     }));
   };
 
@@ -383,13 +406,54 @@ export function EditorCotizacion({
                               />
                             </label>
                           </div>
+                          <div className="mt-2.5 grid grid-cols-[1fr_110px] gap-2.5 sm:grid-cols-[1fr_130px]">
+                            <label>
+                              <span className="mb-1 block text-[11px] text-subtle">Producto en Finppi</span>
+                              <Selector
+                                value={c.productoFinppi ?? ""}
+                                onChange={(e) => {
+                                  const p = productosFinppi.find((x) => x.codigo === e.target.value);
+                                  actualizar(c.clave, {
+                                    productoFinppi: e.target.value || undefined,
+                                    ivaFinppi: p?.iva ?? c.ivaFinppi,
+                                  });
+                                }}
+                              >
+                                <option value="">{productosFinppi.length ? "Elige al facturar…" : "Agrégalos en Catálogos"}</option>
+                                {productosFinppi.map((p) => (
+                                  <option key={p.codigo} value={p.codigo}>
+                                    {p.codigo} - {p.nombre}
+                                  </option>
+                                ))}
+                                {c.productoFinppi && !productosFinppi.some((p) => p.codigo === c.productoFinppi) && (
+                                  <option value={c.productoFinppi}>{c.productoFinppi}</option>
+                                )}
+                              </Selector>
+                            </label>
+                            <label>
+                              <span className="mb-1 block text-[11px] text-subtle">IVA</span>
+                              <Selector
+                                value={c.ivaFinppi ?? (c.paraTerceros ? "Ninguno" : "IVA-19")}
+                                onChange={(e) => actualizar(c.clave, { ivaFinppi: e.target.value as IvaFinppi })}
+                              >
+                                {FINPPI.iva.map((v) => (
+                                  <option key={v}>{v}</option>
+                                ))}
+                              </Selector>
+                            </label>
+                          </div>
                           <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 text-[13px]">
                             <label className="flex items-center gap-2 text-muted">
                               <input
                                 type="checkbox"
                                 className="size-4 accent-[var(--brand)]"
                                 checked={!!c.paraTerceros}
-                                onChange={(e) => actualizar(c.clave, { paraTerceros: e.target.checked })}
+                                onChange={(e) =>
+                                  actualizar(c.clave, {
+                                    paraTerceros: e.target.checked,
+                                    ivaFinppi: e.target.checked ? "Ninguno" : c.ivaFinppi === "Ninguno" ? "IVA-19" : c.ivaFinppi,
+                                  })
+                                }
                               />
                               Ingreso para terceros
                             </label>
@@ -441,6 +505,70 @@ export function EditorCotizacion({
           <SeccionTitulo n={4} titulo="Términos y condiciones" />
           <div className="p-5">
             <AreaTexto rows={4} value={f.terminos} onChange={(e) => set("terminos", e.target.value)} />
+          </div>
+        </Tarjeta>
+
+        <Tarjeta>
+          <SeccionTitulo
+            n={5}
+            titulo="Facturación electrónica"
+            descripcion="Lo que necesitará Finppi. Al facturar solo confirmas con un clic."
+          />
+          <div className="space-y-4 p-5">
+            {cliente && (
+              <CompletarDatosFiscales
+                terceroId={cliente.id}
+                inicial={fiscalSugerido(cliente)}
+                faltantes={faltantesFiscales(cliente.fiscal)}
+              />
+            )}
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <Campo etiqueta="Facturar en">
+                <Selector value={fac.monedaFactura} onChange={(e) => setFac({ monedaFactura: e.target.value as Moneda })}>
+                  <option value="USD">Dólares (USD)</option>
+                  <option value="COP">Pesos (COP)</option>
+                </Selector>
+              </Campo>
+              <Campo etiqueta="Tipo de pago">
+                <Selector
+                  value={fac.tipoPago}
+                  onChange={(e) => setFac({ tipoPago: e.target.value as DatosFacturacion["tipoPago"], plazoDias: e.target.value === "Contado" ? 0 : fac.plazoDias || 30 })}
+                >
+                  {FINPPI.tipoPago.map((t) => (
+                    <option key={t}>{t}</option>
+                  ))}
+                </Selector>
+              </Campo>
+              <Campo etiqueta="Plazo (días)">
+                <Entrada
+                  type="number"
+                  min={0}
+                  max={365}
+                  value={fac.plazoDias}
+                  disabled={fac.tipoPago === "Contado"}
+                  onChange={(e) => setFac({ plazoDias: num(e.target.value) })}
+                />
+              </Campo>
+              <Campo etiqueta="Tipo de operación">
+                <Selector value={fac.tipoOperacion} onChange={(e) => setFac({ tipoOperacion: e.target.value })}>
+                  {FINPPI.tipoOperacion.map((t) => (
+                    <option key={t}>{t}</option>
+                  ))}
+                </Selector>
+              </Campo>
+              <Campo etiqueta="Método de pago" className="sm:col-span-2">
+                <Selector value={fac.metodoPago} onChange={(e) => setFac({ metodoPago: e.target.value })}>
+                  {FINPPI.metodoPago.map((t) => (
+                    <option key={t}>{t}</option>
+                  ))}
+                </Selector>
+              </Campo>
+            </div>
+            {fac.monedaFactura === "USD" && (
+              <p className="text-xs text-subtle">
+                La factura se presenta en dólares. Al emitir, Contabilidad escribe la TRM de referencia y LOGIKS envía los valores en pesos a Finppi y la DIAN.
+              </p>
+            )}
           </div>
         </Tarjeta>
       </div>

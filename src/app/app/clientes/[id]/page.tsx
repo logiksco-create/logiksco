@@ -7,6 +7,8 @@ import { estadoEfectivo, totalesCotizacion } from "@/domain/cotizacion";
 import { totalesFactura } from "@/domain/facturacion";
 import { Encabezado } from "@/components/app/encabezado";
 import { InvitarPortal } from "@/components/app/invitar-portal";
+import { CompletarDatosFiscales } from "@/components/app/factura-electronica";
+import { faltantesFiscales, fiscalSugerido } from "@/domain/einvoice";
 import { Contactos, FormAcuerdo } from "@/components/app/crm";
 import { EstadoCotizacionBadge, EstadoDOBadge, Situacion170Badge } from "@/components/estados";
 import { EstadoFacturaBadge } from "@/components/estado-factura";
@@ -111,6 +113,18 @@ export default async function Cliente({ params }: PageProps<"/app/clientes/[id]"
             <TarjetaEncabezado titulo="Contactos" />
             <Contactos terceroId={t.id} contactos={t.contactos} editable={tieneRol(repo, "comercial", "operaciones")} />
           </Tarjeta>
+          {t.tipo !== "proveedor" && (
+            <Tarjeta>
+              <TarjetaEncabezado titulo="Facturación electrónica" descripcion="Datos que exige Finppi y la DIAN" />
+              <div className="p-5 pt-0">
+                {tieneRol(repo, "comercial", "contabilidad", "cumplimiento") ? (
+                  <CompletarDatosFiscales terceroId={t.id} inicial={fiscalSugerido(t)} faltantes={faltantesFiscales(t.fiscal)} />
+                ) : (
+                  <p className="text-[13px] text-muted">{faltantesFiscales(t.fiscal).length ? "Datos fiscales incompletos" : "Datos fiscales completos"}</p>
+                )}
+              </div>
+            </Tarjeta>
+          )}
           {t.tipo !== "proveedor" && (
             <Tarjeta>
               <TarjetaEncabezado titulo="Acuerdo comercial" descripcion="Corte de facturación, plazo y moneda" />

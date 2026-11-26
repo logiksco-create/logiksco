@@ -2,11 +2,11 @@
 
 import { useActionState, useState, useTransition } from "react";
 import { Check, KeyRound, LoaderCircle, Plus, Save, Send } from "lucide-react";
-import type { LineaFactura, Moneda } from "@/domain/types";
-import { totalesFactura } from "@/domain/facturacion";
+import type { IvaFinppi, LineaFactura, Moneda } from "@/domain/types";
+import { FINPPI, ivaPorDefecto, lineasEnCop, pctIva, totalesCop, totalesOriginales } from "@/domain/einvoice";
 import { conectarMegafoco, enviarAMegafoco, generarPrefactura, guardarLineas } from "@/server/acciones/facturacion";
 import { Boton, Entrada, Selector } from "@/components/ui";
-import { cn, dinero, fecha } from "@/lib/formato";
+import { cn, dinero, fecha, pesosExactos } from "@/lib/formato";
 
 function Mensaje({ r }: { r?: { ok: boolean; mensaje?: string; error?: string } | null }) {
   if (!r) return null;
@@ -73,18 +73,26 @@ export function EditorPrefactura({
   lineasIniciales,
   moneda,
   editable,
+  productosFinppi = [],
+  trmReferencia,
 }: {
   id: string;
   lineasIniciales: LineaFactura[];
   moneda: Moneda;
   editable: boolean;
+  productosFinppi?: { codigo: string; nombre: string; iva?: IvaFinppi }[];
+  trmReferencia?: number;
 }) {
   const [lineas, setLineas] = useState(lineasIniciales);
   const [pendiente, iniciar] = useTransition();
   const [r, setR] = useState<{ ok: boolean; mensaje?: string; error?: string } | null>(null);
-  const t = totalesFactura(lineas);
   const cambiar = (i: number, c: Partial<LineaFactura>) => setLineas((ls) => ls.map((l, j) => (j === i ? { ...l, ...c } : l)));
   const sucias = JSON.stringify(lineas) !== JSON.stringify(lineasIniciales);
+  const enUsd = moneda === "USD";
+  const conTrm = enUsd && !!trmReferencia;
+  const cop = lineasEnCop(lineas, moneda, trmReferencia ?? 1);
+  const to = totalesOriginales(cop);
+  const tc = totalesCop(cop);
 
   return (
     <div>
@@ -93,59 +101,85 @@ export function EditorPrefactura({
           <thead>
             <tr className="border-b border-border bg-surface-2 text-left text-xs tracking-wide text-subtle uppercase">
               <th className="h-9 px-4 font-medium">Concepto</th>
-              <th className="h-9 px-3 font-medium">Ingreso</th>
+              <th className="h-9 px-3 font-medium">Producto Finppi</th>
+              <th className="h-9 px-3 font-medium">IVA</th>
               <th className="h-9 px-3 text-right font-medium">Cant.</th>
-              <th className="h-9 px-3 text-right font-medium">Valor unit.</th>
-              <th className="h-9 px-3 text-right font-medium">IVA %</th>
+              <th className="h-9 px-3 text-right font-medium">Unitario {moneda}</th>
+              {enUsd && <th className="h-9 px-3 text-right font-medium">Unitario COP</th>}
               <th className="h-9 px-4 text-right font-medium">Subtotal</th>
             </tr>
           </thead>
           <tbody>
-            {lineas.map((l, i) => (
-              <tr key={i} className="border-b border-border">
-                <td className="px-4 py-2">
-                  {editable ? (
-                    <Entrada value={l.descripcion} onChange={(e) => cambiar(i, { descripcion: e.target.value })} className="h-8 min-w-56" />
-                  ) : (
-                    l.descripcion
+            {lineas.map((l, i) => {
+              const iva = l.ivaFinppi ?? ivaPorDefecto(l);
+              return (
+                <tr key={i} className="border-b border-border align-top">
+                  <td className="px-4 py-2">
+                    {editable ? (
+                      <Entrada value={l.descripcion} onChange={(e) => cambiar(i, { descripcion: e.target.value })} className="h-8 min-w-56" />
+                    ) : (
+                      l.descripcion
+                    )}
+                    <label className="mt-1.5 flex items-center gap-1.5 text-xs text-muted">
+                      <input
+                        type="checkbox"
+                        disabled={!editable}
+                        className="size-3.5 accent-[var(--brand)]"
+                        checked={l.tipo === "terceros"}
+                        onChange={(e) =>
+                          cambiar(i, e.target.checked ? { tipo: "terceros", ivaFinppi: "Ninguno", ivaPct: 0 } : { tipo: "propio", ivaFinppi: "IVA-19", ivaPct: 19 })
+                        }
+                      />
+                      Ingreso para terceros
+                    </label>
+                  </td>
+                  <td className="px-3 py-2">
+                    {editable ? (
+                      <Selector
+                        value={l.productoFinppi ?? ""}
+                        onChange={(e) => {
+                          const p = productosFinppi.find((x) => x.codigo === e.target.value);
+                          const nuevoIva = p?.iva ?? iva;
+                          cambiar(i, { productoFinppi: e.target.value || undefined, ivaFinppi: nuevoIva, ivaPct: pctIva(nuevoIva) });
+                        }}
+                        className={cn("h-8 w-48", !l.productoFinppi && "border-warning/60")}
+                      >
+                        <option value="">Elige…</option>
+                        {productosFinppi.map((p) => (
+                          <option key={p.codigo} value={p.codigo}>
+                            {p.codigo} - {p.nombre}
+                          </option>
+                        ))}
+                        {l.productoFinppi && !productosFinppi.some((p) => p.codigo === l.productoFinppi) && (
+                          <option value={l.productoFinppi}>{l.productoFinppi}</option>
+                        )}
+                      </Selector>
+                    ) : (
+                      <span className="font-mono text-xs">{l.productoFinppi ?? "—"}</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2">
+                    {editable ? (
+                      <Selector value={iva} onChange={(e) => cambiar(i, { ivaFinppi: e.target.value as IvaFinppi, ivaPct: pctIva(e.target.value as IvaFinppi) })} className="h-8 w-28">
+                        {FINPPI.iva.map((v) => (
+                          <option key={v}>{v}</option>
+                        ))}
+                      </Selector>
+                    ) : (
+                      <span className="text-xs">{iva}</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular">{l.cantidad}</td>
+                  <td className="px-3 py-2 text-right tabular whitespace-nowrap">{dinero(l.valorUnitario, moneda)}</td>
+                  {enUsd && (
+                    <td className="px-3 py-2 text-right font-mono text-xs whitespace-nowrap text-muted">
+                      {conTrm ? cop[i].precioCop.toLocaleString("es-CO", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"}
+                    </td>
                   )}
-                </td>
-                <td className="px-3 py-2">
-                  {editable ? (
-                    <Selector
-                      value={l.tipo}
-                      onChange={(e) => cambiar(i, { tipo: e.target.value as LineaFactura["tipo"], ivaPct: e.target.value === "terceros" ? 0 : l.ivaPct })}
-                      className="h-8 w-32"
-                    >
-                      <option value="propio">Propio</option>
-                      <option value="terceros">Para terceros</option>
-                    </Selector>
-                  ) : (
-                    <span className={cn("text-xs", l.tipo === "terceros" ? "text-info" : "text-muted")}>
-                      {l.tipo === "propio" ? "Propio" : "Para terceros"}
-                    </span>
-                  )}
-                </td>
-                <td className="px-3 py-2 text-right tabular">{l.cantidad}</td>
-                <td className="px-3 py-2 text-right tabular whitespace-nowrap">{dinero(l.valorUnitario, moneda)}</td>
-                <td className="px-3 py-2 text-right">
-                  {editable ? (
-                    <Entrada
-                      type="number"
-                      min={0}
-                      max={100}
-                      value={l.ivaPct}
-                      onChange={(e) => cambiar(i, { ivaPct: Number(e.target.value) })}
-                      className="ml-auto h-8 w-20 text-right tabular"
-                      disabled={l.tipo === "terceros"}
-                    />
-                  ) : (
-                    <span className="tabular">{l.ivaPct}</span>
-                  )}
-                </td>
-                <td className="px-4 py-2 text-right tabular whitespace-nowrap">{dinero(l.cantidad * l.valorUnitario, moneda)}</td>
-              </tr>
-            ))}
+                  <td className="px-4 py-2 text-right tabular whitespace-nowrap">{dinero(cop[i].subtotalOriginal, moneda)}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -153,7 +187,7 @@ export function EditorPrefactura({
         <div className="space-y-2">
           {editable && (
             <p className="max-w-sm text-xs text-subtle">
-              El IVA es una sugerencia: los ingresos para terceros no llevan IVA de la empresa. Tu contador lo confirma en Megafoco.
+              Producto e IVA exactamente como en Finppi. Los ingresos para terceros van sin IVA («Ninguno»).
             </p>
           )}
           <Mensaje r={r} />
@@ -168,24 +202,48 @@ export function EditorPrefactura({
             </Boton>
           )}
         </div>
-        <dl className="min-w-64 space-y-1.5 text-sm">
-          <div className="flex justify-between gap-6">
-            <dt className="text-muted">Ingresos propios</dt>
-            <dd className="tabular">{dinero(t.propios, moneda)}</dd>
-          </div>
-          <div className="flex justify-between gap-6">
-            <dt className="text-muted">Ingresos para terceros</dt>
-            <dd className="tabular">{dinero(t.terceros, moneda)}</dd>
-          </div>
-          <div className="flex justify-between gap-6">
-            <dt className="text-muted">IVA</dt>
-            <dd className="tabular">{dinero(t.iva, moneda)}</dd>
-          </div>
-          <div className="flex justify-between gap-6 border-t border-border pt-2 text-base font-semibold">
-            <dt>Total</dt>
-            <dd className="tabular">{dinero(t.total, moneda)}</dd>
-          </div>
-        </dl>
+        <div className="flex flex-wrap gap-6">
+          <dl className="min-w-52 space-y-1.5 text-sm">
+            <div className="flex justify-between gap-6">
+              <dt className="text-muted">Subtotal</dt>
+              <dd className="tabular">{dinero(to.subtotal, moneda)}</dd>
+            </div>
+            {to.terceros > 0 && (
+              <div className="flex justify-between gap-6 text-xs">
+                <dt className="text-subtle">de ello, para terceros</dt>
+                <dd className="tabular text-subtle">{dinero(to.terceros, moneda)}</dd>
+              </div>
+            )}
+            <div className="flex justify-between gap-6">
+              <dt className="text-muted">IVA</dt>
+              <dd className="tabular">{dinero(to.iva, moneda)}</dd>
+            </div>
+            <div className="flex justify-between gap-6 border-t border-border pt-2 text-base font-semibold">
+              <dt>Total {moneda}</dt>
+              <dd className="tabular">{dinero(to.total, moneda)}</dd>
+            </div>
+          </dl>
+          {enUsd && (
+            <dl className="min-w-52 space-y-1.5 rounded-lg bg-brand-soft p-3 text-sm text-brand-fg">
+              <div className="flex justify-between gap-6 text-xs">
+                <dt>A la DIAN en pesos</dt>
+                <dd className="font-mono">{conTrm ? `TRM ${trmReferencia!.toLocaleString("es-CO")}` : "falta TRM"}</dd>
+              </div>
+              <div className="flex justify-between gap-6">
+                <dt>Subtotal</dt>
+                <dd className="tabular">{conTrm ? pesosExactos(tc.subtotal) : "—"}</dd>
+              </div>
+              <div className="flex justify-between gap-6">
+                <dt>IVA</dt>
+                <dd className="tabular">{conTrm ? pesosExactos(tc.iva) : "—"}</dd>
+              </div>
+              <div className="flex justify-between gap-6 border-t border-brand/20 pt-2 text-base font-semibold">
+                <dt>Total COP</dt>
+                <dd className="tabular">{conTrm ? pesosExactos(tc.total) : "—"}</dd>
+              </div>
+            </dl>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -26,6 +26,9 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
     "supabase/**",
+    // El worker tiene su propio package.json y tsconfig.
+    "worker/**/node_modules/**",
+    "worker/**/dist/**",
   ]),
 ]);
 

@@ -1,6 +1,6 @@
 # LOGIKS.CO
 
-Plataforma SaaS multiempresa para operadores logísticos y agentes de carga en Colombia: cotización, aceptación en línea, Circular 170 de la DIAN, operaciones (DO), alertas, trazabilidad de correos y facturación vía Megafoco.
+Plataforma SaaS multiempresa para operadores logísticos y agentes de carga en Colombia: cotización, aceptación en línea, Circular 170 de la DIAN, operaciones (DO), alertas, trazabilidad de correos y factura electrónica en USD o COP con un clic (bot sobre Finppi, ver `worker/einvoice-bot`).
 
 > Cliente piloto: Oikor Colombia SAS. El PRD completo está en el documento «PRD — LOGIKS.CO».
 

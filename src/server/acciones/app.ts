@@ -84,6 +84,16 @@ const esquemaConcepto = z.object({
   ventaUnitaria: z.number().min(0, "La venta no puede ser negativa"),
   vigenciaTarifa: fechaISO.optional(),
   paraTerceros: z.boolean().optional(),
+  productoFinppi: z.preprocess((v) => (v === "" ? undefined : v), z.string().trim().max(30).optional()),
+  ivaFinppi: z.enum(["Ninguno", "IVA-0", "IVA-5", "IVA-19"]).optional(),
+});
+
+const esquemaFacturacion = z.object({
+  monedaFactura: z.enum(["COP", "USD"]),
+  tipoPago: z.enum(["Contado", "Crédito"]),
+  plazoDias: z.number().int().min(0).max(365),
+  metodoPago: z.string().trim().min(2).max(80),
+  tipoOperacion: z.string().trim().min(2).max(40),
 });
 
 const esquemaCotizacion = z.object({
@@ -105,6 +115,7 @@ const esquemaCotizacion = z.object({
   monedaPresentacion: z.enum(["COP", "USD"]),
   vigenteHasta: fechaISO,
   terminos: z.string().max(4000),
+  facturacion: esquemaFacturacion.optional(),
 });
 
 export type EntradaCotizacion = z.input<typeof esquemaCotizacion>;

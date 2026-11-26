@@ -41,6 +41,7 @@ Navegador ──► Server Components (lectura) ─┐
 
 ## Qué está probado
 
+- Facturación electrónica: conversión USD→COP, totales, CUFE, consecutivos y reglas del bot (`src/domain/einvoice.test.ts`, `worker/einvoice-bot/test/logica.test.ts`), y el bot completo contra un **Finppi simulado** (`worker/einvoice-bot/test/bot-simulado.test.ts`): healthcheck, prueba sin emitir, totales distintos, emisión con punto de no retorno, cliente nuevo, reconciliación y cero saltos. Flujo de pantalla en `e2e/facturacion-electronica.cjs`.
 - Dominio: 25 pruebas unitarias (`npm test`): utilidad, duplicado, 170, alertas, archivos, reportes, facturación, portal.
 - SQL: migraciones y 6 suites de seguridad contra Postgres 16 (`npm run test:sql`): aislamiento entre empresas, RPC, archivos por rol, inmutabilidad de correos, llave de Megafoco y portal sin acceso directo.
 - Flujo completo en modo demo con Playwright (`npm run e2e`).
@@ -48,11 +49,24 @@ Navegador ──► Server Components (lectura) ─┐
 
 **Sin probar contra el servicio real:** envío con Resend (no hay llave), conector de Megafoco (no hay API ni contrato definitivo) e invitaciones por correo (se evitó enviar correos a direcciones de prueba).
 
+## Facturación electrónica (Finppi)
+
+El operador factura en la moneda negociada (USD o COP). Para la DIAN todo va en pesos:
+
+1. **Cotización**: pide condiciones de factura (moneda, tipo y método de pago, plazo, tipo de operación), producto de Finppi e IVA por concepto, y completa los datos fiscales del cliente que falten (`src/domain/einvoice.ts → faltantesFiscales`).
+2. **Prefactura**: hereda todo desde los DO. Contabilidad escribe la **TRM de referencia**; cada precio unitario se convierte a COP con 2 decimales y los totales se calculan con la fórmula de Finppi (`lineasEnCop`, `totalesCop`).
+3. **Un clic**: el modal de confirmación congela los «valores aprobados» (`payloadEmision`) en `fe_jobs` (RPC `fe_encolar_emision`). Opción «Probar sin emitir».
+4. **Bot** (`worker/einvoice-bot`, fuera de Vercel): transcribe en Finppi, compara totales (±$1), respeta el consecutivo (libro `fe_consecutivos`), marca el punto de no retorno antes del clic definitivo, descarga PDF/XML originales, extrae el CUFE y deja la factura emitida.
+5. **LOGIKS**: muestra número, CUFE, QR DIAN, PDF «Manifiesto» en USD con valores fiscales en COP, PDF/XML originales (con verificación SHA-256) y envía al cliente (`/api/fe/notificar`, firmado HMAC con `FE_WORKER_SECRET`).
+
+Seguridad: credenciales de Finppi en Vault (id del secreto en `app.fe_secretos`, fuera de la API); solo `fe_credenciales()` con la llave de servicio las lee. Un trigger impide que un usuario escriba número, CUFE, archivos o estados de emisión desde el navegador. En modo demo la emisión se simula al instante (CUFE ficticio, marcado «Simulación»).
+
 ## Integraciones
 
 | Integración | Cómo se activa | Estado |
 | --- | --- | --- |
 | Correo (Resend) | `RESEND_API_KEY`, `CORREO_REMITENTE` (dominio verificado con SPF/DKIM) y webhook con `RESEND_WEBHOOK_SECRET` | Implementado; sin llave solo registra |
+| Finppi (factura electrónica) | Bot en `worker/einvoice-bot` (Docker, Railway/Fly/VPS) con `SUPABASE_SERVICE_ROLE_KEY` y `FE_WORKER_SECRET`; en Vercel `FE_WORKER_SECRET`. Cada empresa guarda sus credenciales en Configuración → Facturación electrónica | Implementado y probado contra un Finppi simulado; emisión real deshabilitada (`FE_PERMITIR_EMISION`) hasta la Fase 0 con cuenta de pruebas |
 | Megafoco | `MEGAFOCO_API_URL` + `MEGAFOCO_WEBHOOK_SECRET`; cada empresa pega su llave en Configuración (Vault) | Implementado contra el contrato borrador del PRD |
 | TRM del día | Automática desde datos.gov.co (Superintendencia Financiera), caché de 1 h; `TRM_RESPALDO` si no responde | Activa |
 | Tarea diaria | Vercel Cron 7:00 a. m. Colombia → `/api/tareas/diaria` con `CRON_SECRET` | Activa: guarda alertas; resúmenes y recordatorios salen cuando haya Resend |
@@ -72,7 +86,7 @@ Navegador ──► Server Components (lectura) ─┐
 | Portal del cliente RF-35 y RF-36 | Hecho |
 | Trazabilidad RF-38 a RF-40 | Hecho: buzón entrante por DO y PDF de la línea de tiempo |
 | CRM RF-41 y RF-42 | Hecho: contactos con cumpleaños y acuerdos editables |
-| Facturación RF-45 a RF-50 | Hecho salvo notas crédito/débito |
+| Facturación RF-45 a RF-50 | Hecho: factura electrónica USD/COP con Finppi en un clic; notas crédito/débito pendientes |
 | Reportes RF-53 | Hecho |
 | Configuración RF-54 | Hecho: empresa, usuarios, catálogos, hitos, términos, Megafoco |
 | Registro y arranque | Hecho: asistente de 4 pasos y catálogos base |

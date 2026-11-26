@@ -83,17 +83,25 @@ export async function agregarCatalogo(_: R, formData: FormData): Promise<R> {
     const repo = await contexto();
     const d = z
       .object({
-        tipo: z.enum(["puerto", "aeropuerto", "ciudad", "contenedor", "concepto"]),
+        tipo: z.enum(["puerto", "aeropuerto", "ciudad", "contenedor", "concepto", "producto_finppi"]),
         nombre: z.string().trim().min(2, "Nombre requerido").max(120),
-        codigo: z.preprocess((v) => (v === "" ? undefined : v), z.string().trim().max(10).optional()),
+        codigo: z.preprocess((v) => (v === "" ? undefined : v), z.string().trim().max(30).optional()),
+        iva: z.preprocess((v) => (v === "" ? undefined : v), z.enum(["Ninguno", "IVA-0", "IVA-5", "IVA-19"]).optional()),
         bloque: z.preprocess((v) => (v === "" ? undefined : v), z.enum(["origen", "flete", "destino", "terrestre", "aduana", "seguro", "otros"]).optional()),
       })
       .parse(Object.fromEntries(formData));
+    if (d.tipo === "producto_finppi" && !d.codigo) throw new ErrorNegocio("Escribe el código exacto del producto en Finppi");
     await repo.agregarCatalogo({
       tipo: d.tipo,
       nombre: d.nombre,
-      codigo: d.codigo?.toUpperCase(),
-      datos: d.tipo === "concepto" ? { bloque: d.bloque ?? "otros" } : {},
+      // En Finppi el código se respeta tal cual (mayúsculas y minúsculas).
+      codigo: d.tipo === "producto_finppi" ? d.codigo : d.codigo?.toUpperCase(),
+      datos:
+        d.tipo === "concepto"
+          ? { bloque: d.bloque ?? "otros" }
+          : d.tipo === "producto_finppi"
+            ? { iva: d.iva ?? "IVA-19" }
+            : {},
     });
     return `«${d.nombre}» agregado`;
   });

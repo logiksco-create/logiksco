@@ -1,3 +1,4 @@
+import type { PayloadEmision } from "@/domain/einvoice";
 import type {
   AcuerdoComercial,
   Archivo,
@@ -10,6 +11,11 @@ import type {
   EntradaCatalogo,
   EstadoCotizacion,
   Factura,
+  CuentaFe,
+  DatosFiscales,
+  DatosFacturacion,
+  EstadoBotFe,
+  TrabajoFe,
   Formulario170,
   Hito,
   Incoterm,
@@ -110,7 +116,31 @@ export interface Repositorio {
   factura(id: string): Promise<Factura | null>;
   crearPrefactura(f: Omit<Factura, "id" | "empresaId" | "estado" | "creadoEl">): Promise<Factura>;
   actualizarLineas(id: string, lineas: Factura["lineas"]): Promise<void>;
-  actualizarFactura(id: string, cambios: Partial<Pick<Factura, "estado" | "megafocoId" | "numero" | "cufe" | "pdfUrl" | "xmlUrl" | "error">>): Promise<void>;
+  actualizarFactura(
+    id: string,
+    cambios: Partial<
+      Pick<
+        Factura,
+        "estado" | "megafocoId" | "numero" | "cufe" | "pdfUrl" | "xmlUrl" | "error" | "trmReferencia" | "tipoPago" | "metodoPago" | "tipoOperacion" | "vencimiento"
+      >
+    >,
+  ): Promise<void>;
+
+  /* Facturación electrónica con Finppi */
+  guardarDatosFiscales(terceroId: string, fiscal: DatosFiscales): Promise<void>;
+  cuentaFe(): Promise<CuentaFe | null>;
+  guardarCredencialesFe(usuario: string, clave: string, versionConsentimiento: string): Promise<void>;
+  desconectarFe(): Promise<void>;
+  probarConexionFe(): Promise<void>;
+  guardarResolucionFe(texto: string): Promise<void>;
+  /** Congela los valores aprobados y encola la emisión (o la prueba sin emitir). */
+  encolarEmision(facturaId: string, d: { payload: PayloadEmision; dryRun: boolean; enviarAlEmitir: boolean }): Promise<void>;
+  /** Trabajos del bot (de una factura, o los de conexión si no se indica). */
+  trabajosFe(facturaId?: string): Promise<TrabajoFe[]>;
+  estadoBotFe(): Promise<EstadoBotFe>;
+  descargarArchivoFe(facturaId: string, tipo: "pdf" | "xml"): Promise<Descarga | null>;
+  /** Solo servidor: deja constancia de que la factura se envió al cliente. */
+  marcarFacturaEnviada(facturaId: string): Promise<void>;
   megafocoConectado(): Promise<boolean>;
   guardarLlaveMegafoco(llave: string): Promise<void>;
   /** Solo servidor: llave descifrada para llamar a Megafoco. */
@@ -207,6 +237,7 @@ export interface DatosCotizacion {
   monedaPresentacion: Moneda;
   vigenteHasta: string;
   terminos: string;
+  facturacion?: DatosFacturacion;
 }
 
 /**

@@ -1,0 +1,596 @@
+"use client";
+
+import { useActionState, useEffect, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import {
+  BadgeCheck,
+  Check,
+  CircleAlert,
+  FlaskConical,
+  LoaderCircle,
+  Mail,
+  PlugZap,
+  RefreshCw,
+  Save,
+  Send,
+  ShieldCheck,
+  Unplug,
+  X,
+} from "lucide-react";
+import { FINPPI, TEXTO_CONSENTIMIENTO } from "@/domain/einvoice";
+import type { DatosFiscales } from "@/domain/types";
+import {
+  conectarFinppi,
+  desconectarFinppi,
+  emitirFacturaElectronica,
+  enviarFacturaCliente,
+  guardarCondicionesFe,
+  guardarDatosFiscales,
+  guardarResolucion,
+  probarConexionFinppi,
+} from "@/server/acciones/fe";
+import { AreaTexto, Boton, Campo, Entrada, Insignia, Selector } from "@/components/ui";
+import { cn } from "@/lib/formato";
+
+type R = { ok: true; mensaje?: string } | { ok: false; error: string } | null;
+
+function Mensaje({ r }: { r: R }) {
+  if (!r) return null;
+  return r.ok ? (
+    <p className="flex items-center gap-1.5 text-[13px] text-success">
+      <Check className="size-4 shrink-0" /> {r.mensaje}
+    </p>
+  ) : (
+    <p className="flex items-start gap-1.5 text-[13px] text-danger">
+      <CircleAlert className="mt-0.5 size-4 shrink-0" /> {r.error}
+    </p>
+  );
+}
+
+/**
+ * Envío sin reinicio: con `<form action>` React 19 limpia el formulario al
+ * terminar, y un error de validación borraría lo escrito.
+ */
+function useEnvio(accion: (d: FormData) => void) {
+  const [, iniciar] = useTransition();
+  return (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const datos = new FormData(e.currentTarget);
+    iniciar(() => accion(datos));
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/* Diálogo nativo (accesible, con Escape y foco atrapado)              */
+/* ------------------------------------------------------------------ */
+
+function Dialogo({
+  abierto,
+  cerrar,
+  titulo,
+  descripcion,
+  children,
+  ancho = "max-w-2xl",
+}: {
+  abierto: boolean;
+  cerrar: () => void;
+  titulo: string;
+  descripcion?: string;
+  children: React.ReactNode;
+  ancho?: string;
+}) {
+  const ref = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const d = ref.current;
+    if (!d) return;
+    if (abierto && !d.open) d.showModal();
+    if (!abierto && d.open) d.close();
+  }, [abierto]);
+  return (
+    <dialog
+      ref={ref}
+      onClose={cerrar}
+      onClick={(e) => e.target === ref.current && cerrar()}
+      className={cn(
+        "m-auto w-[calc(100%-2rem)] rounded-2xl border border-border bg-surface p-0 text-fg shadow-2xl backdrop:bg-black/50 backdrop:backdrop-blur-sm",
+        ancho,
+      )}
+    >
+      <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
+        <div>
+          <h2 className="text-[16px] font-semibold tracking-tight">{titulo}</h2>
+          {descripcion && <p className="mt-0.5 text-[13px] text-muted">{descripcion}</p>}
+        </div>
+        <button type="button" onClick={cerrar} className="rounded-md p-1 text-subtle hover:bg-surface-2 hover:text-fg" aria-label="Cerrar">
+          <X className="size-4" />
+        </button>
+      </div>
+      <div className="max-h-[75vh] overflow-y-auto">{children}</div>
+    </dialog>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Datos fiscales del cliente                                          */
+/* ------------------------------------------------------------------ */
+
+export function FormDatosFiscales({ terceroId, inicial, alGuardar }: { terceroId: string; inicial: DatosFiscales; alGuardar?: () => void }) {
+  const [estado, accion, pendiente] = useActionState(guardarDatosFiscales.bind(null, terceroId), null);
+  const enviar = useEnvio(accion);
+  const [persona, setPersona] = useState(inicial.tipoPersona);
+  useEffect(() => {
+    if (estado?.ok) alGuardar?.();
+  }, [estado, alGuardar]);
+  return (
+    <form onSubmit={enviar} className="space-y-4 p-5">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Campo etiqueta="Tipo de persona">
+          <Selector name="tipoPersona" value={persona} onChange={(e) => setPersona(e.target.value as DatosFiscales["tipoPersona"])}>
+            <option value="Juridica">Jurídica</option>
+            <option value="Natural">Natural</option>
+          </Selector>
+        </Campo>
+        <Campo etiqueta="Tipo de documento">
+          <Selector name="tipoDocumento" defaultValue={inicial.tipoDocumento}>
+            {FINPPI.tipoDocumento.map((t) => (
+              <option key={t}>{t}</option>
+            ))}
+          </Selector>
+        </Campo>
+        <Campo etiqueta="Número de documento" ayuda="Sin puntos ni dígito de verificación">
+          <Entrada name="numeroDocumento" defaultValue={inicial.numeroDocumento} required className="font-mono" inputMode="numeric" />
+        </Campo>
+        <Campo etiqueta={persona === "Juridica" ? "Razón social" : "Nombres"}>
+          <Entrada name="nombres" defaultValue={inicial.nombres} required />
+        </Campo>
+        <Campo etiqueta="Apellidos" ayuda={persona === "Juridica" ? "En empresas, repite la razón social" : undefined}>
+          <Entrada name="apellidos" defaultValue={inicial.apellidos} required />
+        </Campo>
+        <Campo etiqueta="Correo de facturación" ayuda="Varios separados por coma. Finppi envía la factura aquí.">
+          <Entrada name="email" defaultValue={inicial.email} required />
+        </Campo>
+        <Campo etiqueta="Celular">
+          <Entrada name="celular" defaultValue={inicial.celular} required inputMode="tel" />
+        </Campo>
+        <Campo etiqueta="Teléfono de la ubicación">
+          <Entrada name="telefono" defaultValue={inicial.telefono} required inputMode="tel" />
+        </Campo>
+        <Campo etiqueta="Régimen">
+          <Selector name="regimen" defaultValue={inicial.regimen}>
+            {FINPPI.regimen.map((t) => (
+              <option key={t}>{t}</option>
+            ))}
+          </Selector>
+        </Campo>
+        <Campo etiqueta="Responsabilidad fiscal">
+          <Selector name="responsabilidadFiscal" defaultValue={inicial.responsabilidadFiscal}>
+            {FINPPI.responsabilidadFiscal.map((t) => (
+              <option key={t}>{t}</option>
+            ))}
+          </Selector>
+        </Campo>
+        <Campo etiqueta="País">
+          <Entrada name="pais" defaultValue={inicial.pais} required />
+        </Campo>
+        <Campo etiqueta="Ciudad" ayuda="Como en Finppi: MUNICIPIO / Departamento">
+          <Entrada name="ciudad" defaultValue={inicial.ciudad} required placeholder="LA CEJA / Antioquia" />
+        </Campo>
+        <Campo etiqueta="Dirección principal" className="sm:col-span-2">
+          <Entrada name="direccion" defaultValue={inicial.direccion} required />
+        </Campo>
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Mensaje r={estado} />
+        <Boton disabled={pendiente} className="ml-auto">
+          {pendiente ? <LoaderCircle className="animate-spin" /> : <Save />} Guardar datos fiscales
+        </Boton>
+      </div>
+    </form>
+  );
+}
+
+/** Chip de completitud y botón para completar en un diálogo. */
+export function CompletarDatosFiscales({
+  terceroId,
+  inicial,
+  faltantes,
+  compacto,
+}: {
+  terceroId: string;
+  inicial: DatosFiscales;
+  faltantes: string[];
+  compacto?: boolean;
+}) {
+  const [abierto, setAbierto] = useState(false);
+  const router = useRouter();
+  const listo = faltantes.length === 0;
+  return (
+    <>
+      <div
+        className={cn(
+          "flex flex-wrap items-center gap-2 rounded-lg p-3 text-[13px]",
+          listo ? "bg-success-soft text-success" : "bg-warning-soft text-warning",
+          compacto && "p-2.5",
+        )}
+      >
+        {listo ? <BadgeCheck className="size-4 shrink-0" /> : <CircleAlert className="size-4 shrink-0" />}
+        <span className="min-w-0 flex-1">
+          {listo ? "Cliente listo para factura electrónica" : `Faltan ${faltantes.length} dato${faltantes.length > 1 ? "s" : ""} para Finppi: ${faltantes.slice(0, 3).join(", ")}${faltantes.length > 3 ? "…" : ""}`}
+        </span>
+        <button type="button" onClick={() => setAbierto(true)} className="font-medium underline-offset-2 hover:underline">
+          {listo ? "Ver" : "Completar"}
+        </button>
+      </div>
+      <Dialogo
+        abierto={abierto}
+        cerrar={() => setAbierto(false)}
+        titulo="Datos para facturación electrónica"
+        descripcion="Exactamente lo que pide Finppi para crear al cliente y emitir."
+      >
+        <FormDatosFiscales
+          terceroId={terceroId}
+          inicial={inicial}
+          alGuardar={() => {
+            setAbierto(false);
+            router.refresh();
+          }}
+        />
+      </Dialogo>
+    </>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Factura: condiciones, emisión, refresco y envío                     */
+/* ------------------------------------------------------------------ */
+
+export function CondicionesFe({
+  facturaId,
+  moneda,
+  inicial,
+  trmOficial,
+  editable,
+}: {
+  facturaId: string;
+  moneda: "COP" | "USD";
+  inicial: { trmReferencia?: number; tipoPago: "Contado" | "Crédito"; plazoDias: number; metodoPago: string; tipoOperacion: string };
+  trmOficial?: { valor: number; fecha: string; oficial: boolean };
+  editable: boolean;
+}) {
+  const [estado, accion, pendiente] = useActionState(guardarCondicionesFe.bind(null, facturaId), null);
+  const enviar = useEnvio(accion);
+  const [trm, setTrm] = useState(inicial.trmReferencia ? String(inicial.trmReferencia) : "");
+  const [tipoPago, setTipoPago] = useState(inicial.tipoPago);
+  return (
+    <form onSubmit={enviar} className="space-y-3.5">
+      <fieldset disabled={!editable} className="space-y-3.5">
+        {moneda === "USD" && (
+          <Campo
+            etiqueta="TRM de referencia"
+            ayuda={
+              trmOficial?.oficial ? (
+                <button type="button" className="text-brand-fg hover:underline" onClick={() => setTrm(String(trmOficial.valor))}>
+                  Oficial del {trmOficial.fecha.split("-").reverse().join("/")}: {trmOficial.valor.toLocaleString("es-CO")} · usar
+                </button>
+              ) : (
+                "La escribes tú: convierte los dólares a pesos para la DIAN"
+              )
+            }
+          >
+            <Entrada
+              name="trmReferencia"
+              value={trm}
+              onChange={(e) => setTrm(e.target.value)}
+              inputMode="decimal"
+              placeholder="4012.37"
+              className="font-mono tabular"
+              required
+            />
+          </Campo>
+        )}
+        <div className="grid grid-cols-2 gap-3">
+          <Campo etiqueta="Tipo de pago">
+            <Selector name="tipoPago" value={tipoPago} onChange={(e) => setTipoPago(e.target.value as "Contado" | "Crédito")}>
+              {FINPPI.tipoPago.map((t) => (
+                <option key={t}>{t}</option>
+              ))}
+            </Selector>
+          </Campo>
+          <Campo etiqueta="Plazo (días)">
+            <Entrada name="plazoDias" type="number" min={0} max={365} defaultValue={inicial.plazoDias} disabled={tipoPago === "Contado"} />
+          </Campo>
+        </div>
+        <Campo etiqueta="Método de pago">
+          <Selector name="metodoPago" defaultValue={inicial.metodoPago}>
+            {FINPPI.metodoPago.map((t) => (
+              <option key={t}>{t}</option>
+            ))}
+          </Selector>
+        </Campo>
+        <Campo etiqueta="Tipo de operación">
+          <Selector name="tipoOperacion" defaultValue={inicial.tipoOperacion}>
+            {FINPPI.tipoOperacion.map((t) => (
+              <option key={t}>{t}</option>
+            ))}
+          </Selector>
+        </Campo>
+        {tipoPago === "Contado" && <input type="hidden" name="plazoDias" value="0" />}
+      </fieldset>
+      {editable && (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <Mensaje r={estado} />
+          <Boton variante="secundario" tamano="sm" disabled={pendiente} className="ml-auto">
+            {pendiente ? <LoaderCircle className="animate-spin" /> : <Save />} Guardar condiciones
+          </Boton>
+        </div>
+      )}
+    </form>
+  );
+}
+
+export interface ResumenEmision {
+  cliente: string;
+  correo: string;
+  moneda: "COP" | "USD";
+  totalOriginal: string;
+  totalCop: string;
+  trm?: string;
+  proximo?: string;
+  bloqueos: string[];
+  simulacion: boolean;
+}
+
+export function BotonEmitir({ facturaId, resumen, reintento }: { facturaId: string; resumen: ResumenEmision; reintento?: boolean }) {
+  const [abierto, setAbierto] = useState(false);
+  const [confirmo, setConfirmo] = useState(false);
+  const [enviar, setEnviar] = useState(true);
+  const [crearCliente, setCrearCliente] = useState(true);
+  const [r, setR] = useState<R>(null);
+  const [pendiente, iniciar] = useTransition();
+  const router = useRouter();
+  const bloqueada = resumen.bloqueos.length > 0;
+
+  const ejecutar = (dryRun: boolean) =>
+    iniciar(async () => {
+      const x = await emitirFacturaElectronica(facturaId, { dryRun, enviarAlEmitir: enviar, crearCliente, confirmo });
+      setR(x);
+      if (x?.ok) {
+        if (!dryRun) setAbierto(false);
+        router.refresh();
+      }
+    });
+
+  return (
+    <>
+      <Boton className="w-full" tamano="lg" onClick={() => { setR(null); setAbierto(true); }}>
+        <ShieldCheck /> {reintento ? "Reintentar emisión" : "Emitir factura electrónica"}
+      </Boton>
+      {r && !abierto && <Mensaje r={r} />}
+      <Dialogo
+        abierto={abierto}
+        cerrar={() => setAbierto(false)}
+        titulo="Confirmar emisión ante la DIAN"
+        descripcion="El bot transcribe estos valores en Finppi y la DIAN la valida. No se puede deshacer."
+        ancho="max-w-lg"
+      >
+        <div className="space-y-4 p-5">
+          <div className="overflow-hidden rounded-xl border border-border">
+            <div className="bg-gradient-to-br from-[#0a0f1f] to-[#1a2550] p-4 text-white">
+              <p className="text-[12px] text-white/60">{resumen.cliente}</p>
+              <p className="mt-1 text-2xl font-semibold tracking-tight tabular">{resumen.totalOriginal}</p>
+              {resumen.moneda === "USD" && (
+                <p className="mt-1 font-mono text-[12px] text-white/70">
+                  = {resumen.totalCop} · TRM {resumen.trm}
+                </p>
+              )}
+            </div>
+            <dl className="grid grid-cols-2 gap-3 p-4 text-[13px]">
+              <div>
+                <dt className="text-subtle">Va a la DIAN en</dt>
+                <dd className="font-medium">Pesos colombianos</dd>
+              </div>
+              <div>
+                <dt className="text-subtle">Número</dt>
+                <dd className="font-mono font-medium">{resumen.proximo ?? "El siguiente de Finppi"}</dd>
+              </div>
+              <div className="col-span-2">
+                <dt className="text-subtle">Finppi enviará la factura a</dt>
+                <dd className="font-medium break-all">{resumen.correo || "—"}</dd>
+              </div>
+            </dl>
+          </div>
+
+          {bloqueada ? (
+            <div className="space-y-1.5 rounded-lg bg-danger-soft p-3 text-[13px] text-danger">
+              <p className="font-medium">Antes de emitir:</p>
+              <ul className="list-disc space-y-1 pl-5">
+                {resumen.bloqueos.map((b) => (
+                  <li key={b}>{b}</li>
+                ))}
+              </ul>
+            </div>
+          ) : (
+            <div className="space-y-2.5 text-[13px]">
+              <label className="flex items-start gap-2.5">
+                <input type="checkbox" className="mt-0.5 size-4 accent-[var(--brand)]" checked={crearCliente} onChange={(e) => setCrearCliente(e.target.checked)} />
+                <span>Si el cliente no existe en Finppi, créalo con sus datos fiscales.</span>
+              </label>
+              <label className="flex items-start gap-2.5">
+                <input type="checkbox" className="mt-0.5 size-4 accent-[var(--brand)]" checked={enviar} onChange={(e) => setEnviar(e.target.checked)} />
+                <span>
+                  Al quedar emitida, enviar al cliente el PDF de LOGIKS{resumen.moneda === "USD" ? " en dólares" : ""} y el original de la DIAN.
+                </span>
+              </label>
+              <label className="flex items-start gap-2.5 rounded-lg border border-border p-3">
+                <input type="checkbox" className="mt-0.5 size-4 accent-[var(--brand)]" checked={confirmo} onChange={(e) => setConfirmo(e.target.checked)} />
+                <span>
+                  <b>Entiendo</b> que la emisión no se puede deshacer y que debo verificar que la DIAN la haya aceptado.
+                </span>
+              </label>
+              {resumen.simulacion && (
+                <p className="rounded-lg bg-warning-soft p-2.5 text-xs text-warning">
+                  Modo demo: la emisión se simula al instante con un CUFE ficticio. Nada llega a Finppi ni a la DIAN.
+                </p>
+              )}
+            </div>
+          )}
+
+          <Mensaje r={r} />
+
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Boton variante="secundario" onClick={() => ejecutar(true)} disabled={pendiente || bloqueada}>
+              {pendiente ? <LoaderCircle className="animate-spin" /> : <FlaskConical />} Probar sin emitir
+            </Boton>
+            <Boton onClick={() => ejecutar(false)} disabled={pendiente || bloqueada || !confirmo}>
+              {pendiente ? <LoaderCircle className="animate-spin" /> : <Send />} Emitir ahora
+            </Boton>
+          </div>
+        </div>
+      </Dialogo>
+    </>
+  );
+}
+
+/** Mientras el bot trabaja, la página se actualiza sola. */
+export function RefrescoEnVivo({ activo, cada = 3000 }: { activo: boolean; cada?: number }) {
+  const router = useRouter();
+  useEffect(() => {
+    if (!activo) return;
+    const t = setInterval(() => router.refresh(), cada);
+    return () => clearInterval(t);
+  }, [activo, cada, router]);
+  return null;
+}
+
+export function BotonEnviarCliente({ facturaId, yaEnviada }: { facturaId: string; yaEnviada?: boolean }) {
+  const [r, setR] = useState<R>(null);
+  const [pendiente, iniciar] = useTransition();
+  return (
+    <div className="space-y-2">
+      <Boton
+        variante={yaEnviada ? "secundario" : "primario"}
+        className="w-full"
+        disabled={pendiente}
+        onClick={() => iniciar(async () => setR(await enviarFacturaCliente(facturaId)))}
+      >
+        {pendiente ? <LoaderCircle className="animate-spin" /> : <Mail />} {yaEnviada ? "Reenviar al cliente" : "Enviar al cliente"}
+      </Boton>
+      <Mensaje r={r} />
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Conexión con Finppi                                                  */
+/* ------------------------------------------------------------------ */
+
+export function FormConexionFinppi({ reconectar }: { reconectar: boolean }) {
+  const [estado, accion, pendiente] = useActionState(conectarFinppi, null);
+  const enviar = useEnvio(accion);
+  const [acepto, setAcepto] = useState(false);
+  return (
+    <form onSubmit={enviar} className="space-y-4" autoComplete="off">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Campo etiqueta="Correo de Finppi">
+          <Entrada name="usuario" type="email" required autoComplete="off" placeholder="facturacion@tuempresa.co" />
+        </Campo>
+        <Campo etiqueta="Contraseña de Finppi" ayuda="Se cifra y nunca se vuelve a mostrar">
+          <Entrada name="clave" type="password" required autoComplete="new-password" />
+        </Campo>
+      </div>
+      <div className="rounded-xl border border-border bg-surface-2 p-4">
+        <p className="mb-2 text-[13px] font-semibold">Autorización y responsabilidad del usuario</p>
+        <ol className="list-decimal space-y-1.5 pl-5 text-[12.5px] leading-relaxed text-muted">
+          {TEXTO_CONSENTIMIENTO.map((t) => (
+            <li key={t}>{t}</li>
+          ))}
+        </ol>
+        <label className="mt-3 flex items-start gap-2.5 text-[13px]">
+          <input type="checkbox" name="acepto" value="si" checked={acepto} onChange={(e) => setAcepto(e.target.checked)} className="mt-0.5 size-4 accent-[var(--brand)]" />
+          <span>Leí y acepto la autorización (versión 1.0).</span>
+        </label>
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Mensaje r={estado} />
+        <Boton disabled={pendiente || !acepto} className="ml-auto">
+          {pendiente ? <LoaderCircle className="animate-spin" /> : <PlugZap />} {reconectar ? "Actualizar y probar conexión" : "Guardar y probar conexión"}
+        </Boton>
+      </div>
+    </form>
+  );
+}
+
+export function AccionesConexion({ admin, conectada }: { admin: boolean; conectada: boolean }) {
+  const [r, setR] = useState<R>(null);
+  const [pendiente, iniciar] = useTransition();
+  const [confirmar, setConfirmar] = useState(false);
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-2">
+        {conectada && (
+          <Boton variante="secundario" tamano="sm" disabled={pendiente} onClick={() => iniciar(async () => setR(await probarConexionFinppi()))}>
+            {pendiente ? <LoaderCircle className="animate-spin" /> : <RefreshCw />} Actualizar
+          </Boton>
+        )}
+        {admin && conectada && (
+          <Boton
+            variante="secundario"
+            tamano="sm"
+            disabled={pendiente}
+            className={confirmar ? "border-danger/40 text-danger" : undefined}
+            onClick={() => {
+              if (!confirmar) return setConfirmar(true);
+              iniciar(async () => setR(await desconectarFinppi()));
+              setConfirmar(false);
+            }}
+          >
+            <Unplug /> {confirmar ? "¿Seguro? Borra las credenciales" : "Desconectar"}
+          </Boton>
+        )}
+      </div>
+      <Mensaje r={r} />
+    </div>
+  );
+}
+
+export function FormResolucion({ texto, editable }: { texto: string; editable: boolean }) {
+  const [estado, accion, pendiente] = useActionState(guardarResolucion, null);
+  const enviar = useEnvio(accion);
+  return (
+    <form onSubmit={enviar} className="space-y-3">
+      <AreaTexto
+        name="resolucion"
+        rows={3}
+        defaultValue={texto}
+        disabled={!editable}
+        placeholder="Autorización de numeración DIAN N.º 18764000000000 del 2026-01-01, prefijo ATFE del 1 al 5000. Vigencia 24 meses."
+      />
+      {editable && (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <Mensaje r={estado} />
+          <Boton variante="secundario" tamano="sm" disabled={pendiente} className="ml-auto">
+            {pendiente ? <LoaderCircle className="animate-spin" /> : <Save />} Guardar
+          </Boton>
+        </div>
+      )}
+    </form>
+  );
+}
+
+export function EstadoBot({ latidoEl, pausado, demo }: { latidoEl?: string; pausado: boolean; demo: boolean }) {
+  const [ahora, setAhora] = useState<number | null>(null);
+  useEffect(() => {
+    const tick = () => setAhora(Date.now());
+    tick();
+    const t = setInterval(tick, 30_000);
+    return () => clearInterval(t);
+  }, []);
+  if (demo) return <Insignia tono="alerta" punto>Bot simulado (demo)</Insignia>;
+  if (pausado) return <Insignia tono="peligro" punto>Bot en pausa de seguridad</Insignia>;
+  const vivo = !!latidoEl && ahora !== null && ahora - new Date(latidoEl).getTime() < 3 * 60_000;
+  return vivo ? (
+    <Insignia tono="exito" punto>Bot en línea</Insignia>
+  ) : (
+    <Insignia tono="neutro" punto>Bot sin conexión</Insignia>
+  );
+}

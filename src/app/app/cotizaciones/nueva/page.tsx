@@ -33,6 +33,7 @@ export default async function NuevaCotizacion({ searchParams }: PageProps<"/app/
         trmDia={trm}
         lugares={d.lugares}
         conceptosCatalogo={d.conceptos}
+        productosFinppi={d.productosFinppi}
         servicios={d.servicios}
         clientes={d.clientes}
         proveedores={d.proveedores}

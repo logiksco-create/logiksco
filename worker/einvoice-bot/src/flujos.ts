@@ -1,0 +1,283 @@
+import { createHmac } from "node:crypto";
+import type { Page } from "playwright";
+import { config } from "./config.ts";
+import * as db from "./db.ts";
+import type { Job } from "./db.ts";
+import { ErrorBot, desenlace, esperaReintento, mismoNit } from "./logica.ts";
+import { contextoLimpio } from "./navegador.ts";
+import { validarPdf } from "./pdf.ts";
+import * as finppi from "./adapters/finppi/finppi.ts";
+import { ADAPTER_VERSION } from "./adapters/finppi/selectors.ts";
+import {
+  partirConsecutivo,
+  totalesCoinciden,
+  verificarConsecutivo,
+  type PayloadEmision,
+} from "../../../src/domain/einvoice.ts";
+
+/** Abre un contexto limpio, inicia sesión y garantiza el cierre. */
+async function conSesion<T>(job: Job, fn: (page: Page, secretos: string[]) => Promise<T>): Promise<T> {
+  const cred = await db.credenciales(job.empresa_id);
+  if (!cred) throw new ErrorBot("INVALID_CREDENTIALS", "La empresa no tiene credenciales de Finppi");
+  const secretos = [cred.clave, cred.usuario];
+  const ctx = await contextoLimpio();
+  const page = await ctx.newPage();
+  // Salir del formulario sin guardar: se acepta «salir de la página»; todo lo demás se cancela.
+  page.on("dialog", (d) => void (d.type() === "beforeunload" ? d.accept() : d.dismiss()));
+  try {
+    await db.log(job, "login", "Conectando con Finppi…");
+    await finppi.iniciarSesion(page, cred.usuario, cred.clave);
+    await db.actualizarCuenta(job.empresa_id, { ultimo_login_ok: new Date().toISOString() });
+    return await fn(page, secretos);
+  } finally {
+    await ctx.close().catch(() => undefined);
+  }
+}
+
+async function verificarEmpresa(job: Job, page: Page) {
+  const emp = await db.empresa(job.empresa_id);
+  const cabecera = await finppi.textoCabecera(page);
+  if (!mismoNit(cabecera, emp.nit)) {
+    await db.actualizarCuenta(job.empresa_id, { estado: "empresa_distinta" });
+    throw new ErrorBot("WRONG_COMPANY", `La cuenta de Finppi no corresponde al NIT ${emp.nit}`);
+  }
+  await db.log(job, "empresa", `Empresa verificada: ${emp.razon_social}`);
+  return emp;
+}
+
+/* =============================== Healthcheck =============================== */
+
+export async function healthcheck(job: Job) {
+  await conSesion(job, async (page) => {
+    await finppi.irAFacturas(page);
+    await finppi.abrirFormularioFactura(page);
+    const emp = await verificarEmpresa(job, page);
+    const proxima = await finppi.leerNumeroOfrecido(page);
+    await db.log(job, "consecutivo", `Tu próxima factura será la ${proxima}`);
+    // Se sale SIN guardar y se vuelve a modo factura por el menú.
+    await finppi.irAFacturas(page);
+    const conteos = await finppi.contarClientesYProductos(page).catch(() => ({ clientes: undefined, productos: undefined }));
+    await db.actualizarCuenta(job.empresa_id, {
+      estado: "activa",
+      instantanea: {
+        razonSocial: emp.razon_social,
+        nit: emp.nit.replace(/[^0-9]/g, "").slice(0, 9),
+        proximaFactura: proxima,
+        leidoEl: new Date().toISOString(),
+        ...conteos,
+      },
+    });
+    // Vigilancia (§5A.4): ¿se emitió algo fuera de LOGIKS?
+    const serie = partirConsecutivo(proxima);
+    if (serie) {
+      const ultimo = await db.ultimoConsecutivo(job.empresa_id, serie.prefijo);
+      const v = verificarConsecutivo(proxima, ultimo);
+      if (!v.ok) await db.log(job, "consecutivo", `${v.mensaje} ¿Se emitió algo directamente en Finppi?`, "aviso");
+    }
+  });
+}
+
+/* ================================= Emitir ================================= */
+
+export async function emitir(job: Job) {
+  if (!job.factura_id) throw new Error("Trabajo de emisión sin factura");
+  const p = job.payload as unknown as PayloadEmision;
+  const pruebaPorSeguridad = !job.dry_run && !config.permitirEmision;
+  const dryRun = job.dry_run || pruebaPorSeguridad;
+  let despuesDeEnviar = false;
+
+  if (!dryRun) await db.actualizarFactura(job.factura_id, { estado: "enviando", error: null, error_codigo: null });
+
+  try {
+    await conSesion(job, async (page) => {
+      await finppi.irAFacturas(page);
+      await finppi.abrirFormularioFactura(page);
+      const emp = await verificarEmpresa(job, page);
+      if (p.nitEmisor && !mismoNit(emp.nit, p.nitEmisor)) throw new ErrorBot("WRONG_COMPANY", "La factura es de otra empresa");
+
+      // Cero saltos (§5A.2): el ofrecido debe ser el siguiente del libro.
+      const ofrecido = await finppi.leerNumeroOfrecido(page);
+      const serie = partirConsecutivo(ofrecido);
+      const ultimo = serie ? await db.ultimoConsecutivo(job.empresa_id, serie.prefijo) : null;
+      const v = verificarConsecutivo(ofrecido, ultimo);
+      if (!v.ok) throw new ErrorBot("CONSECUTIVE_GAP", v.mensaje);
+      await db.log(job, "consecutivo", `Finppi ofrece ${ofrecido}: es el siguiente esperado`);
+      await finppi.elegirNumero(page, ofrecido);
+
+      const cliente = await finppi.elegirCliente(page, p.cliente, p.crearCliente);
+      await db.log(job, "cliente", `${cliente === "creado" ? "Cliente creado en Finppi" : "Cliente encontrado"}: ${p.cliente.nombres}`);
+
+      await finppi.llenarFactura(page, p);
+      await db.log(job, "items", `${p.items.length} ítems cargados en COP${p.original.moneda === "USD" ? ` (TRM ${p.original.trmReferencia})` : ""}`);
+
+      // Verificación de totales (§5.4): tolerancia $1; NaN = fallo.
+      const t = await finppi.leerTotales(page);
+      const comparar: [string, number, number | undefined][] = [
+        ["Subtotal", p.totales.subtotal, t["Subtotal"]],
+        ["IVA", p.totales.iva, t["IVA (+)"]],
+        ["Total", p.totales.total, t["Total"]],
+      ];
+      for (const [nombre, aprobado, leido] of comparar) {
+        if (leido === undefined) continue;
+        if (!totalesCoinciden(aprobado, leido)) {
+          throw new ErrorBot("VALUES_MISMATCH", `${nombre} en Finppi (${leido}) no coincide con el aprobado (${aprobado})`);
+        }
+      }
+      await db.log(job, "totales", `Totales de Finppi = aprobados (${p.totales.total.toLocaleString("es-CO")} COP)`);
+
+      if (dryRun) {
+        // El dry run no toca «Enviar» y el número ofrecido debe seguir igual.
+        const despues = await finppi.leerNumeroOfrecido(page).catch(() => ofrecido);
+        if (despues !== ofrecido) await db.log(job, "dry_run", `¡Atención! El consecutivo cambió durante la prueba (${ofrecido} → ${despues})`, "aviso");
+        await db.log(
+          job,
+          "dry_run",
+          pruebaPorSeguridad
+            ? "Emisión real deshabilitada en este bot (FE_PERMITIR_EMISION). Se detuvo antes de «Enviar»: nada se emitió."
+            : "Prueba sin emitir: se detuvo antes de «Enviar». Nada se emitió.",
+          pruebaPorSeguridad ? "aviso" : "info",
+        );
+        await finppi.irAFacturas(page);
+        await db.actualizarJob(job.id, { resultado: { numeroOfrecido: ofrecido, totales: t, pruebaPorSeguridad } });
+        if (pruebaPorSeguridad) {
+          await db.actualizarFactura(job.factura_id!, {
+            estado: "fallida",
+            error_codigo: "EMISION_DESHABILITADA",
+            error: "El bot está en modo prueba: llenó Finppi y se detuvo antes de emitir. Actívalo cuando termine la Fase 0.",
+          });
+        }
+        return;
+      }
+
+      // Punto de no retorno: se marca en BD y se espera la escritura ANTES del clic.
+      await db.actualizarFactura(job.factura_id!, { numero_esperado: ofrecido });
+      await finppi.enviar(page, { numero: ofrecido, total: p.totales.total }, async () => {
+        await db.actualizarJob(job.id, { punto_no_retorno: true, adapter_version: ADAPTER_VERSION });
+        if (serie) await db.registrarConsecutivo({ empresa_id: job.empresa_id, numero: ofrecido, prefijo: serie.prefijo, seq: serie.seq, estado: "en_vuelo", factura_id: job.factura_id! });
+        despuesDeEnviar = true;
+        await db.log(job, "enviar", "Punto de no retorno: «Enviar»");
+      });
+
+      const fila = await finppi.esperarAceptada(page, ofrecido);
+      if (fila.numero !== ofrecido) throw new ErrorBot("VALUES_MISMATCH", `Finppi asignó ${fila.numero} en vez de ${ofrecido}`);
+      await db.log(job, "resultado", `${ofrecido} aceptada por la DIAN`);
+      await completarDescarga(job, page, fila, ofrecido, emp.nit);
+    });
+  } catch (e) {
+    await manejarError(job, e, despuesDeEnviar);
+  }
+}
+
+/** Descarga PDF/XML originales, valida y deja la factura emitida. */
+async function completarDescarga(job: Job, page: Page, fila: finppi.FilaListado, numero: string, nit: string) {
+  const pdf = await finppi.descargar(page, fila.fila, "pdf");
+  const { cufe, sha256 } = await validarPdf(pdf, { numero, nit: nit.replace(/[^0-9]/g, "").slice(0, 9) });
+  const base = `${job.empresa_id}/fe/${job.factura_id}`;
+  await db.subirArchivo(`${base}/original.pdf`, pdf, "application/pdf");
+  let xmlRuta: string | null = null;
+  try {
+    const xml = await finppi.descargar(page, fila.fila, "xml");
+    await db.subirArchivo(`${base}/original.xml`, xml, "application/xml");
+    xmlRuta = `${base}/original.xml`;
+  } catch {
+    await db.log(job, "descarga", "No se pudo descargar el XML (el PDF sí quedó)", "aviso");
+  }
+  await db.actualizarFactura(job.factura_id!, {
+    estado: "emitida",
+    numero,
+    cufe,
+    fecha_validacion: new Date().toISOString(),
+    pdf_finppi_path: `${base}/original.pdf`,
+    pdf_finppi_sha256: sha256,
+    xml_path: xmlRuta,
+    error: null,
+    error_codigo: null,
+  });
+  const serie = partirConsecutivo(numero);
+  if (serie) await db.registrarConsecutivo({ empresa_id: job.empresa_id, numero, prefijo: serie.prefijo, seq: serie.seq, estado: "emitido", factura_id: job.factura_id!, cufe });
+  await db.actualizarJob(job.id, { resultado: { numero, cufe } });
+  await db.log(job, "archivos", `PDF original guardado (SHA-256 ${sha256.slice(0, 12)}…)`);
+  await avisarLogiks(job.factura_id!);
+}
+
+/* =============================== Reconciliar =============================== */
+
+/** Busca por número esperado o referencia. Nunca emite (§5.3). */
+export async function reconciliar(job: Job) {
+  const f = await db.factura(job.factura_id!);
+  const buscar = f.numero_esperado ?? f.referencia;
+  if (!buscar) {
+    await db.actualizarFactura(f.id, { estado: "revision", error: "Sin número ni referencia para buscar en Finppi" });
+    return;
+  }
+  try {
+    await conSesion(job, async (page) => {
+      const emp = await db.empresa(job.empresa_id);
+      const fila = await finppi.buscarEnListado(page, buscar);
+      if (fila && fila.estado === "Aceptada") {
+        await db.log(job, "reconciliar", `Encontrada ${fila.numero} aceptada en Finppi`);
+        await completarDescarga(job, page, fila, fila.numero, emp.nit);
+        return;
+      }
+      await db.log(job, "reconciliar", `No aparece ${buscar} aceptada en Finppi`, "aviso");
+      await db.actualizarFactura(f.id, {
+        estado: "revision",
+        error: `No se encontró ${buscar} aceptada en Finppi. Revisa en Finppi antes de volver a emitir.`,
+      });
+      await avisarLogiks(f.id);
+    });
+  } catch (e) {
+    // Si no se pudo buscar, se reintenta luego. Nunca se emite.
+    await db.log(job, "reconciliar", e instanceof Error ? e.message : "Error al buscar", "aviso");
+    if (job.intentos < 6) {
+      await db.actualizarJob(job.id, { estado: "en_cola", disponible_el: new Date(Date.now() + 10 * 60_000).toISOString() });
+      throw new ReintentoProgramado();
+    }
+    await db.actualizarFactura(f.id, { estado: "revision", error: "No se pudo verificar la factura en Finppi" });
+  }
+}
+
+export class ReintentoProgramado extends Error {}
+
+/* ================================ Errores ================================ */
+
+async function manejarError(job: Job, e: unknown, despuesDeEnviar: boolean) {
+  if (process.env.DEPURAR_BOT && !(e instanceof ErrorBot)) console.error("[bot] error inesperado", e);
+  const err = e instanceof ErrorBot ? e : new ErrorBot("TIMEOUT", e instanceof Error ? e.message : "Error desconocido");
+  await db.log(job, "error", `${err.codigo}: ${err.message}`, "error");
+  const d = desenlace(err.codigo, despuesDeEnviar);
+  if (err.codigo === "INVALID_CREDENTIALS" || err.codigo === "ACCOUNT_LOCKED_OR_CHALLENGE") {
+    await db.actualizarCuenta(job.empresa_id, { estado: err.codigo === "INVALID_CREDENTIALS" ? "credenciales_invalidas" : "bloqueada" });
+  }
+  if (!job.factura_id) throw err;
+  if (job.dry_run) throw err; // la prueba no cambia la factura
+
+  if (d.job === "fallido" && d.reintentar) {
+    const espera = esperaReintento(job.intentos);
+    if (espera !== null) {
+      await db.actualizarFactura(job.factura_id, { estado: "en_cola", error: null });
+      await db.actualizarJob(job.id, { estado: "en_cola", disponible_el: new Date(Date.now() + espera).toISOString(), error_codigo: err.codigo, error: err.message });
+      throw new ReintentoProgramado();
+    }
+  }
+  await db.actualizarFactura(job.factura_id, { estado: d.factura, error_codigo: err.codigo, error: err.message });
+  if (d.job === "desconocido") {
+    await db.db.from("fe_jobs").insert({ empresa_id: job.empresa_id, factura_id: job.factura_id, tipo: "reconciliar", prioridad: 2, disponible_el: new Date(Date.now() + 60_000).toISOString() });
+  }
+  await avisarLogiks(job.factura_id).catch(() => undefined);
+  throw Object.assign(err, { estadoJob: d.job });
+}
+
+/* =========================== Aviso a LOGIKS =========================== */
+
+export async function avisarLogiks(facturaId: string) {
+  if (!config.secretoAvisos) return;
+  const cuerpo = JSON.stringify({ facturaId });
+  const firma = createHmac("sha256", config.secretoAvisos).update(cuerpo).digest("hex");
+  await fetch(`${config.logiksUrl}/api/fe/notificar`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-logiks-firma": firma },
+    body: cuerpo,
+    signal: AbortSignal.timeout(60_000),
+  }).catch((e) => console.error("[aviso LOGIKS]", e instanceof Error ? e.message : e));
+}

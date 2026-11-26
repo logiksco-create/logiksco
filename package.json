@@ -9,7 +9,7 @@
     "lint": "eslint",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "e2e": "node e2e/flujo-principal.cjs",
+    "e2e": "node e2e/flujo-principal.cjs && node e2e/facturacion-electronica.cjs",
     "test:sql": "scripts/probar-sql.sh",
     "verificar": "npm run lint && npm run typecheck && npm test"
   },

@@ -1,4 +1,6 @@
 import "server-only";
+import { createHash } from "node:crypto";
+import type { PayloadEmision } from "@/domain/einvoice";
 import type {
   AcuerdoComercial,
   Archivo,
@@ -9,6 +11,9 @@ import type {
   EntradaCatalogo,
   EstadoCotizacion,
   Factura,
+  DatosFiscales,
+  EstadoBotFe,
+  TrabajoFe,
   Formulario170,
   Hito,
   Rol,
@@ -451,7 +456,7 @@ export class DemoRepositorio implements Repositorio {
     this.exigirContabilidad();
     const f = await this.factura(facturaId);
     if (!f) throw new ErrorNegocio("La prefactura no existe");
-    if (f.estado !== "borrador") throw new ErrorNegocio("Solo se edita una prefactura en borrador");
+    if (!["borrador", "aprobada", "fallida", "rechazada"].includes(f.estado)) throw new ErrorNegocio("La factura ya está en proceso o emitida");
     f.lineas = lineas;
   }
 
@@ -459,6 +464,152 @@ export class DemoRepositorio implements Repositorio {
     const f = await this.factura(facturaId);
     if (!f) throw new ErrorNegocio("La factura no existe");
     Object.assign(f, cambios);
+  }
+
+  /* ---------------- Facturación electrónica (simulada) ---------------- */
+
+  async guardarDatosFiscales(terceroId: string, fiscal: DatosFiscales) {
+    if (!this.usuario.roles.some((r) => r === "comercial" || r === "contabilidad" || r === "admin" || r === "cumplimiento")) {
+      throw new ErrorNegocio("Tu rol no permite editar clientes");
+    }
+    const t = await this.tercero(terceroId);
+    if (!t) throw new ErrorNegocio("El cliente no existe");
+    t.fiscal = { ...fiscal };
+  }
+
+  async cuentaFe() {
+    return estado().cuentaFe ?? null;
+  }
+
+  async guardarCredencialesFe(usuario: string, _clave: string, version: string) {
+    if (!this.usuario.roles.includes("admin")) throw new ErrorNegocio("Solo el Administrador puede conectar Finppi");
+    const s = estado();
+    s.cuentaFe = {
+      estado: "pendiente",
+      tieneCredenciales: true,
+      usuarioPista: `${usuario.slice(0, 2)}***${usuario.slice(usuario.indexOf("@"))}`,
+      consentimientoEl: ahora(),
+      consentimientoVersion: version,
+      instantanea: s.cuentaFe?.instantanea ?? {},
+      resolucion: s.cuentaFe?.resolucion,
+    };
+    this.healthcheckSimulado();
+  }
+
+  async desconectarFe() {
+    if (!this.usuario.roles.includes("admin")) throw new ErrorNegocio("Solo el Administrador puede desconectar Finppi");
+    const c = estado().cuentaFe;
+    if (c) Object.assign(c, { estado: "desconectada", tieneCredenciales: false, usuarioPista: undefined });
+  }
+
+  async probarConexionFe() {
+    if (!estado().cuentaFe?.tieneCredenciales) throw new ErrorNegocio("Primero guarda las credenciales de Finppi");
+    this.healthcheckSimulado();
+  }
+
+  async guardarResolucionFe(texto: string) {
+    const s = estado();
+    s.cuentaFe ??= { estado: "desconectada", tieneCredenciales: false, instantanea: {} };
+    s.cuentaFe.resolucion = texto;
+  }
+
+  /** En el demo no hay bot: el resultado se simula al instante. */
+  private healthcheckSimulado() {
+    const s = estado();
+    const c = s.cuentaFe!;
+    const leido = ahora();
+    Object.assign(c, {
+      estado: "activa",
+      ultimoLoginOk: leido,
+      instantanea: {
+        razonSocial: s.empresa.razonSocial,
+        nit: s.empresa.nit.replace(/[^0-9]/g, "").slice(0, 9),
+        proximaFactura: `SETT${s.ultimoConsecutivoFe + 1}`,
+        leidoEl: leido,
+        clientes: 3,
+        productos: 3,
+      },
+    });
+    s.trabajosFe.unshift({
+      id: id(),
+      tipo: "healthcheck",
+      estado: "ok",
+      dryRun: false,
+      creadoEl: leido,
+      terminadoEl: leido,
+      resultado: { simulado: true },
+      logs: [
+        { paso: "login", nivel: "info", mensaje: "Conectando con Finppi… (simulado)", creadoEl: leido },
+        { paso: "empresa", nivel: "info", mensaje: `Empresa verificada: ${s.empresa.razonSocial}`, creadoEl: leido },
+        { paso: "consecutivo", nivel: "info", mensaje: `Tu próxima factura será la SETT${s.ultimoConsecutivoFe + 1}`, creadoEl: leido },
+      ],
+    });
+  }
+
+  async encolarEmision(facturaId: string, d: { payload: PayloadEmision; dryRun: boolean; enviarAlEmitir: boolean }) {
+    this.exigirContabilidad();
+    const s = estado();
+    const f = await this.factura(facturaId);
+    if (!f) throw new ErrorNegocio("La factura no existe");
+    if (!["borrador", "aprobada", "fallida", "rechazada"].includes(f.estado)) {
+      throw new ErrorNegocio("Esta factura ya está en proceso o emitida");
+    }
+    if (s.cuentaFe?.estado !== "activa") {
+      throw new ErrorNegocio("Conecta y verifica tu cuenta de Finppi en Configuración antes de emitir");
+    }
+    const t = ahora();
+    const numero = `SETT${s.ultimoConsecutivoFe + 1}`;
+    const p = d.payload;
+    const logs: TrabajoFe["logs"] = [
+      { paso: "login", nivel: "info", mensaje: "Sesión iniciada en Finppi (simulado)", creadoEl: t },
+      { paso: "empresa", nivel: "info", mensaje: `NIT ${p.nitEmisor} verificado`, creadoEl: t },
+      { paso: "consecutivo", nivel: "info", mensaje: `Finppi ofrece ${numero}: es el siguiente esperado`, creadoEl: t },
+      { paso: "cliente", nivel: "info", mensaje: `Cliente ${p.cliente.nombres} (${p.cliente.numeroDocumento})`, creadoEl: t },
+      { paso: "items", nivel: "info", mensaje: `${p.items.length} ítems cargados en COP con TRM ${p.original.trmReferencia}`, creadoEl: t },
+      { paso: "totales", nivel: "info", mensaje: `Totales de Finppi = aprobados (${p.totales.total.toLocaleString("es-CO")} COP)`, creadoEl: t },
+    ];
+    if (d.dryRun) {
+      logs.push({ paso: "dry_run", nivel: "info", mensaje: "Prueba sin emitir: se detuvo antes de «Enviar». Nada se emitió.", creadoEl: t });
+      s.trabajosFe.unshift({ id: id(), facturaId, tipo: "emitir", estado: "ok", dryRun: true, creadoEl: t, terminadoEl: t, resultado: { numeroOfrecido: numero }, logs });
+      return;
+    }
+    s.ultimoConsecutivoFe += 1;
+    const cufe = createHash("sha384").update(`${p.referencia}|${numero}|${p.totales.total}|demo`).digest("hex");
+    logs.push(
+      { paso: "enviar", nivel: "info", mensaje: "Punto de no retorno: «Enviar» (simulado)", creadoEl: t },
+      { paso: "resultado", nivel: "info", mensaje: `${numero} aceptada · CUFE ${cufe.slice(0, 12)}… (ficticio)`, creadoEl: t },
+    );
+    Object.assign(f, {
+      estado: "emitida",
+      referencia: f.referencia ?? p.referencia,
+      numero,
+      numeroEsperado: numero,
+      cufe,
+      fechaValidacion: t,
+      totalCop: p.totales.total,
+      simulada: true,
+      error: undefined,
+      errorCodigo: undefined,
+    } satisfies Partial<Factura>);
+    if (s.cuentaFe) s.cuentaFe.instantanea.proximaFactura = `SETT${s.ultimoConsecutivoFe + 1}`;
+    s.trabajosFe.unshift({ id: id(), facturaId, tipo: "emitir", estado: "ok", dryRun: false, creadoEl: t, terminadoEl: t, resultado: { numero, cufe }, logs });
+  }
+
+  async trabajosFe(facturaId?: string) {
+    return estado().trabajosFe.filter((j) => (facturaId ? j.facturaId === facturaId : j.tipo === "healthcheck"));
+  }
+
+  async estadoBotFe(): Promise<EstadoBotFe> {
+    return { latidoEl: ahora(), pausado: false };
+  }
+
+  async descargarArchivoFe() {
+    return null; // en el demo no hay PDF original de Finppi
+  }
+
+  async marcarFacturaEnviada(facturaId: string) {
+    const f = await this.factura(facturaId);
+    if (f) f.enviadaClienteEl = ahora();
   }
 
   async megafocoConectado() {

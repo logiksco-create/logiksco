@@ -47,6 +47,12 @@ export default async function Catalogos({ searchParams }: PageProps<"/app/config
           ))}
         </nav>
         <div className="space-y-5 p-5">
+          {tipo === "producto_finppi" && (
+            <p className="text-[13px] text-muted">
+              Copia el <b>código exacto</b> de cada producto o servicio tal como aparece en Finppi (en la factura se ve como «CÓDIGO - Nombre»).
+              El bot lo elige por ese código; si no existe en Finppi, la emisión se detiene sin emitir.
+            </p>
+          )}
           {admin && <AgregarCatalogo tipo={tipo} />}
           <div>
             <p className="mb-2 text-xs font-medium tracking-wide text-subtle uppercase">De tu empresa · {propias.length}</p>
@@ -59,6 +65,7 @@ export default async function Catalogos({ searchParams }: PageProps<"/app/config
                     {e.nombre}
                     {e.codigo && <span className="font-mono text-xs opacity-70">{e.codigo}</span>}
                     {e.datos.bloque && <span className="text-xs opacity-70">· {BLOQUES[e.datos.bloque]}</span>}
+                    {e.datos.iva && <span className="text-xs opacity-70">· {e.datos.iva}</span>}
                     {admin && <QuitarCatalogo id={e.id} nombre={e.nombre} />}
                   </span>
                 ))}

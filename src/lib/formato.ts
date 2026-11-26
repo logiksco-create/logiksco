@@ -108,3 +108,8 @@ export function fechaLegibleCorta(iso: string): string {
     new Date(`${iso.slice(0, 10)}T00:00:00Z`),
   );
 }
+
+/** Pesos con centavos: valores fiscales que van a Finppi/DIAN. */
+export function pesosExactos(valor: number): string {
+  return new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(valor);
+}
