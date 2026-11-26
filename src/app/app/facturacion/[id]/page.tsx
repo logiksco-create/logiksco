@@ -102,6 +102,11 @@ export default async function DetalleFactura({ params }: PageProps<"/app/factura
   const contable = tieneRol(repo, "contabilidad");
   const editable = contable && EDITABLE.includes(f.estado);
   const enProceso = EN_PROCESO.includes(f.estado) || trabajos.some((j) => j.estado === "en_cola" || j.estado === "corriendo");
+  // Recién emitida y con envío automático pendiente: seguir mirando un par de minutos.
+  // eslint-disable-next-line react-hooks/purity -- marca de tiempo del render en el servidor
+  const ahora = Date.now();
+  const esperandoEnvio =
+    f.estado === "emitida" && f.enviarAlEmitir !== false && !f.enviadaClienteEl && !!f.fechaValidacion && ahora - new Date(f.fechaValidacion).getTime() < 120_000;
   const productos = catalogo.filter((e) => e.codigo).map((e) => ({ codigo: e.codigo!, nombre: e.nombre, iva: e.datos.iva }));
   const hoy = hoyISO();
 
@@ -131,7 +136,7 @@ export default async function DetalleFactura({ params }: PageProps<"/app/factura
 
   return (
     <>
-      <RefrescoEnVivo activo={enProceso} />
+      <RefrescoEnVivo activo={enProceso || esperandoEnvio} />
       <Encabezado
         antes={
           <Link href="/app/facturacion" className="mb-2 inline-flex items-center gap-1 text-[13px] text-muted hover:text-fg">
