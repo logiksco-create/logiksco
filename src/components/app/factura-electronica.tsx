@@ -553,18 +553,29 @@ export function AccionesConexion({ admin, conectada }: { admin: boolean; conecta
   );
 }
 
-export function FormResolucion({ texto, editable }: { texto: string; editable: boolean }) {
+export function FormResolucion({ texto, condiciones, editable }: { texto: string; condiciones: string; editable: boolean }) {
   const [estado, accion, pendiente] = useActionState(guardarResolucion, null);
   const enviar = useEnvio(accion);
   return (
     <form onSubmit={enviar} className="space-y-3">
-      <AreaTexto
-        name="resolucion"
-        rows={3}
-        defaultValue={texto}
-        disabled={!editable}
-        placeholder="Autorización de numeración DIAN N.º 18764000000000 del 2026-01-01, prefijo ATFE del 1 al 5000. Vigencia 24 meses."
-      />
+      <Campo etiqueta="Información tributaria y resolución" ayuda="Encabezado de la factura: régimen, responsabilidades, actividad económica y resolución DIAN.">
+        <AreaTexto
+          name="resolucion"
+          rows={4}
+          defaultValue={texto}
+          disabled={!editable}
+          placeholder="Responsable de IVA · No somos autorretenedores · Actividad económica 5229 · Resolución DIAN N.º 18764000000000 del 2026-01-01, prefijo FE del 1 al 10000."
+        />
+      </Campo>
+      <Campo etiqueta="Condiciones y notas legales" ayuda="Pie de la factura: TRM de pago, intereses de mora, responsabilidad sobre la carga.">
+        <AreaTexto
+          name="condiciones"
+          rows={4}
+          defaultValue={condiciones}
+          disabled={!editable}
+          placeholder="Las facturas en dólares se pagan a la TRM del día de pago… La mora causa intereses a la tasa máxima legal… Las mercancías viajan por cuenta y riesgo del cliente…"
+        />
+      </Campo>
       {editable && (
         <div className="flex flex-wrap items-center justify-between gap-2">
           <Mensaje r={estado} />

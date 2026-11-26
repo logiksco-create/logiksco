@@ -132,7 +132,7 @@ export interface Repositorio {
   guardarCredencialesFe(usuario: string, clave: string, versionConsentimiento: string): Promise<void>;
   desconectarFe(): Promise<void>;
   probarConexionFe(): Promise<void>;
-  guardarResolucionFe(texto: string): Promise<void>;
+  guardarTextosFe(t: { resolucion: string; condiciones: string }): Promise<void>;
   /** Congela los valores aprobados y encola la emisión (o la prueba sin emitir). */
   encolarEmision(facturaId: string, d: { payload: PayloadEmision; dryRun: boolean; enviarAlEmitir: boolean }): Promise<void>;
   /** Trabajos del bot (de una factura, o los de conexión si no se indica). */

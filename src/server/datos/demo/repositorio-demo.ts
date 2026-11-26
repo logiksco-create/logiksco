@@ -492,6 +492,7 @@ export class DemoRepositorio implements Repositorio {
       consentimientoVersion: version,
       instantanea: s.cuentaFe?.instantanea ?? {},
       resolucion: s.cuentaFe?.resolucion,
+      condiciones: s.cuentaFe?.condiciones,
     };
     this.healthcheckSimulado();
   }
@@ -507,10 +508,11 @@ export class DemoRepositorio implements Repositorio {
     this.healthcheckSimulado();
   }
 
-  async guardarResolucionFe(texto: string) {
+  async guardarTextosFe(t: { resolucion: string; condiciones: string }) {
     const s = estado();
     s.cuentaFe ??= { estado: "desconectada", tieneCredenciales: false, instantanea: {} };
-    s.cuentaFe.resolucion = texto;
+    s.cuentaFe.resolucion = t.resolucion;
+    s.cuentaFe.condiciones = t.condiciones;
   }
 
   /** En el demo no hay bot: el resultado se simula al instante. */

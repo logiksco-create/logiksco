@@ -411,6 +411,8 @@ export interface LineaFactura {
   /** Producto en Finppi e IVA exacto para la factura electrónica. */
   productoFinppi?: string;
   ivaFinppi?: IvaFinppi;
+  /** Unidad del concepto en el DO (se imprime en la factura). */
+  unidad?: Unidad;
 }
 
 export interface Factura {
@@ -481,8 +483,10 @@ export interface CuentaFe {
     clientes?: number;
     productos?: number;
   };
-  /** Texto de la resolución DIAN que se imprime en el PDF de LOGIKS. */
+  /** Información tributaria y resolución DIAN (encabezado del PDF). */
   resolucion?: string;
+  /** Condiciones de pago y notas legales (pie del PDF). */
+  condiciones?: string;
 }
 
 export const ESTADOS_TRABAJO_FE = {

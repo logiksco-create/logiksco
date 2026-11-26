@@ -69,6 +69,7 @@ export function lineasDesdeOperaciones(ops: Operacion[], moneda: Moneda): LineaF
       valorUnitario: Math.round(convertir(c.ventaUnitaria, c.moneda, moneda, o.trm) * 100) / 100,
       ivaPct: c.ivaFinppi ? pctIva(c.ivaFinppi) : c.paraTerceros ? 0 : IVA_PROPIO_SUGERIDO,
       productoFinppi: c.productoFinppi,
+      unidad: c.unidad,
       ivaFinppi: c.ivaFinppi ?? (c.paraTerceros ? ("Ninguno" as const) : ("IVA-19" as const)),
     })),
   );

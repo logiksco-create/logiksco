@@ -301,7 +301,10 @@ export function crearSemilla(hoy = hoyISO()): EstadoDemo {
       consentimientoVersion: "1.0",
       ultimoLoginOk: d(-1) + "T13:00:00.000Z",
       instantanea: { razonSocial: empresa.razonSocial, nit: "901456789", proximaFactura: "SETT1", leidoEl: d(-1) + "T13:00:00.000Z", clientes: 3, productos: 3 },
-      resolucion: "Resolución DIAN de prueba (modo demo). Numeración SETT1 a SETT5000000.",
+      resolucion:
+        "Responsable de IVA · No somos grandes contribuyentes · No somos autorretenedores · Actividad económica 5229 (actividades de agencias de aduana y de carga). Resolución de facturación electrónica DIAN N.º 18760000000000 del 2026-01-15 · Prefijo SETT del 1 al 5.000.000 · Vigencia 24 meses (modo demo).",
+      condiciones:
+        "Las facturas en dólares se pagan a la TRM del día de pago, siempre que no sea inferior a la TRM de la fecha de emisión. La mora en el pago causa intereses a la tasa máxima permitida por la Superintendencia Financiera. Las mercancías viajan por cuenta y riesgo de nuestros clientes y no se aseguran sin orden expresa; nuestra responsabilidad no excede la que asumen frente a nosotros las compañías transportadoras.",
     } satisfies CuentaFe,
     catalogoPropio: [
       { id: "cat-1", tipo: "concepto", nombre: "Manejo de carga refrigerada", base: false, datos: { bloque: "origen", moneda: "COP", unidad: "embarque" } },

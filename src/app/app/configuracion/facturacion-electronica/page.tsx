@@ -149,9 +149,9 @@ export default async function ConfiguracionFe() {
             </ul>
           </Tarjeta>
           <Tarjeta>
-            <TarjetaEncabezado titulo="Resolución en el PDF" descripcion="Texto legal que se imprime en tu factura LOGIKS" />
+            <TarjetaEncabezado titulo="Textos de la factura" descripcion="Se imprimen en tu PDF de factura LOGIKS" />
             <div className="p-5 pt-0">
-              <FormResolucion texto={cuenta?.resolucion ?? ""} editable={contable} />
+              <FormResolucion texto={cuenta?.resolucion ?? ""} condiciones={cuenta?.condiciones ?? ""} editable={contable} />
             </div>
           </Tarjeta>
           <div className="flex gap-2.5 rounded-xl border border-border bg-surface-2 p-4 text-[13px] text-muted">

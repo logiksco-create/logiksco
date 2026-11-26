@@ -148,3 +148,17 @@ describe("facturación electrónica: DIAN y consecutivos", () => {
     expect(verificarConsecutivo("FV10", "ATFE65")).toMatchObject({ ok: false, motivo: "otra_serie" });
   });
 });
+
+import { enLetras } from "./letras";
+describe("valor en letras", () => {
+  it("dólares y pesos con centavos", () => {
+    expect(enLetras(2515.21, "USD")).toBe("DOS MIL QUINIENTOS QUINCE DÓLARES CON VEINTIÚN CENTAVOS");
+    expect(enLetras(20037580.3, "COP")).toBe("VEINTE MILLONES TREINTA Y SIETE MIL QUINIENTOS OCHENTA PESOS CON TREINTA CENTAVOS M/CTE");
+    expect(enLetras(1, "USD")).toBe("UN DÓLAR");
+    expect(enLetras(100, "USD")).toBe("CIEN DÓLARES");
+    expect(enLetras(21000, "COP")).toBe("VEINTIÚN MIL PESOS M/CTE");
+    expect(enLetras(1000000, "COP")).toBe("UN MILLÓN DE PESOS M/CTE");
+    expect(enLetras(4993.96, "USD")).toBe("CUATRO MIL NOVECIENTOS NOVENTA Y TRES DÓLARES CON NOVENTA Y SEIS CENTAVOS");
+    expect(enLetras(101, "USD")).toBe("CIENTO UN DÓLARES");
+  });
+});

@@ -115,8 +115,11 @@ export async function desconectarFinppi(): Promise<R> {
 export async function guardarResolucion(_: unknown, formData: FormData): Promise<R> {
   return intentar(async () => {
     const repo = await contexto();
-    await repo.guardarResolucionFe(z.string().trim().max(600).parse(formData.get("resolucion") ?? ""));
-    return "Texto de la resolución guardado";
+    await repo.guardarTextosFe({
+      resolucion: z.string().trim().max(1000, "Máximo 1.000 caracteres").parse(formData.get("resolucion") ?? ""),
+      condiciones: z.string().trim().max(1500, "Máximo 1.500 caracteres").parse(formData.get("condiciones") ?? ""),
+    });
+    return "Textos de la factura guardados";
   });
 }
 

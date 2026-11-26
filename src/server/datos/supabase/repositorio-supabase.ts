@@ -976,6 +976,7 @@ export class SupabaseRepositorio implements Repositorio {
       ultimoLoginOk: data.ultimo_login_ok ?? undefined,
       instantanea: data.instantanea ?? {},
       resolucion: data.resolucion ?? undefined,
+      condiciones: data.condiciones ?? undefined,
     };
   }
 
@@ -999,8 +1000,8 @@ export class SupabaseRepositorio implements Repositorio {
     falla(error);
   }
 
-  async guardarResolucionFe(texto: string) {
-    const { error } = await this.db.rpc("fe_guardar_resolucion", { p_empresa: this.empresa.id, p_texto: texto });
+  async guardarTextosFe(t: { resolucion: string; condiciones: string }) {
+    const { error } = await this.db.rpc("fe_guardar_textos", { p_empresa: this.empresa.id, p_resolucion: t.resolucion, p_condiciones: t.condiciones });
     falla(error);
   }
 

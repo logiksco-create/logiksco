@@ -3,6 +3,7 @@ import type { Factura } from "@/domain/types";
 import type { Repositorio } from "./datos/repositorio";
 import { notificar } from "./notificaciones";
 import { pdfFactura } from "./pdf/factura";
+import { datosPdfFactura } from "./fe-datos-pdf";
 import { lineasEnCop, totalesOriginales, urlDian } from "@/domain/einvoice";
 import type { Adjunto } from "./correo";
 import { ErrorNegocio } from "./datos/errores";
@@ -19,11 +20,12 @@ export function correosFacturacion(cliente: { fiscal?: { email?: string }; conta
  * de Finppi sin modificar. Queda en la trazabilidad del cliente.
  */
 export async function enviarFacturaAlCliente(repo: Repositorio, f: Factura) {
-  const [cliente, operaciones, cuenta] = await Promise.all([repo.tercero(f.clienteId), repo.operaciones(), repo.cuentaFe()]);
-  if (!cliente) throw new ErrorNegocio("El cliente no existe");
+  const datos = await datosPdfFactura(repo, f);
+  if (!datos) throw new ErrorNegocio("El cliente no existe");
+  const { cliente } = datos;
   const para = correosFacturacion(cliente);
   if (!para.length) throw new ErrorNegocio("El cliente no tiene correo de facturación");
-  const pdf = await pdfFactura({ f, empresa: repo.empresa, cliente, operaciones, cuenta });
+  const pdf = await pdfFactura(datos);
   const adjuntos: Adjunto[] = [{ nombre: `Factura ${f.numero} - ${repo.empresa.razonSocial}.pdf`, contenido: new Uint8Array(pdf) }];
   const original = await repo.descargarArchivoFe(f.id, "pdf").catch(() => null);
   if (original && "bytes" in original) adjuntos.push({ nombre: `Factura ${f.numero} - DIAN (original).pdf`, contenido: original.bytes });
