@@ -37,6 +37,7 @@ import {
   SelectorPresentacion,
   BotonDescartarPrueba,
   BotonDetenerEnvio,
+  BotonReabrirPrueba,
 } from "@/components/app/factura-electronica";
 import { EstadoFacturaBadge } from "@/components/estado-factura";
 import { Insignia, Tarjeta, TarjetaEncabezado, clasesBoton } from "@/components/ui";
@@ -108,6 +109,9 @@ export default async function DetalleFactura({ params }: PageProps<"/app/factura
   const puedePresentar = tieneRol(repo, "contabilidad", "comercial");
   const enProceso = EN_PROCESO.includes(f.estado) || trabajos.some((j) => j.estado === "en_cola" || j.estado === "corriendo");
   const corriendo = trabajos.some((j) => j.estado === "corriendo");
+  // Prueba («Guardar») sin confirmar: la base de datos vuelve a validar que no sea una emisión real.
+  const pruebaSinConfirmar =
+    (f.estado === "estado_desconocido" || f.estado === "revision") && cuenta?.modoEmision !== "real" && !corriendo;
   const enCola = corriendo ? undefined : trabajos.find((j) => j.estado === "en_cola" && j.tipo === "emitir");
   // Recién emitida y con envío automático pendiente: seguir mirando un par de minutos.
   // eslint-disable-next-line react-hooks/purity -- marca de tiempo del render en el servidor
@@ -193,11 +197,16 @@ export default async function DetalleFactura({ params }: PageProps<"/app/factura
       {(f.estado === "estado_desconocido" || f.estado === "revision") && (
         <div className="mb-6 flex gap-3 rounded-xl border border-warning/30 bg-warning-soft p-4 text-[13.5px] text-warning">
           <ShieldAlert className="mt-0.5 size-4 shrink-0" />
-          <p>
-            {f.estado === "estado_desconocido"
-              ? "El bot pulsó «Enviar» pero no alcanzó a confirmar el resultado. Está buscando la factura en Finppi por su referencia; nunca la vuelve a emitir."
-              : "No se pudo confirmar la emisión. Revísala en Finppi antes de cualquier acción: no se reintentará automáticamente."}
-          </p>
+          <div className="min-w-0 space-y-3">
+            <p>
+              {pruebaSinConfirmar
+                ? "Modo prueba: el bot pulsó «Guardar» en Finppi pero no alcanzó a confirmar el borrador. Revisa en Finppi → Facturas de venta si quedó un borrador de este cliente (bórralo allá si sobra) y luego vuelve a prefactura para reintentar."
+                : f.estado === "estado_desconocido"
+                  ? "El bot pulsó «Enviar» pero no alcanzó a confirmar el resultado. Está buscando la factura en Finppi por su referencia; nunca la vuelve a emitir."
+                  : "No se pudo confirmar la emisión. Revísala en Finppi antes de cualquier acción: no se reintentará automáticamente."}
+            </p>
+            {pruebaSinConfirmar && contable && <BotonReabrirPrueba facturaId={f.id} />}
+          </div>
         </div>
       )}
 

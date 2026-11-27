@@ -36,6 +36,7 @@ import {
   cambiarModoEmision,
   descartarPrueba,
   detenerEnvio,
+  reabrirPrueba,
   traerProductosFinppi,
 } from "@/server/acciones/fe";
 import { AreaTexto, Boton, Campo, Entrada, Insignia, Selector } from "@/components/ui";
@@ -792,6 +793,37 @@ export function BotonDescartarPrueba({ facturaId }: { facturaId: string }) {
       >
         {pendiente ? <LoaderCircle className="animate-spin" /> : <RefreshCw />}
         {confirmar ? "¿Seguro? Vuelve a prefactura" : "Descartar prueba"}
+      </Boton>
+      <Mensaje r={r} />
+    </div>
+  );
+}
+
+/** Modo prueba: reabre una factura cuyo «Guardar» quedó sin confirmar. */
+export function BotonReabrirPrueba({ facturaId }: { facturaId: string }) {
+  const [r, setR] = useState<R>(null);
+  const [confirmar, setConfirmar] = useState(false);
+  const [pendiente, iniciar] = useTransition();
+  const router = useRouter();
+  return (
+    <div className="space-y-2">
+      <Boton
+        variante="secundario"
+        tamano="sm"
+        className={cn(confirmar && "border-warning/50 text-warning")}
+        disabled={pendiente}
+        onClick={() => {
+          if (!confirmar) return setConfirmar(true);
+          iniciar(async () => {
+            const x = await reabrirPrueba(facturaId);
+            setR(x);
+            setConfirmar(false);
+            router.refresh();
+          });
+        }}
+      >
+        {pendiente ? <LoaderCircle className="animate-spin" /> : <RefreshCw />}
+        {confirmar ? "¿Ya revisaste Finppi? Volver a prefactura" : "Volver a prefactura (prueba)"}
       </Boton>
       <Mensaje r={r} />
     </div>

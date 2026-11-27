@@ -644,31 +644,64 @@ export async function guardarBorrador(page: Page) {
     }
     await si.click();
   }
+  // Lo que respondió Finppi: avisos, errores de validación y la página a la que llevó.
+  await page.waitForTimeout(3000);
+  const mensajes = [
+    ...new Set(
+      (await page
+        .locator('.Toastify__toast, [role="alert"], .swal2-popup, .alert, .notification, .form__form-group-error, .invalid-feedback')
+        .allInnerTexts()
+        .catch(() => [] as string[]))
+        .map((t) => t.replace(/\s+/g, " ").trim())
+        .filter((t) => t && t.length < 200),
+    ),
+  ].slice(0, 5);
+  const errores = mensajes.filter((m) => /error|requerid|obligatori|inválid|invalid|falta|no se pudo/i.test(m));
+  if (errores.length) throw new ErrorBot("PLATFORM_VALIDATION_ERROR", `Finppi no guardó la factura: ${errores.join(" · ")}`);
+  return { url: new URL(page.url()).pathname, mensajes };
+}
+
+/** Texto de las primeras filas del listado (para explicar si no se encontró algo). */
+async function resumenListado(page: Page): Promise<string> {
+  const filas = page.locator(LIST.rows);
+  const n = Math.min(await filas.count().catch(() => 0), 5);
+  const r: string[] = [];
+  for (let i = 0; i < n; i++) r.push((await filas.nth(i).locator("td").allInnerTexts()).map((x) => x.trim()).filter(Boolean).join(" | "));
+  return r.join(" ;; ") || "(sin filas)";
 }
 
 /**
  * Busca el documento guardado en el listado: por número, luego por
- * referencia y, si no, el borrador más reciente.
+ * referencia y, si no, el borrador más reciente de ese cliente.
+ * El estado se compara sin tildes ni mayúsculas.
  */
-export async function esperarBorrador(page: Page, candidatos: string[]): Promise<FilaListado & { porRecencia?: boolean }> {
-  const limite = Date.now() + T.largo;
+export async function esperarBorrador(
+  page: Page,
+  candidatos: string[],
+  cliente?: { nombre: string; documento: string },
+): Promise<FilaListado & { porRecencia?: boolean }> {
+  const esBorrador = (t: string) => normalizar(t) === normalizar(LIST.statusDraft);
+  const limite = Date.now() + 60_000;
   while (Date.now() < limite) {
     for (const c of candidatos.filter(Boolean)) {
       const f = await buscarEnListado(page, c).catch(() => null);
-      if (f && f.estado === LIST.statusDraft) return f;
+      if (f && esBorrador(f.estado)) return f;
     }
     await irAFacturas(page).catch(() => undefined);
+    await page.locator(LIST.rows).first().waitFor({ timeout: T.corto }).catch(() => undefined);
     const filas = page.locator(LIST.rows);
     const n = await filas.count().catch(() => 0);
     for (let i = 0; i < n; i++) {
       const celdas = (await filas.nth(i).locator("td").allInnerTexts()).map((x) => x.trim());
-      if (celdas.length >= 7 && celdas[5] === LIST.statusDraft) {
-        return { fila: filas.nth(i), numero: numeroDeFila(celdas[1], celdas[0]), estado: celdas[5], porRecencia: true };
-      }
+      const estado = celdas.find(esBorrador);
+      if (!estado) continue;
+      // Debe ser de este cliente (la columna puede mostrar el nombre o el documento).
+      if (cliente && !celdas.some((x) => normalizar(x).includes(normalizar(cliente.nombre)) || soloDigitos(x).includes(cliente.documento))) continue;
+      return { fila: filas.nth(i), numero: numeroDeFila(celdas[1] ?? "", celdas[0] ?? ""), estado, porRecencia: true };
     }
     await new Promise((r) => setTimeout(r, 4000));
   }
-  throw new ErrorBot("TIMEOUT", "El borrador no apareció en el listado de Finppi a tiempo");
+  throw new ErrorBot("TIMEOUT", `El borrador no apareció en el listado de Finppi. Primeras filas: ${await resumenListado(page)}`);
 }
 
 /** Descarga PDF o XML desde los íconos de Opciones (orden verificado: 0 XML, 1 PDF). */

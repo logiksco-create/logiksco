@@ -338,3 +338,12 @@ export async function detenerEnvio(facturaId: string): Promise<R> {
     return "Envío detenido: la factura volvió a prefactura. Corrige lo que necesites y vuelve a enviarla.";
   });
 }
+
+/** Modo prueba: la factura cuyo «Guardar» no se confirmó vuelve a prefactura. */
+export async function reabrirPrueba(facturaId: string): Promise<R> {
+  return intentar(async () => {
+    const repo = await repoContable();
+    await repo.reabrirPruebaFe(z.string().min(1).parse(facturaId));
+    return "La factura volvió a prefactura. Revisa en Finppi si quedó un borrador y bórralo allá antes de reintentar.";
+  });
+}

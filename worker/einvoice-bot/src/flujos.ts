@@ -292,9 +292,16 @@ export async function emitir(job: Job) {
       }
 
       if (modo === "borrador") {
-        await guardarComoBorrador(job, page, p, ofrecido, () => {
-          despuesDeEnviar = true;
-        });
+        await guardarComoBorrador(
+          job,
+          page,
+          p,
+          ofrecido,
+          () => {
+            despuesDeEnviar = true;
+          },
+          { nombre: nombreRegistrado || finppi.nombreEnFinppi(p.cliente), documento: p.cliente.numeroDocumento },
+        );
         return;
       }
 
@@ -323,14 +330,22 @@ export async function emitir(job: Job) {
  * como factura de prueba. Además responde una pregunta de la Fase 0: ¿un
  * borrador consume consecutivo?
  */
-async function guardarComoBorrador(job: Job, page: Page, p: PayloadEmision, ofrecido: string, marcar: () => void) {
+async function guardarComoBorrador(
+  job: Job,
+  page: Page,
+  p: PayloadEmision,
+  ofrecido: string,
+  marcar: () => void,
+  nombreCliente?: { nombre: string; documento: string },
+) {
   await db.actualizarFactura(job.factura_id!, { numero_esperado: ofrecido });
   await db.actualizarJob(job.id, { punto_no_retorno: true, adapter_version: ADAPTER_VERSION });
   await db.log(job, "guardar", "Modo prueba: se pulsa «Guardar» (borrador). No va a la DIAN.");
   marcar();
-  await finppi.guardarBorrador(page);
+  const g = await finppi.guardarBorrador(page);
+  await db.log(job, "guardar", `Finppi respondió${g.mensajes.length ? `: ${g.mensajes.join(" · ")}` : " sin mensajes"} (quedó en ${g.url})`);
 
-  const fila = await finppi.esperarBorrador(page, [ofrecido, p.referencia]);
+  const fila = await finppi.esperarBorrador(page, [ofrecido, p.referencia], nombreCliente);
   await db.log(job, "resultado", `Guardada en Finppi como borrador ${fila.numero || ""}${fila.porRecencia ? " (identificado como el borrador más reciente)" : ""}`, fila.porRecencia ? "aviso" : "info");
 
   let pdfRuta: string | null = null;

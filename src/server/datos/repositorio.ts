@@ -148,6 +148,8 @@ export interface Repositorio {
   descartarPruebaFe(facturaId: string): Promise<void>;
   /** Detiene un envío a Finppi aún en cola; la factura vuelve a prefactura. */
   detenerEnvioFe(facturaId: string): Promise<void>;
+  /** Modo prueba: un «Guardar» sin confirmar vuelve a prefactura. */
+  reabrirPruebaFe(facturaId: string): Promise<void>;
   /** Congela los valores aprobados y encola la emisión (o la prueba sin emitir). */
   encolarEmision(facturaId: string, d: { payload: PayloadEmision; dryRun: boolean; enviarAlEmitir: boolean }): Promise<void>;
   /** Trabajos del bot (de una factura, o los de conexión si no se indica). */

@@ -594,6 +594,13 @@ export class DemoRepositorio implements Repositorio {
     } satisfies Partial<Factura>);
   }
 
+  async reabrirPruebaFe(facturaId: string) {
+    this.exigirContabilidad();
+    const f = await this.factura(facturaId);
+    if (!f || (f.estado !== "estado_desconocido" && f.estado !== "revision")) throw new ErrorNegocio("La factura no está pendiente de verificación");
+    Object.assign(f, { estado: "borrador", error: undefined });
+  }
+
   async detenerEnvioFe(facturaId: string) {
     this.exigirContabilidad();
     const s = estado();
