@@ -18,7 +18,7 @@ import {
   Unplug,
   X,
 } from "lucide-react";
-import { FINPPI, TEXTO_CONSENTIMIENTO } from "@/domain/einvoice";
+import { FINPPI, TEXTO_CONSENTIMIENTO, separarNombre } from "@/domain/einvoice";
 import type { DatosFiscales, Presentacion } from "@/domain/types";
 import {
   conectarFinppi,
@@ -76,6 +76,17 @@ export function FormDatosFiscales({ terceroId, inicial, alGuardar }: { terceroId
   const [estado, accion, pendiente] = useActionState(guardarDatosFiscales.bind(null, terceroId), null);
   const enviar = useEnvio(accion);
   const [persona, setPersona] = useState(inicial.tipoPersona);
+  const [nombres, setNombres] = useState(inicial.nombres);
+  const [apellidos, setApellidos] = useState(inicial.apellidos);
+  // Persona natural: nombres y apellidos van separados en Finppi.
+  const cambiarPersona = (p: DatosFiscales["tipoPersona"]) => {
+    setPersona(p);
+    if (p === "Natural" && (!apellidos.trim() || apellidos.trim() === nombres.trim())) {
+      const s = separarNombre(nombres);
+      setNombres(s.nombres);
+      setApellidos(s.apellidos);
+    } else if (p === "Juridica" && !apellidos.trim()) setApellidos(nombres);
+  };
   useEffect(() => {
     if (estado?.ok) alGuardar?.();
   }, [estado, alGuardar]);
@@ -83,7 +94,7 @@ export function FormDatosFiscales({ terceroId, inicial, alGuardar }: { terceroId
     <form onSubmit={enviar} className="space-y-4 p-5">
       <div className="grid gap-4 sm:grid-cols-2">
         <Campo etiqueta="Tipo de persona">
-          <Selector name="tipoPersona" value={persona} onChange={(e) => setPersona(e.target.value as DatosFiscales["tipoPersona"])}>
+          <Selector name="tipoPersona" value={persona} onChange={(e) => cambiarPersona(e.target.value as DatosFiscales["tipoPersona"])}>
             <option value="Juridica">Jurídica</option>
             <option value="Natural">Natural</option>
           </Selector>
@@ -99,10 +110,13 @@ export function FormDatosFiscales({ terceroId, inicial, alGuardar }: { terceroId
           <Entrada name="numeroDocumento" defaultValue={inicial.numeroDocumento} required className="font-mono" inputMode="numeric" />
         </Campo>
         <Campo etiqueta={persona === "Juridica" ? "Razón social" : "Nombres"}>
-          <Entrada name="nombres" defaultValue={inicial.nombres} required />
+          <Entrada name="nombres" value={nombres} onChange={(e) => setNombres(e.target.value)} required />
         </Campo>
-        <Campo etiqueta="Apellidos" ayuda={persona === "Juridica" ? "En empresas, repite la razón social" : undefined}>
-          <Entrada name="apellidos" defaultValue={inicial.apellidos} required />
+        <Campo
+          etiqueta="Apellidos"
+          ayuda={persona === "Juridica" ? "En empresas, repite la razón social" : "Solo los apellidos, sin repetir los nombres"}
+        >
+          <Entrada name="apellidos" value={apellidos} onChange={(e) => setApellidos(e.target.value)} required />
         </Campo>
         <Campo etiqueta="Correo de facturación" ayuda="Varios separados por coma. Finppi envía la factura aquí.">
           <Entrada name="email" defaultValue={inicial.email} required />

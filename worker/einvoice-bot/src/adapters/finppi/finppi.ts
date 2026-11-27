@@ -248,8 +248,9 @@ async function crearClienteEnPanel(page: Page, c: PayloadEmision["cliente"]) {
   const panel = page.locator(CLIENT_PANEL.nationalId).first();
   await existe(panel, T.medio, "el panel «Crear cliente»");
   const L = CLIENT_PANEL.selectLabels;
-  await elegirPorEtiqueta(page, L.personType, c.tipoPersona);
-  await elegirPorEtiqueta(page, L.docType, c.tipoDocumento);
+  const N = CLIENT_PANEL.selectNames;
+  await elegirPorNombre(page, N.personType, L.personType, c.tipoPersona);
+  await elegirPorNombre(page, N.docType, L.docType, c.tipoDocumento);
   await page.locator(CLIENT_PANEL.nationalId).fill(c.numeroDocumento);
   const juridica = c.tipoPersona === "Juridica";
   const nombre = await campoTexto(page, {
@@ -270,13 +271,13 @@ async function crearClienteEnPanel(page: Page, c: PayloadEmision["cliente"]) {
   else if (apellido && !juridica) await apellido.fill(c.apellidos);
   await page.locator(CLIENT_PANEL.email).fill(c.email);
   await page.locator(CLIENT_PANEL.phone).fill(c.celular);
-  await elegirPorEtiqueta(page, L.regime, c.regimen);
-  await elegirPorEtiqueta(page, L.fiscalResponsibility, c.responsabilidadFiscal);
+  await elegirPorNombre(page, N.regime, L.regime, c.regimen);
+  await elegirPorNombre(page, N.fiscalResponsibility, L.fiscalResponsibility, c.responsabilidadFiscal);
   await page.locator(CLIENT_PANEL.locationName).fill("Oficina principal");
   // País y ciudad: se escribe para filtrar y se exige UNA coincidencia exacta.
-  const pais = await existe(controlPorEtiqueta(page, L.country), T.corto, "el desplegable «País»");
+  const pais = await control(page, N.country, L.country);
   await elegir(page, pais, c.pais, { escribir: c.pais });
-  const ciudad = await existe(controlPorEtiqueta(page, L.city), T.corto, "el desplegable «Ciudad»");
+  const ciudad = await control(page, N.city, L.city);
   await elegir(page, ciudad, c.ciudad, { escribir: c.ciudad.split(" / ")[0] });
   await page.locator(CLIENT_PANEL.address1).fill(c.direccion);
   // Lectura de vuelta antes de crear (§9C.2 paso 4).

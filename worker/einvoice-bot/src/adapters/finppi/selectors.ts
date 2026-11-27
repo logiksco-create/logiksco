@@ -133,8 +133,14 @@ export const CLIENT_PANEL = {
   address1: 'input[name="locations.0.address.address_line1"]',
   address2: 'input[name="locations.0.address.address_line2"]',
   submit: 'button[type="submit"]:has-text("Crear")',
+  // Verificado en vivo (diagnóstico 27-nov-2026): name del input oculto de cada react-select.
+  selectNames: {
+    personType: 'personType', docType: 'customerIdTypeId', regime: 'customerRegimenTypeId',
+    fiscalResponsibility: 'customerFiscalResponsabilityId', country: 'locations.0.address.country', city: 'locations.0.address.cityCode',
+  },
+  // Respaldo por etiqueta visible (Finppi escribe «Regimen» sin tilde).
   selectLabels: {
-    personType: 'Tipo de persona', docType: 'Tipo de documento', regime: 'Régimen',
+    personType: 'Tipo de persona', docType: 'Tipo de documento', regime: 'Regimen',
     fiscalResponsibility: 'Responsabilidad fiscal', country: 'País', city: 'Ciudad',
   },
 };

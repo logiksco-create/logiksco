@@ -179,3 +179,18 @@ describe("productos", () => {
     expect(siguienteCodigoProducto(["OIK01", "LG-009", undefined, "lg-010"])).toBe("LG-011");
   });
 });
+
+describe("persona natural: nombres y apellidos", () => {
+  it("separa el nombre completo (los dos últimos son apellidos)", async () => {
+    const { separarNombre } = await import("./einvoice");
+    expect(separarNombre("Luis Miguel Ortiz Restrepo")).toEqual({ nombres: "Luis Miguel", apellidos: "Ortiz Restrepo" });
+    expect(separarNombre("Ana Gómez Ruiz")).toEqual({ nombres: "Ana", apellidos: "Gómez Ruiz" });
+    expect(separarNombre("Ana Gómez")).toEqual({ nombres: "Ana", apellidos: "Gómez" });
+  });
+  it("no deja emitir una persona natural con el apellido igual al nombre", async () => {
+    const { faltantesFiscales } = await import("./einvoice");
+    const f = { tipoPersona: "Natural" as const, nombres: "Luis Miguel Ortiz Restrepo", apellidos: "Luis Miguel Ortiz Restrepo" };
+    expect(faltantesFiscales(f)).toContain("Nombres y apellidos por separado (persona natural)");
+    expect(faltantesFiscales({ ...f, nombres: "Luis Miguel", apellidos: "Ortiz Restrepo" })).not.toContain("Nombres y apellidos por separado (persona natural)");
+  });
+});

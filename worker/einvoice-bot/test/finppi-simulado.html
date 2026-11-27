@@ -200,11 +200,12 @@ function panelCliente() {
     else nombres.append(campo('Nombres', input('name')), campo('Apellidos', input('lastname')));
   };
   pintarNombres('Natural');
-  p.append(campo('Tipo de persona', selector(['Natural', 'Juridica'], pintarNombres)), campo('Tipo de documento', selector(['Cédula de ciudadanía', 'Nit'])));
+  p.append(campo('Tipo de persona', selector(['Natural', 'Juridica'], pintarNombres, 'Natural', 'personType')), campo('Tipo de documento', selector(['Cédula de ciudadanía', 'Nit'], null, '', 'customerIdTypeId')));
   p.append(nombres);
   for (const c of campos) p.append(input(c));
-  p.append(campo('Régimen', selector(['Responsable de iva', 'No responsable de iva'])), campo('Responsabilidad fiscal', selector(['No aplica (ninguna de las anteriores)', 'Gran contribuyente'])),
-    campo('País', selector(['Colombia', 'Ecuador'])), campo('Ciudad', selector(['LA CEJA / Antioquia', 'MEDELLÍN / Antioquia', 'RIONEGRO / Antioquia'])));
+  // Como Finppi: «Regimen» sin tilde; cada desplegable con su input oculto.
+  p.append(campo('Regimen*', selector(['Responsable de iva', 'No responsable de iva'], null, '', 'customerRegimenTypeId')), campo('Responsabilidad fiscal*', selector(['No aplica (ninguna de las anteriores)', 'Gran contribuyente'], null, '', 'customerFiscalResponsabilityId')),
+    campo('País', selector(['Colombia', 'Ecuador'], null, 'Colombia', 'locations.0.address.country')), campo('Ciudad*', selector(['LA CEJA / Antioquia', 'MEDELLÍN / Antioquia', 'RIONEGRO / Antioquia'], null, '', 'locations.0.address.cityCode')));
   const crear = Object.assign(document.createElement('button'), { type: 'submit', textContent: 'Crear' });
   crear.onclick = (e) => {
     e.preventDefault();

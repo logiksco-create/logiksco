@@ -115,8 +115,8 @@ export function fiscalSugerido(c: {
     tipoPersona: juridica ? "Juridica" : "Natural",
     tipoDocumento: juridica ? "Nit" : "Cédula de ciudadanía",
     numeroDocumento: documentoLimpio(c.nit),
-    nombres: c.razonSocial,
-    apellidos: juridica ? c.razonSocial : "",
+    nombres: juridica ? c.razonSocial : separarNombre(c.razonSocial).nombres,
+    apellidos: juridica ? c.razonSocial : separarNombre(c.razonSocial).apellidos,
     email: contacto?.correo ?? "",
     celular: contacto?.telefono ?? "",
     regimen: "Responsable de iva",
@@ -127,6 +127,19 @@ export function fiscalSugerido(c: {
     telefono: contacto?.telefono ?? "",
     ...Object.fromEntries(Object.entries(c.fiscal ?? {}).filter(([, v]) => v !== undefined && v !== "")),
   };
+}
+
+const mismoTexto = (a: string, b: string) => a.trim().replace(/\s+/g, " ").toLowerCase() === b.trim().replace(/\s+/g, " ").toLowerCase();
+
+/**
+ * Separa un nombre completo de persona natural en nombres y apellidos
+ * (convención colombiana: los dos últimos son los apellidos).
+ */
+export function separarNombre(completo: string): { nombres: string; apellidos: string } {
+  const p = completo.trim().split(/\s+/).filter(Boolean);
+  if (p.length <= 1) return { nombres: p[0] ?? "", apellidos: "" };
+  const corte = p.length >= 4 ? p.length - 2 : 1;
+  return { nombres: p.slice(0, corte).join(" "), apellidos: p.slice(corte).join(" ") };
 }
 
 /** Campos que faltan o están mal para crear al cliente en Finppi (§9A.2). */
@@ -141,6 +154,9 @@ export function faltantesFiscales(f: Partial<DatosFiscales> | undefined): string
   if (d.regimen && !(FINPPI.regimen as readonly string[]).includes(d.regimen)) faltan.push("Régimen de Finppi");
   if (d.responsabilidadFiscal && !(FINPPI.responsabilidadFiscal as readonly string[]).includes(d.responsabilidadFiscal)) {
     faltan.push("Responsabilidad fiscal de Finppi");
+  }
+  if (d.tipoPersona === "Natural" && d.nombres?.trim() && d.apellidos?.trim() && mismoTexto(d.nombres, d.apellidos)) {
+    faltan.push("Nombres y apellidos por separado (persona natural)");
   }
   if (d.ciudad && !/^.+ \/ .+$/.test(d.ciudad)) faltan.push("Ciudad con formato «MUNICIPIO / Departamento»");
   if (d.numeroDocumento && /[^0-9A-Za-z]/.test(d.numeroDocumento)) faltan.push("Documento sin puntos ni dígito de verificación");
