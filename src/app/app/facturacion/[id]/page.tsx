@@ -36,6 +36,7 @@ import {
   RefrescoEnVivo,
   SelectorPresentacion,
   BotonDescartarPrueba,
+  BotonDetenerEnvio,
 } from "@/components/app/factura-electronica";
 import { EstadoFacturaBadge } from "@/components/estado-factura";
 import { Insignia, Tarjeta, TarjetaEncabezado, clasesBoton } from "@/components/ui";
@@ -106,6 +107,8 @@ export default async function DetalleFactura({ params }: PageProps<"/app/factura
   const editable = contable && EDITABLE.includes(f.estado);
   const puedePresentar = tieneRol(repo, "contabilidad", "comercial");
   const enProceso = EN_PROCESO.includes(f.estado) || trabajos.some((j) => j.estado === "en_cola" || j.estado === "corriendo");
+  const corriendo = trabajos.some((j) => j.estado === "corriendo");
+  const enCola = corriendo ? undefined : trabajos.find((j) => j.estado === "en_cola" && j.tipo === "emitir");
   // Recién emitida y con envío automático pendiente: seguir mirando un par de minutos.
   // eslint-disable-next-line react-hooks/purity -- marca de tiempo del render en el servidor
   const ahora = Date.now();
@@ -294,11 +297,27 @@ export default async function DetalleFactura({ params }: PageProps<"/app/factura
             <Tarjeta className="p-5">
               <div className="flex items-start gap-3">
                 <LoaderCircle className="mt-0.5 size-5 shrink-0 animate-spin text-brand-fg" />
-                <div className="text-[13.5px]">
-                  <p className="font-medium">El bot está trabajando en Finppi</p>
+                <div className="min-w-0 text-[13.5px]">
+                  <p className="font-medium">{enCola ? "En cola: esperando al bot" : "El bot está trabajando en Finppi"}</p>
                   <p className="mt-1 text-muted">
-                    Esta página se actualiza sola. Cuando la DIAN la acepte verás el número, el CUFE y los PDF aquí.
+                    {enCola
+                      ? "El bot la toma en su próxima pasada. Esta página se actualiza sola."
+                      : "Esta página se actualiza sola. Cuando la DIAN la acepte verás el número, el CUFE y los PDF aquí."}
                   </p>
+                  {enCola?.error && (
+                    <p className="mt-2 rounded-lg bg-danger-soft p-2.5 text-xs text-danger">
+                      El último intento falló: {enCola.error.split("\n")[0]}. El bot lo reintentará solo.
+                    </p>
+                  )}
+                  {enCola && contable && (
+                    <div className="mt-3 space-y-2 rounded-lg border border-border bg-surface-2 p-3">
+                      <p className="text-xs text-muted">
+                        ¿Cambiaste datos del cliente o de la factura? Lo que está en cola usa los datos del momento en que confirmaste:
+                        detén el envío, corrige y vuelve a enviarla.
+                      </p>
+                      <BotonDetenerEnvio facturaId={f.id} />
+                    </div>
+                  )}
                   <div className="mt-3">
                     <EstadoBot latidoEl={bot.latidoEl} pausado={bot.pausado} demo={modoDemo} bajoDemanda={!!process.env.GITHUB_BOT_TOKEN} />
                   </div>

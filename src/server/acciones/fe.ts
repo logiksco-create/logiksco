@@ -319,3 +319,12 @@ export async function descartarPrueba(facturaId: string): Promise<R> {
     return "La prueba se descartó: la factura volvió a prefactura";
   });
 }
+
+/** Detiene un envío que sigue en cola (el bot aún no lo tomó) para corregir y reenviar. */
+export async function detenerEnvio(facturaId: string): Promise<R> {
+  return intentar(async () => {
+    const repo = await repoContable();
+    await repo.detenerEnvioFe(z.string().min(1).parse(facturaId));
+    return "Envío detenido: la factura volvió a prefactura. Corrige lo que necesites y vuelve a enviarla.";
+  });
+}

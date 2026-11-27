@@ -594,6 +594,19 @@ export class DemoRepositorio implements Repositorio {
     } satisfies Partial<Factura>);
   }
 
+  async detenerEnvioFe(facturaId: string) {
+    this.exigirContabilidad();
+    const s = estado();
+    if (s.trabajosFe.some((j) => j.facturaId === facturaId && j.estado === "corriendo")) {
+      throw new ErrorNegocio("El bot ya está trabajando en esta factura: espera a que termine");
+    }
+    const cola = s.trabajosFe.filter((j) => j.facturaId === facturaId && j.estado === "en_cola");
+    if (!cola.length) throw new ErrorNegocio("No hay un envío en cola para detener");
+    for (const j of cola) Object.assign(j, { estado: "cancelado", terminadoEl: ahora(), error: `Detenido por ${this.usuario.nombre}` });
+    const f = await this.factura(facturaId);
+    if (f && (f.estado === "en_cola" || f.estado === "fallida")) Object.assign(f, { estado: "borrador", error: undefined });
+  }
+
   async guardarPresentacionFe(p: Presentacion) {
     const s = estado();
     s.cuentaFe ??= { estado: "desconectada", tieneCredenciales: false, instantanea: {} };

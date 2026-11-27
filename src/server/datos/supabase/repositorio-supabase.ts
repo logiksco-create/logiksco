@@ -1072,6 +1072,11 @@ export class SupabaseRepositorio implements Repositorio {
     falla(error);
   }
 
+  async detenerEnvioFe(facturaId: string) {
+    const { error } = await this.db.rpc("fe_detener_envio", { p_factura: facturaId });
+    falla(error);
+  }
+
   async guardarPresentacionFe(p: Presentacion) {
     const { error } = await this.db.rpc("fe_guardar_presentacion", { p_empresa: this.empresa.id, p_presentacion: p });
     falla(error);

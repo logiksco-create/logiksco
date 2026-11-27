@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
+  CircleStop,
   BadgeCheck,
   Check,
   CircleAlert,
@@ -32,6 +33,7 @@ import {
   cambiarPresentacionFactura,
   cambiarModoEmision,
   descartarPrueba,
+  detenerEnvio,
   traerProductosFinppi,
 } from "@/server/acciones/fe";
 import { AreaTexto, Boton, Campo, Entrada, Insignia, Selector } from "@/components/ui";
@@ -745,6 +747,37 @@ export function BotonDescartarPrueba({ facturaId }: { facturaId: string }) {
       >
         {pendiente ? <LoaderCircle className="animate-spin" /> : <RefreshCw />}
         {confirmar ? "¿Seguro? Vuelve a prefactura" : "Descartar prueba"}
+      </Boton>
+      <Mensaje r={r} />
+    </div>
+  );
+}
+
+/** Detiene el envío que espera en la cola (antes de que el bot lo tome). */
+export function BotonDetenerEnvio({ facturaId }: { facturaId: string }) {
+  const [r, setR] = useState<R>(null);
+  const [confirmar, setConfirmar] = useState(false);
+  const [pendiente, iniciar] = useTransition();
+  const router = useRouter();
+  return (
+    <div className="space-y-2">
+      <Boton
+        variante="secundario"
+        tamano="sm"
+        className={cn(confirmar && "border-danger/40 text-danger")}
+        disabled={pendiente}
+        onClick={() => {
+          if (!confirmar) return setConfirmar(true);
+          iniciar(async () => {
+            const x = await detenerEnvio(facturaId);
+            setR(x);
+            setConfirmar(false);
+            router.refresh();
+          });
+        }}
+      >
+        {pendiente ? <LoaderCircle className="animate-spin" /> : <CircleStop />}
+        {confirmar ? "¿Seguro? Vuelve a prefactura" : "Detener envío"}
       </Boton>
       <Mensaje r={r} />
     </div>
