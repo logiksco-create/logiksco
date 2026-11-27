@@ -91,7 +91,7 @@ const esquemaConcepto = z.object({
 });
 
 const esquemaFacturacion = z.object({
-  monedaFactura: z.enum(["COP", "USD"]),
+  monedaFactura: z.enum(["COP", "USD"]).transform(() => "USD" as const),
   tipoPago: z.enum(["Contado", "Crédito"]),
   plazoDias: z.number().int().min(0).max(365),
   metodoPago: z.string().trim().min(2).max(80),

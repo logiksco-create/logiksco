@@ -53,8 +53,9 @@ export interface PropsEditor {
   opcionesFinppi?: OpcionesClienteFinppi;
 }
 
-const facturacionPorDefecto = (c?: Tercero, moneda: Moneda = "COP"): DatosFacturacion => ({
-  monedaFactura: c?.acuerdo?.moneda ?? moneda,
+const facturacionPorDefecto = (c?: Tercero, _moneda?: Moneda): DatosFacturacion => ({
+  // Regla de la empresa: en LOGIKS se factura y se ve en USD; a la DIAN va en COP.
+  monedaFactura: "USD",
   tipoPago: c?.acuerdo?.plazoPagoDias ? "Crédito" : "Contado",
   plazoDias: c?.acuerdo?.plazoPagoDias ?? 0,
   metodoPago: "Acuerdo mutuo",
@@ -582,10 +583,7 @@ export function EditorCotizacion({
             )}
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <Campo etiqueta="Facturar en">
-                <Selector value={fac.monedaFactura} onChange={(e) => setFac({ monedaFactura: e.target.value as Moneda })}>
-                  <option value="USD">Dólares (USD)</option>
-                  <option value="COP">Pesos (COP)</option>
-                </Selector>
+                <Entrada value="Dólares (USD)" readOnly aria-readonly className="text-muted" />
               </Campo>
               <Campo etiqueta="Tipo de pago">
                 <Selector
@@ -622,11 +620,9 @@ export function EditorCotizacion({
                 </Selector>
               </Campo>
             </div>
-            {fac.monedaFactura === "USD" && (
-              <p className="text-xs text-subtle">
-                La factura se presenta en dólares. Al emitir, Contabilidad escribe la TRM de referencia y LOGIKS envía los valores en pesos a Finppi y la DIAN.
-              </p>
-            )}
+            <p className="text-xs text-subtle">
+              En LOGIKS la factura siempre se ve en dólares (prefactura, borrador y emitida). Al emitir, Contabilidad escribe la TRM de referencia y LOGIKS envía los valores en pesos a Finppi y la DIAN.
+            </p>
           </div>
         </Tarjeta>
       </div>

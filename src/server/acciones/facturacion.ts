@@ -49,7 +49,8 @@ export async function generarPrefactura(clienteId: string, operacionIds: string[
     // Las condiciones de facturación vienen de la cotización del primer DO.
     const q = await repo.cotizacion(elegidas[0].cotizacionId);
     const cond = q?.facturacion;
-    const moneda = cond?.monedaFactura ?? cliente.acuerdo?.moneda ?? "COP";
+    // Regla de la empresa: la factura en LOGIKS siempre en USD (a la DIAN va en COP con la TRM de referencia).
+    const moneda = "USD" as const;
     const f = await repo.crearPrefactura({
       clienteId,
       moneda,
