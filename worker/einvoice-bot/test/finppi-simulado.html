@@ -103,7 +103,17 @@ function listado() {
     document.getElementById('res').textContent = `${filas.length} resultados encontrados`;
     for (const f of filas) {
       const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${f.n}</td><td>${f.prefijo}</td><td></td><td>${f.cliente}</td><td>${f.fecha}</td><td>${f.estado || 'Aceptada'}</td><td>${fmt(f.total)}</td>
+      // Como Finppi: el cliente se ve por nombre y cortado («Luis Miguel Ortiz R...»).
+      const nom = S.clientes.find((c) => c.doc === f.cliente)?.nombre ?? f.cliente;
+      const cli = nom.length > 19 ? nom.slice(0, 19) + '...' : nom;
+      if (f.estado === 'Borrador') {
+        // Como Finppi (captura 27-nov): BORR + número; opciones: papelera, documento, lápiz.
+        tr.innerHTML = `<td>${f.n}</td><td>BORR${f.borr}</td><td>x</td><td>${cli}</td><td>${f.fecha}</td><td><span class="badge">Borrador</span></td><td>${fmt(f.total)}</td>
+          <td><button title="Eliminar">t</button><button title="Ver">v</button><button title="Editar">e</button></td>`;
+        tr.querySelector('button').onclick = () => { S.prohibido = true; guardar(); };
+        tb.append(tr); continue;
+      }
+      tr.innerHTML = `<td>${f.n}</td><td>${f.prefijo}</td><td></td><td>${cli}</td><td>${f.fecha}</td><td>${f.estado || 'Aceptada'}</td><td>${fmt(f.total)}</td>
         <td><button title="Descargar XML">x</button><button title="Descargar PDF">p</button><button title="Duplicar">d</button><button title="Reenviar">r</button></td>`;
       const [bx, bp, bd, br] = tr.querySelectorAll('button');
       bx.onclick = () => { const a = document.createElement('a'); a.href = `${window.BASE_ARCHIVOS || ''}/__archivo/xml/${f.prefijo}${f.n}`; a.download = 'f.xml'; a.click(); };
@@ -180,7 +190,7 @@ function formulario() {
   const guardarB = Object.assign(document.createElement('button'), { type: 'submit', textContent: 'Guardar' });
   guardarB.addEventListener('click', (e) => {
     e.preventDefault(); e.stopPropagation();
-    S.facturas.unshift({ n: '', prefijo: 'BOR', cliente: id.value, fecha: '2026-11-27', total: form.total, orden: form.querySelector('[name=orderID]').value, estado: 'Borrador' });
+    S.facturas.unshift({ n: S.facturas.length + 1, borr: 9341226 + S.facturas.length, prefijo: 'BOR', cliente: id.value, fecha: '2026-11-27', total: form.total, orden: form.querySelector('[name=orderID]').value, estado: 'Borrador' });
     guardar(); setTimeout(() => ir('/income/invoice'), 300);
   });
   form.append(enviar, guardarB);

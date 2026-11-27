@@ -661,6 +661,16 @@ export async function guardarBorrador(page: Page) {
   return { url: new URL(page.url()).pathname, mensajes };
 }
 
+/** ¿La celda es este cliente? Acepta el nombre cortado: «Luis Miguel Ortiz R...». */
+export function mismoCliente(celda: string, nombre: string): boolean {
+  const c = normalizar(celda);
+  const n = normalizar(nombre);
+  if (!c || !n) return false;
+  if (c.includes(n)) return true;
+  const corto = c.replace(/(\.{2,}|…)$/, "").trim();
+  return corto !== c && corto.length >= 6 && n.startsWith(corto);
+}
+
 /** Texto de las primeras filas del listado (para explicar si no se encontró algo). */
 async function resumenListado(page: Page): Promise<string> {
   const filas = page.locator(LIST.rows);
@@ -679,9 +689,10 @@ export async function esperarBorrador(
   page: Page,
   candidatos: string[],
   cliente?: { nombre: string; documento: string },
+  ms = 60_000,
 ): Promise<FilaListado & { porRecencia?: boolean }> {
   const esBorrador = (t: string) => normalizar(t) === normalizar(LIST.statusDraft);
-  const limite = Date.now() + 60_000;
+  const limite = Date.now() + ms;
   while (Date.now() < limite) {
     for (const c of candidatos.filter(Boolean)) {
       const f = await buscarEnListado(page, c).catch(() => null);
@@ -695,8 +706,8 @@ export async function esperarBorrador(
       const celdas = (await filas.nth(i).locator("td").allInnerTexts()).map((x) => x.trim());
       const estado = celdas.find(esBorrador);
       if (!estado) continue;
-      // Debe ser de este cliente (la columna puede mostrar el nombre o el documento).
-      if (cliente && !celdas.some((x) => normalizar(x).includes(normalizar(cliente.nombre)) || soloDigitos(x).includes(cliente.documento))) continue;
+      // Debe ser de este cliente (la columna muestra el nombre, a veces cortado con «...»).
+      if (cliente && !celdas.some((x) => mismoCliente(x, cliente.nombre) || soloDigitos(x).includes(cliente.documento))) continue;
       return { fila: filas.nth(i), numero: numeroDeFila(celdas[1] ?? "", celdas[0] ?? ""), estado, porRecencia: true };
     }
     await new Promise((r) => setTimeout(r, 4000));

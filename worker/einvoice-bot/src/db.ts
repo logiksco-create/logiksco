@@ -79,6 +79,20 @@ export async function factura(id: string) {
   return data as { id: string; empresa_id: string; estado: string; referencia: string | null; numero_esperado: string | null; enviar_al_emitir: boolean };
 }
 
+/** Valores de la última emisión (no prueba en seco) de la factura: modo y cliente. */
+export async function ultimaEmision(facturaId: string): Promise<{ modo?: string; cliente?: { numeroDocumento: string; nombres: string; apellidos: string; tipoPersona: string } } | null> {
+  const { data, error } = await db
+    .from("fe_jobs")
+    .select("payload")
+    .eq("factura_id", facturaId)
+    .eq("tipo", "emitir")
+    .eq("dry_run", false)
+    .order("creado_el", { ascending: false })
+    .limit(1);
+  revisar(error, "última emisión");
+  return (data?.[0]?.payload as never) ?? null;
+}
+
 /** Último consecutivo emitido conocido de la serie (libro, §5A.1). */
 export async function ultimoConsecutivo(empresaId: string, prefijo: string): Promise<string | null> {
   const { data, error } = await db

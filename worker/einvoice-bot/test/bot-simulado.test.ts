@@ -44,6 +44,7 @@ vi.mock("../src/db.ts", () => ({
   },
   subirArchivo: async (ruta: string, bytes: Uint8Array) => void (h.archivos[ruta] = bytes),
   factura: async (id: string) => ({ id, ...h.facturas[id] }),
+  ultimaEmision: async (id: string) => (h.facturas[id]?.emision as never) ?? null,
   db: { from: () => ({ insert: async (f: Record<string, unknown>) => void h.nuevosJobs.push(f) }) },
   marcarProductoEnFinppi: async (_e: string, codigo: string) => void h.marcados.push(codigo),
   cargarProductosFinppi: async (_e: string, p: { codigo: string; nombre: string }[]) => {

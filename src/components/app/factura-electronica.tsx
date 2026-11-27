@@ -4,6 +4,7 @@ import { useActionState, useEffect, useRef, useState, useTransition } from "reac
 import { useRouter } from "next/navigation";
 import {
   CircleStop,
+  Search,
   BadgeCheck,
   Check,
   CircleAlert,
@@ -37,6 +38,7 @@ import {
   descartarPrueba,
   detenerEnvio,
   reabrirPrueba,
+  verificarPrueba,
   traerProductosFinppi,
 } from "@/server/acciones/fe";
 import { AreaTexto, Boton, Campo, Entrada, Insignia, Selector } from "@/components/ui";
@@ -793,6 +795,30 @@ export function BotonDescartarPrueba({ facturaId }: { facturaId: string }) {
       >
         {pendiente ? <LoaderCircle className="animate-spin" /> : <RefreshCw />}
         {confirmar ? "¿Seguro? Vuelve a prefactura" : "Descartar prueba"}
+      </Boton>
+      <Mensaje r={r} />
+    </div>
+  );
+}
+
+/** Modo prueba: el bot verifica en Finppi el borrador sin confirmar (sin guardar otra vez). */
+export function BotonVerificarPrueba({ facturaId }: { facturaId: string }) {
+  const [r, setR] = useState<R>(null);
+  const [pendiente, iniciar] = useTransition();
+  const router = useRouter();
+  return (
+    <div className="space-y-2">
+      <Boton
+        tamano="sm"
+        disabled={pendiente}
+        onClick={() =>
+          iniciar(async () => {
+            setR(await verificarPrueba(facturaId));
+            router.refresh();
+          })
+        }
+      >
+        {pendiente ? <LoaderCircle className="animate-spin" /> : <Search />} Verificar en Finppi
       </Boton>
       <Mensaje r={r} />
     </div>

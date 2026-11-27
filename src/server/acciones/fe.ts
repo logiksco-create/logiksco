@@ -347,3 +347,13 @@ export async function reabrirPrueba(facturaId: string): Promise<R> {
     return "La factura volvió a prefactura. Revisa en Finppi si quedó un borrador y bórralo allá antes de reintentar.";
   });
 }
+
+/** Modo prueba: el bot busca en Finppi (solo lectura) el borrador sin confirmar. */
+export async function verificarPrueba(facturaId: string): Promise<R> {
+  return intentar(async () => {
+    const repo = await repoContable();
+    await repo.verificarPruebaFe(z.string().min(1).parse(facturaId));
+    if (!modoDemo) await despertarBot("verificar");
+    return "El bot buscará el borrador en Finppi sin guardar nada. Sigue el avance en «Seguimiento del bot».";
+  });
+}

@@ -38,6 +38,7 @@ import {
   BotonDescartarPrueba,
   BotonDetenerEnvio,
   BotonReabrirPrueba,
+  BotonVerificarPrueba,
 } from "@/components/app/factura-electronica";
 import { EstadoFacturaBadge } from "@/components/estado-factura";
 import { Insignia, Tarjeta, TarjetaEncabezado, clasesBoton } from "@/components/ui";
@@ -200,12 +201,17 @@ export default async function DetalleFactura({ params }: PageProps<"/app/factura
           <div className="min-w-0 space-y-3">
             <p>
               {pruebaSinConfirmar
-                ? "Modo prueba: el bot pulsó «Guardar» en Finppi pero no alcanzó a confirmar el borrador. Revisa en Finppi → Facturas de venta si quedó un borrador de este cliente (bórralo allá si sobra) y luego vuelve a prefactura para reintentar."
+                ? "Modo prueba: el bot pulsó «Guardar» en Finppi pero no alcanzó a confirmar el borrador. «Verificar en Finppi» lo busca sin guardar nada; si no quedó, vuelve a prefactura para reintentar."
                 : f.estado === "estado_desconocido"
                   ? "El bot pulsó «Enviar» pero no alcanzó a confirmar el resultado. Está buscando la factura en Finppi por su referencia; nunca la vuelve a emitir."
                   : "No se pudo confirmar la emisión. Revísala en Finppi antes de cualquier acción: no se reintentará automáticamente."}
             </p>
-            {pruebaSinConfirmar && contable && <BotonReabrirPrueba facturaId={f.id} />}
+            {pruebaSinConfirmar && contable && (
+              <div className="flex flex-wrap items-start gap-2">
+                <BotonVerificarPrueba facturaId={f.id} />
+                <BotonReabrirPrueba facturaId={f.id} />
+              </div>
+            )}
           </div>
         </div>
       )}

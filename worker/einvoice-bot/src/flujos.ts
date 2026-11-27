@@ -348,17 +348,10 @@ async function guardarComoBorrador(
   const fila = await finppi.esperarBorrador(page, [ofrecido, p.referencia], nombreCliente);
   await db.log(job, "resultado", `Guardada en Finppi como borrador ${fila.numero || ""}${fila.porRecencia ? " (identificado como el borrador más reciente)" : ""}`, fila.porRecencia ? "aviso" : "info");
 
-  let pdfRuta: string | null = null;
-  let sha: string | null = null;
-  try {
-    const pdf = await finppi.descargar(page, fila.fila, "pdf");
-    pdfRuta = `${job.empresa_id}/fe/${job.factura_id}/borrador.pdf`;
-    await db.subirArchivo(pdfRuta, pdf, "application/pdf");
-    sha = createHash("sha256").update(pdf).digest("hex");
-    await db.log(job, "archivos", "PDF del borrador guardado");
-  } catch {
-    await db.log(job, "archivos", "Finppi no ofrece PDF para el borrador", "aviso");
-  }
+  // En la fila de un borrador el primer ícono es la PAPELERA: no se toca ningún
+  // ícono (un borrador no tiene PDF válido ante la DIAN).
+  const pdfRuta: string | null = null;
+  const sha: string | null = null;
 
   // ¿Guardar consumió el consecutivo? (pregunta abierta de la Fase 0)
   let despues: string | null = null;
@@ -430,6 +423,11 @@ async function completarDescarga(job: Job, page: Page, fila: finppi.FilaListado,
 /** Busca por número esperado o referencia. Nunca emite (§5.3). */
 export async function reconciliar(job: Job) {
   const f = await db.factura(job.factura_id!);
+  const em = await db.ultimaEmision(f.id).catch(() => null);
+  if (em?.modo === "borrador" && em.cliente) {
+    await verificarBorrador(job, f, em.cliente as PayloadEmision["cliente"]);
+    return;
+  }
   const buscar = f.numero_esperado ?? f.referencia;
   if (!buscar) {
     await db.actualizarFactura(f.id, { estado: "revision", error: "Sin número ni referencia para buscar en Finppi" });
@@ -460,6 +458,39 @@ export async function reconciliar(job: Job) {
     }
     await db.actualizarFactura(f.id, { estado: "revision", error: "No se pudo verificar la factura en Finppi" });
   }
+}
+
+/**
+ * MODO PRUEBA: busca (solo lectura) el borrador que dejó un «Guardar» sin
+ * confirmar. Si está, la factura queda como prueba guardada; nunca guarda otra vez.
+ */
+async function verificarBorrador(job: Job, f: Awaited<ReturnType<typeof db.factura>>, cliente: PayloadEmision["cliente"]) {
+  try {
+    await conSesion(job, async (page) => {
+      await db.log(job, "verificar", "Modo prueba: buscando en Finppi el borrador guardado (no se guarda nada)…");
+      const fila = await finppi.esperarBorrador(
+        page,
+        [f.numero_esperado ?? "", f.referencia ?? ""],
+        { nombre: finppi.nombreEnFinppi(cliente), documento: cliente.numeroDocumento },
+        25_000,
+      );
+      await db.log(job, "resultado", `Borrador encontrado en Finppi ${fila.numero || ""}${fila.porRecencia ? " (el más reciente de este cliente)" : ""}`);
+      await db.actualizarFactura(f.id, {
+        estado: "emitida",
+        simulada: true,
+        numero_esperado: fila.numero || f.numero_esperado,
+        fecha_validacion: new Date().toISOString(),
+        error: null,
+        error_codigo: null,
+      });
+      await db.actualizarJob(job.id, { resultado: { borrador: true, numero: fila.numero || f.numero_esperado } });
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "No se pudo verificar";
+    await db.log(job, "verificar", msg, "aviso");
+    await db.actualizarFactura(f.id, { estado: "revision", error: msg });
+  }
+  await avisarLogiks(f.id).catch(() => undefined);
 }
 
 export class ReintentoProgramado extends Error {}

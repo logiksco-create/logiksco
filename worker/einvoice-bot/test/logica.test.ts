@@ -62,3 +62,13 @@ describe("normalizar textos de Finppi", () => {
     expect(normalizar("Regimen*")).toBe("regimen");
   });
 });
+
+describe("cliente en el listado de Finppi", () => {
+  it("reconoce el nombre cortado con «...»", async () => {
+    const { mismoCliente } = await import("../src/adapters/finppi/finppi.ts");
+    expect(mismoCliente("Luis Miguel Ortiz R...", "Luis Miguel Ortiz Restrepo")).toBe(true);
+    expect(mismoCliente("Luis Miguel Ortiz Restrepo", "Luis Miguel Ortiz Restrepo")).toBe(true);
+    expect(mismoCliente("Luis Fernando Gó...", "Luis Miguel Ortiz Restrepo")).toBe(false);
+    expect(mismoCliente("Lu...", "Luis Miguel Ortiz Restrepo")).toBe(false);
+  });
+});
