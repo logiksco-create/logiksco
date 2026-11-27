@@ -146,6 +146,9 @@ describe.skipIf(!hayNavegador)("bot contra Finppi simulado", () => {
     await expect(flujos.emitir(job({ payload: malo }))).rejects.toMatchObject({ codigo: "VALUES_MISMATCH" });
     expect(h.facturas["fac-1"].estado).toBe("fallida");
     expect(h.libro).toHaveLength(0);
+    // Deja la estructura de la página para corregir selectores, sin la contraseña.
+    expect(h.jobs[Object.keys(h.jobs).pop()!].resultado).toBeTruthy();
+    expect(JSON.stringify(h.jobs)).not.toContain(h.clave);
   }, 90_000);
 
   it("emisión: punto de no retorno, aceptada, CUFE del PDF y archivos guardados", async () => {
@@ -157,7 +160,7 @@ describe.skipIf(!hayNavegador)("bot contra Finppi simulado", () => {
     expect(f.numero).toBe("SETT1");
     expect(f.cufe).toBe(CUFE);
     expect(String(f.pdf_finppi_path)).toBe("emp/fe/fac-1/original.pdf");
-    expect(Object.keys(h.archivos)).toEqual(["emp/fe/fac-1/original.pdf", "emp/fe/fac-1/original.xml"]);
+    expect(Object.keys(h.archivos).filter((k) => !k.includes("/diagnostico/"))).toEqual(["emp/fe/fac-1/original.pdf", "emp/fe/fac-1/original.xml"]);
     expect(h.libro.find((x) => x.numero === "SETT1")?.estado).toBe("emitido");
     const orden = h.logs.map((l) => l.split(":")[0]);
     expect(orden.indexOf("enviar")).toBeLessThan(orden.indexOf("resultado"));

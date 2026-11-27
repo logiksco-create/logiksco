@@ -3,7 +3,7 @@ import type { Page } from "playwright";
 import { config } from "./config.ts";
 import * as db from "./db.ts";
 import type { Job } from "./db.ts";
-import { ErrorBot, desenlace, esperaReintento, mismoNit } from "./logica.ts";
+import { ErrorBot, desenlace, enmascarar, esperaReintento, mismoNit } from "./logica.ts";
 import { contextoLimpio } from "./navegador.ts";
 import { validarPdf } from "./pdf.ts";
 import * as finppi from "./adapters/finppi/finppi.ts";
@@ -29,9 +29,55 @@ async function conSesion<T>(job: Job, fn: (page: Page, secretos: string[]) => Pr
     await finppi.iniciarSesion(page, cred.usuario, cred.clave);
     await db.actualizarCuenta(job.empresa_id, { ultimo_login_ok: new Date().toISOString() });
     return await fn(page, secretos);
+  } catch (e) {
+    if (e instanceof ErrorBot && ["SELECTOR_NOT_FOUND", "PLATFORM_VALIDATION_ERROR", "VALUES_MISMATCH"].includes(e.codigo)) {
+      await guardarDiagnostico(job, page, secretos).catch((x) => console.error("[diagnóstico]", x instanceof Error ? x.message : x));
+    }
+    throw e;
   } finally {
     await ctx.close().catch(() => undefined);
   }
+}
+
+/**
+ * Cuando algo no se encuentra en Finppi, guarda la ESTRUCTURA de la página
+ * (etiquetas, desplegables, nombres de campos y botones) y una captura, para
+ * corregir selectors.ts sin adivinar. Nunca guarda valores de contraseñas.
+ */
+async function guardarDiagnostico(job: Job, page: Page, secretos: string[]) {
+  const estructura = await page.evaluate(() => {
+    const t = (el: Element | null | undefined, n = 120) => (el?.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, n);
+    const html = (el: Element | null | undefined, n = 700) =>
+      (el?.outerHTML ?? "").replace(/value="[^"]*"/g, 'value="…"').replace(/\s+/g, " ").slice(0, n);
+    return {
+      url: location.pathname,
+      titulo: t(document.querySelector("h1, h2, h3, h4")),
+      etiquetas: Array.from(document.querySelectorAll("label")).map((l) => t(l, 60)).filter(Boolean).slice(0, 80),
+      campos: Array.from(document.querySelectorAll("input, textarea, select"))
+        .map((i) => `${i.tagName.toLowerCase()}[name=${i.getAttribute("name") ?? ""}][id=${i.id}][type=${i.getAttribute("type") ?? ""}][placeholder=${i.getAttribute("placeholder") ?? ""}]`)
+        .slice(0, 120),
+      botones: Array.from(document.querySelectorAll("button")).map((b) => `${t(b, 40)} [type=${b.getAttribute("type") ?? ""}][id=${b.id}]`).slice(0, 60),
+      desplegables: Array.from(document.querySelectorAll('[class*="-control"], [class*="select__control"], [class*="Select"]'))
+        .slice(0, 25)
+        .map((c) => ({
+          clase: (c.getAttribute("class") ?? "").slice(0, 100),
+          texto: t(c, 60),
+          contexto: t(c.parentElement?.parentElement?.parentElement, 160),
+          html: html(c.parentElement?.parentElement, 700),
+        })),
+    };
+  });
+  let captura: string | null = null;
+  try {
+    const png = await page.screenshot({ fullPage: true, type: "png" });
+    captura = `${job.empresa_id}/fe/diagnostico/${job.id}.png`;
+    await db.subirArchivo(captura, new Uint8Array(png), "image/png");
+  } catch {
+    captura = null;
+  }
+  const limpio = JSON.parse(enmascarar(JSON.stringify(estructura), secretos));
+  await db.actualizarJob(job.id, { resultado: { diagnostico: limpio, captura } });
+  await db.log(job, "diagnostico", "Se guardó la estructura de la página de Finppi para corregir el selector", "aviso");
 }
 
 async function verificarEmpresa(job: Job, page: Page) {
