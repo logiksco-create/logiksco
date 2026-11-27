@@ -22,6 +22,10 @@ export const config = {
    */
   permitirEmision: process.env.FE_PERMITIR_EMISION === "si",
   headless: process.env.HEADLESS !== "no",
+  /** Bajo demanda (GitHub Actions): procesa la cola y termina. */
+  unaVez: process.env.BOT_UNA_VEZ === "si",
+  /** Tope de minutos encendido en modo bajo demanda. */
+  maxMinutos: Number(process.env.BOT_MAX_MINUTOS ?? 15),
   /** Cada cuánto se busca trabajo y se envía el latido. */
   intervaloMs: Number(process.env.INTERVALO_MS ?? 4000),
 };

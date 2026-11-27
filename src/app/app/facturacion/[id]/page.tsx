@@ -218,7 +218,7 @@ export default async function DetalleFactura({ params }: PageProps<"/app/factura
               <TarjetaEncabezado
                 titulo="Seguimiento del bot"
                 descripcion="Cada paso que hace en Finppi, en vivo"
-                accion={<EstadoBot latidoEl={bot.latidoEl} pausado={bot.pausado} demo={modoDemo} />}
+                accion={<EstadoBot latidoEl={bot.latidoEl} pausado={bot.pausado} demo={modoDemo} bajoDemanda={!!process.env.GITHUB_BOT_TOKEN} />}
               />
               <ul className="divide-y divide-border border-t border-border">
                 {trabajos.map((j) => (
@@ -300,7 +300,7 @@ export default async function DetalleFactura({ params }: PageProps<"/app/factura
                     Esta página se actualiza sola. Cuando la DIAN la acepte verás el número, el CUFE y los PDF aquí.
                   </p>
                   <div className="mt-3">
-                    <EstadoBot latidoEl={bot.latidoEl} pausado={bot.pausado} demo={modoDemo} />
+                    <EstadoBot latidoEl={bot.latidoEl} pausado={bot.pausado} demo={modoDemo} bajoDemanda={!!process.env.GITHUB_BOT_TOKEN} />
                   </div>
                 </div>
               </div>

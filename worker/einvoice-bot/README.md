@@ -37,7 +37,24 @@ LOGIKS (Vercel) ──encola──▶ fe_jobs (Supabase) ◀──reclama── 
   llave de servicio las lee. Los logs enmascaran correos y claves.
 - Todos los selectores están en `src/adapters/finppi/selectors.ts`.
 
-## Desplegar
+## Opción gratis: bajo demanda en GitHub Actions
+
+`.github/workflows/bot-finppi.yml` enciende el bot solo cuando hay trabajo:
+LOGIKS lo despierta al confirmar una factura o al probar la conexión, el bot
+vacía la cola y se apaga (máximo 15 min). Respaldo: revisión cada 2 h en
+horario laboral que termina en segundos si la cola está vacía. Usa los
+minutos gratis de GitHub (~2.000/mes en repos privados; ~2–3 min por factura).
+
+Configuración (una vez):
+1. GitHub → repositorio → Settings → Secrets and variables → Actions →
+   **New repository secret**: `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY`
+   (opcional `FE_WORKER_SECRET`).
+2. GitHub → Settings (de tu cuenta) → Developer settings → Fine-grained tokens
+   → token con acceso SOLO a este repositorio y permiso **Actions: Read and
+   write**. Pégalo en Vercel como `GITHUB_BOT_TOKEN` y vuelve a desplegar.
+3. Para probar: Actions → «Bot Finppi» → **Run workflow**.
+
+## Desplegar en un servidor propio
 
 1. Variables (ver `.env.example`): `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`,
    `LOGIKS_URL`, `FE_WORKER_SECRET` (el mismo valor en Vercel),

@@ -46,7 +46,8 @@ async function procesar(job: db.Job) {
 }
 
 async function main() {
-  console.log(`[bot] ${config.workerId} · adaptador ${ADAPTER_VERSION} · emisión real ${config.permitirEmision ? "HABILITADA" : "deshabilitada (solo pruebas)"}`);
+  console.log(`[bot] ${config.unaVez ? "bajo demanda · " : ""}${config.workerId} · adaptador ${ADAPTER_VERSION} · emisión real ${config.permitirEmision ? "HABILITADA" : "deshabilitada (solo pruebas)"}`);
+  const inicio = Date.now();
   while (!detener) {
     try {
       const activo = await db.latido(ADAPTER_VERSION);
@@ -55,10 +56,20 @@ async function main() {
         await procesar(job);
         continue;
       }
+      // Bajo demanda (GitHub Actions): vacía la cola y se apaga. Si hay un
+      // trabajo programado para dentro de poco (p. ej. una verificación), lo espera.
+      if (config.unaVez) {
+        const pronto = activo ? await db.trabajosProximos(3 * 60_000) : 0;
+        if (!pronto || Date.now() - inicio > config.maxMinutos * 60_000) {
+          console.log(`[bot] cola vacía${pronto ? " (tiempo máximo alcanzado)" : ""}: me apago`);
+          break;
+        }
+      }
     } catch (e) {
       console.error("[bot]", e instanceof Error ? e.message : e);
+      if (config.unaVez && Date.now() - inicio > config.maxMinutos * 60_000) break;
     }
-    await new Promise((r) => setTimeout(r, config.intervaloMs));
+    await new Promise((r) => setTimeout(r, config.unaVez ? 10_000 : config.intervaloMs));
   }
   await cerrarNavegador();
 }

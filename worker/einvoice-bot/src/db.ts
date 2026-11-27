@@ -115,3 +115,14 @@ export async function subirArchivo(ruta: string, bytes: Uint8Array, tipo: string
 export async function pausarSistema(motivo: string) {
   await db.from("fe_sistema").update({ pausado: true, motivo }).eq("id", 1);
 }
+
+/** Trabajos en cola que estarán disponibles dentro de `ms` (para no apagarse antes). */
+export async function trabajosProximos(ms: number): Promise<number> {
+  const { count, error } = await db
+    .from("fe_jobs")
+    .select("id", { count: "exact", head: true })
+    .eq("estado", "en_cola")
+    .lte("disponible_el", new Date(Date.now() + ms).toISOString());
+  revisar(error, "trabajos próximos");
+  return count ?? 0;
+}

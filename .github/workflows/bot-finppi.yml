@@ -1,0 +1,91 @@
+# Bot de facturación electrónica (Finppi) BAJO DEMANDA.
+#
+# LOGIKS lo despierta al encolar una emisión o una prueba de conexión
+# (workflow_dispatch vía la API de GitHub). Procesa la cola y se apaga.
+# Respaldo: una revisión cada 2 horas en horario laboral (Colombia) que sale
+# en segundos si no hay nada en cola.
+#
+# Secretos del repositorio (Settings → Secrets and variables → Actions):
+#   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY   (obligatorios)
+#   FE_WORKER_SECRET                          (opcional: avisos a LOGIKS)
+# Variables del repositorio (opcionales):
+#   FE_PERMITIR_EMISION = si                  (solo cuando pasen a modo real)
+#   LOGIKS_URL                                (por defecto logiksco.vercel.app)
+name: Bot Finppi
+
+on:
+  workflow_dispatch:
+    inputs:
+      motivo:
+        description: "Por qué se despierta (lo pone LOGIKS)"
+        required: false
+        default: manual
+  schedule:
+    # 7:15 a 19:15 hora Colombia (UTC-5), lunes a viernes, cada 2 horas.
+    - cron: "15 12-23/2 * * 1-5"
+
+# Nunca dos bots a la vez: uno corre y, como mucho, otro espera.
+concurrency:
+  group: bot-finppi
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  bot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: worker/einvoice-bot
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      FE_WORKER_SECRET: ${{ secrets.FE_WORKER_SECRET }}
+      FE_PERMITIR_EMISION: ${{ vars.FE_PERMITIR_EMISION || 'no' }}
+      LOGIKS_URL: ${{ vars.LOGIKS_URL || 'https://logiksco.vercel.app' }}
+      WORKER_ID: github-${{ github.run_id }}
+      BOT_UNA_VEZ: si
+      BOT_MAX_MINUTOS: "15"
+    steps:
+      - name: ¿Hay trabajo en cola? (solo en la revisión programada)
+        id: cola
+        if: github.event_name == 'schedule'
+        working-directory: .
+        run: |
+          n=$(curl -sf "$SUPABASE_URL/rest/v1/fe_jobs?select=id&estado=eq.en_cola&limit=1" -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" | tr -d '[:space:]')
+          if [ "$n" = "[]" ]; then echo "vacia=si" >> "$GITHUB_OUTPUT"; echo "Cola vacía"; fi
+
+      - uses: actions/checkout@v4
+        if: steps.cola.outputs.vacia != 'si'
+        with:
+          sparse-checkout: |
+            worker/einvoice-bot
+            src/domain
+
+      - uses: actions/setup-node@v4
+        if: steps.cola.outputs.vacia != 'si'
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: worker/einvoice-bot/package-lock.json
+
+      - name: Dependencias
+        if: steps.cola.outputs.vacia != 'si'
+        run: npm ci --no-audit --no-fund
+
+      - name: Caché del navegador
+        if: steps.cola.outputs.vacia != 'si'
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: chromium-${{ runner.os }}-${{ hashFiles('worker/einvoice-bot/package-lock.json') }}
+
+      - name: Chromium
+        if: steps.cola.outputs.vacia != 'si'
+        run: npx playwright install --with-deps chromium
+
+      - name: Procesar la cola
+        if: steps.cola.outputs.vacia != 'si'
+        run: npm start

@@ -603,7 +603,7 @@ export function FormResolucion({ texto, condiciones, editable }: { texto: string
   );
 }
 
-export function EstadoBot({ latidoEl, pausado, demo }: { latidoEl?: string; pausado: boolean; demo: boolean }) {
+export function EstadoBot({ latidoEl, pausado, demo, bajoDemanda }: { latidoEl?: string; pausado: boolean; demo: boolean; bajoDemanda?: boolean }) {
   const [ahora, setAhora] = useState<number | null>(null);
   useEffect(() => {
     const tick = () => setAhora(Date.now());
@@ -614,6 +614,13 @@ export function EstadoBot({ latidoEl, pausado, demo }: { latidoEl?: string; paus
   if (demo) return <Insignia tono="alerta" punto>Bot simulado (demo)</Insignia>;
   if (pausado) return <Insignia tono="peligro" punto>Bot en pausa de seguridad</Insignia>;
   const vivo = !!latidoEl && ahora !== null && ahora - new Date(latidoEl).getTime() < 3 * 60_000;
+  if (bajoDemanda) {
+    return vivo ? (
+      <Insignia tono="exito" punto>Bot trabajando</Insignia>
+    ) : (
+      <Insignia tono="info" punto>Bot bajo demanda · se enciende al confirmar</Insignia>
+    );
+  }
   return vivo ? (
     <Insignia tono="exito" punto>Bot en línea</Insignia>
   ) : (

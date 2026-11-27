@@ -17,6 +17,8 @@ import {
 import { hoyISO } from "@/domain/fechas";
 import type { DatosFiscales } from "@/domain/types";
 import { enviarFacturaAlCliente } from "../fe-envio";
+import { despertarBot } from "../bot-github";
+import { modoDemo } from "@/lib/env";
 
 /**
  * Facturación electrónica con Finppi: datos fiscales, conexión de la cuenta
@@ -92,6 +94,7 @@ export async function conectarFinppi(_: unknown, formData: FormData): Promise<R>
       })
       .parse(Object.fromEntries(formData));
     await repo.guardarCredencialesFe(d.usuario, d.clave, VERSION_CONSENTIMIENTO);
+    if (!modoDemo) await despertarBot("conexion");
     return "Credenciales guardadas y cifradas. El bot está probando la conexión…";
   });
 }
@@ -100,6 +103,7 @@ export async function probarConexionFinppi(): Promise<R> {
   return intentar(async () => {
     const repo = await contexto();
     await repo.probarConexionFe();
+    if (!modoDemo) await despertarBot("conexion");
     return "Probando la conexión con Finppi…";
   });
 }
@@ -228,6 +232,7 @@ export async function emitirFacturaElectronica(
     });
     payload.modo = modo;
     await repo.encolarEmision(facturaId, { payload, dryRun: o.dryRun, enviarAlEmitir: o.enviarAlEmitir });
+    if (!modoDemo) await despertarBot(o.dryRun ? "prueba" : modo === "borrador" ? "guardar" : "emitir");
 
     // En el demo la emisión simulada termina al instante.
     const despues = await repo.factura(facturaId);

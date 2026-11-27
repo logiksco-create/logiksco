@@ -44,7 +44,7 @@ export default async function ConfiguracionFe() {
         }
         titulo="Facturación electrónica"
         descripcion="LOGIKS arma la factura (en USD o COP), el bot la transcribe en Finppi en pesos y la DIAN la valida."
-        acciones={<EstadoBot latidoEl={bot.latidoEl} pausado={bot.pausado} demo={modoDemo} />}
+        acciones={<EstadoBot latidoEl={bot.latidoEl} pausado={bot.pausado} demo={modoDemo} bajoDemanda={!!process.env.GITHUB_BOT_TOKEN} />}
       />
 
       <div className="grid gap-6 xl:grid-cols-[1fr_380px]">
