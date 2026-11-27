@@ -194,3 +194,19 @@ describe("persona natural: nombres y apellidos", () => {
     expect(faltantesFiscales({ ...f, nombres: "Luis Miguel", apellidos: "Ortiz Restrepo" })).not.toContain("Nombres y apellidos por separado (persona natural)");
   });
 });
+
+describe("valores exactos de las listas de Finppi", () => {
+  const op = { ciudades: ["MEDELLÍN / Antioquia", "LA CEJA / Antioquia"], regimen: ["Responsable de iva", "No responsable de iva"] };
+  it("ajusta tildes y mayúsculas al texto de Finppi", async () => {
+    const { ajustarAFinppi } = await import("./einvoice");
+    expect(ajustarAFinppi({ ciudad: "Medellin / Antioquia", regimen: "no responsable de IVA" }, op)).toEqual({
+      ciudad: "MEDELLÍN / Antioquia",
+      regimen: "No responsable de iva",
+    });
+  });
+  it("marca la ciudad que no existe en Finppi", async () => {
+    const { faltantesFiscales } = await import("./einvoice");
+    expect(faltantesFiscales({ ciudad: "Medellin / Antioquia" }, op)).not.toContain("Ciudad tal como está en Finppi");
+    expect(faltantesFiscales({ ciudad: "Medallo / Antioquia" }, op)).toContain("Ciudad tal como está en Finppi");
+  });
+});

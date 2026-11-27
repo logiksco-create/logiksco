@@ -134,6 +134,10 @@ describe.skipIf(!hayNavegador)("bot contra Finppi simulado", () => {
     await flujos.healthcheck(job({ tipo: "healthcheck", factura_id: null }));
     expect(h.cuenta.estado).toBe("activa");
     expect((h.cuenta.instantanea as { proximaFactura: string }).proximaFactura).toBe("SETT1");
+    // Lee las listas reales del panel de cliente sin crear a nadie.
+    const op = (h.cuenta.instantanea as { opcionesCliente: Record<string, string[]> }).opcionesCliente;
+    expect(op.regimen).toContain("No responsable de iva");
+    expect(op.ciudades).toContain("MEDELLÍN / Antioquia");
     expect(h.logs.join("\n")).not.toContain(h.clave);
   }, 60_000);
 
@@ -186,7 +190,7 @@ describe.skipIf(!hayNavegador)("bot contra Finppi simulado", () => {
     h.libro = [];
     const nuevo = {
       ...payload,
-      cliente: { ...payload.cliente, tipoPersona: "Natural", tipoDocumento: "Cédula de ciudadanía", numeroDocumento: "1017000111", nombres: "Ana María", apellidos: "Gómez Ruiz", ciudad: "MEDELLÍN / Antioquia" },
+      cliente: { ...payload.cliente, tipoPersona: "Natural", tipoDocumento: "Cédula de ciudadanía", numeroDocumento: "1017000111", nombres: "Ana María", apellidos: "Gómez Ruiz", ciudad: "Medellin / Antioquia" },
     };
     await flujos.emitir(job({ dry_run: true, payload: nuevo }));
     expect(h.logs.join("\n")).toContain("Cliente creado en Finppi: Ana María");

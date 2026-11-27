@@ -129,6 +129,18 @@ async function healthcheckInterno(job: Job) {
     const emp = await verificarEmpresa(job, page);
     const proxima = await finppi.leerNumeroOfrecido(page);
     await db.log(job, "consecutivo", `Tu próxima factura será la ${proxima}`);
+    // Listas reales del panel de cliente (para que LOGIKS solo ofrezca valores válidos).
+    const opcionesCliente = await finppi.leerOpcionesCliente(page).catch(async (e: Error) => {
+      await db.log(job, "cliente", `No se pudieron leer las opciones del panel de cliente: ${e.message}`, "aviso");
+      return undefined;
+    });
+    if (opcionesCliente) {
+      await db.log(
+        job,
+        "cliente",
+        `Opciones de cliente leídas: ${opcionesCliente.tipoDocumento.length} tipos de documento, ${opcionesCliente.regimen.length} regímenes, ${opcionesCliente.responsabilidadFiscal.length} responsabilidades, ${opcionesCliente.ciudades.length} ciudades`,
+      );
+    }
     // Se sale SIN guardar y se vuelve a modo factura por el menú.
     await finppi.irAFacturas(page);
     const conteos = await finppi.contarClientesYProductos(page).catch(() => ({ clientes: undefined, productos: undefined }));
@@ -140,6 +152,7 @@ async function healthcheckInterno(job: Job) {
         proximaFactura: proxima,
         leidoEl: new Date().toISOString(),
         ...conteos,
+        ...(opcionesCliente ? { opcionesCliente } : {}),
       },
     });
     // Vigilancia (§5A.4): ¿se emitió algo fuera de LOGIKS?

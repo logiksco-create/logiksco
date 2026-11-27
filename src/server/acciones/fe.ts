@@ -9,6 +9,7 @@ import {
   FINPPI,
   VERSION_CONSENTIMIENTO,
   bloqueosEmision,
+  ajustarAFinppi,
   fiscalSugerido,
   payloadEmision,
   referenciaFactura,
@@ -213,8 +214,12 @@ export async function emitirFacturaElectronica(
     const cliente = await repo.tercero(f.clienteId);
     if (!cliente) throw new ErrorNegocio("El cliente no existe");
     const hoy = hoyISO();
-    const fiscal = cliente.fiscal;
+    const cuenta = await repo.cuentaFe();
+    const opcionesFinppi = cuenta?.instantanea.opcionesCliente;
+    // Valores al texto exacto de Finppi (tildes y mayúsculas de su lista).
+    const fiscal = cliente.fiscal ? ajustarAFinppi(cliente.fiscal, opcionesFinppi) : undefined;
     const bloqueos = bloqueosEmision({
+      opcionesFinppi,
       moneda: f.moneda,
       trmReferencia: f.trmReferencia,
       lineas: f.lineas,
@@ -228,7 +233,6 @@ export async function emitirFacturaElectronica(
     });
     if (bloqueos.length) throw new ErrorNegocio(bloqueos[0]);
     const venc = f.vencimiento && f.vencimiento >= hoy ? f.vencimiento : hoy;
-    const cuenta = await repo.cuentaFe();
     const modo = cuenta?.modoEmision === "real" ? "real" : "borrador";
     const payload = payloadEmision({
       referencia: f.referencia ?? referenciaFactura((n) => randomInt(n)),

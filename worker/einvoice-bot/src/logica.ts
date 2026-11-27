@@ -93,3 +93,14 @@ export function numeroDeFila(prefijo: string, numero: string): string {
 export function esOpcionDeProducto(textoOpcion: string, codigo: string): boolean {
   return textoOpcion.trim().startsWith(`${codigo} - `) || textoOpcion.trim() === codigo;
 }
+
+/** Para comparar textos de Finppi: sin tildes, sin mayúsculas, espacios simples, sin «*» final. */
+export function normalizar(t: string): string {
+  return t
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\*+\s*$/, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}

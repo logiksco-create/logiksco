@@ -41,6 +41,7 @@ export default async function EditarCotizacion({ params, searchParams }: PagePro
         lugares={d.lugares}
         conceptosCatalogo={d.conceptos}
         productosFinppi={d.productosFinppi}
+        opcionesFinppi={d.opcionesFinppi}
         servicios={d.servicios}
         clientes={d.clientes}
         proveedores={d.proveedores}

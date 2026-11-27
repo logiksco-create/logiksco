@@ -18,8 +18,9 @@ import {
   Unplug,
   X,
 } from "lucide-react";
-import { FINPPI, TEXTO_CONSENTIMIENTO, separarNombre } from "@/domain/einvoice";
-import type { DatosFiscales, Presentacion } from "@/domain/types";
+import { FINPPI, TEXTO_CONSENTIMIENTO, separarNombre, valorEnLista } from "@/domain/einvoice";
+import type { DatosFiscales, OpcionesClienteFinppi, Presentacion } from "@/domain/types";
+import { Combo } from "@/components/ui/combo";
 import {
   conectarFinppi,
   desconectarFinppi,
@@ -72,7 +73,25 @@ function useEnvio(accion: (d: FormData) => void) {
 /* Datos fiscales del cliente                                          */
 /* ------------------------------------------------------------------ */
 
-export function FormDatosFiscales({ terceroId, inicial, alGuardar }: { terceroId: string; inicial: DatosFiscales; alGuardar?: () => void }) {
+export function FormDatosFiscales({
+  terceroId,
+  inicial,
+  alGuardar,
+  opciones,
+}: {
+  terceroId: string;
+  inicial: DatosFiscales;
+  alGuardar?: () => void;
+  /** Listas reales de Finppi (si el healthcheck ya las leyó). */
+  opciones?: OpcionesClienteFinppi;
+}) {
+  const lista = (real: string[] | undefined, respaldo: readonly string[]) => (real?.length ? real : [...respaldo]);
+  const tiposDoc = lista(opciones?.tipoDocumento, FINPPI.tipoDocumento);
+  const regimenes = lista(opciones?.regimen, FINPPI.regimen);
+  const responsabilidades = lista(opciones?.responsabilidadFiscal, FINPPI.responsabilidadFiscal);
+  const ciudades = opciones?.ciudades ?? [];
+  const inicialEn = (v: string, l: string[]) => valorEnLista(v, l) ?? v;
+  const [ciudad, setCiudad] = useState(ciudades.length ? inicialEn(inicial.ciudad, ciudades) : inicial.ciudad);
   const [estado, accion, pendiente] = useActionState(guardarDatosFiscales.bind(null, terceroId), null);
   const enviar = useEnvio(accion);
   const [persona, setPersona] = useState(inicial.tipoPersona);
@@ -100,8 +119,8 @@ export function FormDatosFiscales({ terceroId, inicial, alGuardar }: { terceroId
           </Selector>
         </Campo>
         <Campo etiqueta="Tipo de documento">
-          <Selector name="tipoDocumento" defaultValue={inicial.tipoDocumento}>
-            {FINPPI.tipoDocumento.map((t) => (
+          <Selector name="tipoDocumento" defaultValue={inicialEn(inicial.tipoDocumento, tiposDoc)}>
+            {tiposDoc.map((t) => (
               <option key={t}>{t}</option>
             ))}
           </Selector>
@@ -128,15 +147,15 @@ export function FormDatosFiscales({ terceroId, inicial, alGuardar }: { terceroId
           <Entrada name="telefono" defaultValue={inicial.telefono} required inputMode="tel" />
         </Campo>
         <Campo etiqueta="Régimen">
-          <Selector name="regimen" defaultValue={inicial.regimen}>
-            {FINPPI.regimen.map((t) => (
+          <Selector name="regimen" defaultValue={inicialEn(inicial.regimen, regimenes)}>
+            {regimenes.map((t) => (
               <option key={t}>{t}</option>
             ))}
           </Selector>
         </Campo>
         <Campo etiqueta="Responsabilidad fiscal">
-          <Selector name="responsabilidadFiscal" defaultValue={inicial.responsabilidadFiscal}>
-            {FINPPI.responsabilidadFiscal.map((t) => (
+          <Selector name="responsabilidadFiscal" defaultValue={inicialEn(inicial.responsabilidadFiscal, responsabilidades)}>
+            {responsabilidades.map((t) => (
               <option key={t}>{t}</option>
             ))}
           </Selector>
@@ -144,8 +163,21 @@ export function FormDatosFiscales({ terceroId, inicial, alGuardar }: { terceroId
         <Campo etiqueta="País">
           <Entrada name="pais" defaultValue={inicial.pais} required />
         </Campo>
-        <Campo etiqueta="Ciudad" ayuda="Como en Finppi: MUNICIPIO / Departamento">
-          <Entrada name="ciudad" defaultValue={inicial.ciudad} required placeholder="LA CEJA / Antioquia" />
+        <Campo etiqueta="Ciudad" ayuda={ciudades.length ? "De la lista de Finppi: escribe para buscar" : "Como en Finppi: MUNICIPIO / Departamento"}>
+          {ciudades.length ? (
+            <>
+              <Combo
+                valor={ciudad}
+                opciones={ciudades.map((c) => ({ valor: c, etiqueta: c }))}
+                alElegir={(o) => setCiudad(o.valor)}
+                placeholder="Busca el municipio…"
+                ariaLabel="Ciudad"
+              />
+              <input type="hidden" name="ciudad" value={ciudad} />
+            </>
+          ) : (
+            <Entrada name="ciudad" value={ciudad} onChange={(e) => setCiudad(e.target.value)} required placeholder="LA CEJA / Antioquia" />
+          )}
         </Campo>
         <Campo etiqueta="Dirección principal" className="sm:col-span-2">
           <Entrada name="direccion" defaultValue={inicial.direccion} required />
@@ -167,11 +199,13 @@ export function CompletarDatosFiscales({
   inicial,
   faltantes,
   compacto,
+  opciones,
 }: {
   terceroId: string;
   inicial: DatosFiscales;
   faltantes: string[];
   compacto?: boolean;
+  opciones?: OpcionesClienteFinppi;
 }) {
   const [abierto, setAbierto] = useState(false);
   const router = useRouter();
@@ -202,6 +236,7 @@ export function CompletarDatosFiscales({
         <FormDatosFiscales
           terceroId={terceroId}
           inicial={inicial}
+          opciones={opciones}
           alGuardar={() => {
             setAbierto(false);
             router.refresh();

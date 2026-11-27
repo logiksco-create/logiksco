@@ -23,6 +23,7 @@ import {
   type Moneda,
   type Tercero,
 } from "@/domain/types";
+import type { OpcionesClienteFinppi } from "@/domain/types";
 import { FINPPI, faltantesFiscales, fiscalSugerido } from "@/domain/einvoice";
 import { CompletarDatosFiscales } from "@/components/app/factura-electronica";
 import { tarifasVencidas, totalesConcepto, totalesConceptos, totalesPorBloque } from "@/domain/cotizacion";
@@ -48,6 +49,8 @@ export interface PropsEditor {
   servicios?: string[];
   /** Productos de Finppi de la empresa (código exacto + IVA por defecto). */
   productosFinppi?: { codigo: string; nombre: string; iva?: IvaFinppi }[];
+  /** Listas reales del panel de cliente de Finppi. */
+  opcionesFinppi?: OpcionesClienteFinppi;
 }
 
 const facturacionPorDefecto = (c?: Tercero, moneda: Moneda = "COP"): DatosFacturacion => ({
@@ -89,6 +92,7 @@ export function EditorCotizacion({
   conceptosCatalogo = [],
   servicios = [],
   productosFinppi = [],
+  opcionesFinppi,
 }: PropsEditor) {
   const router = useRouter();
   const [pendiente, iniciar] = useTransition();
@@ -572,7 +576,8 @@ export function EditorCotizacion({
               <CompletarDatosFiscales
                 terceroId={cliente.id}
                 inicial={fiscalSugerido(cliente)}
-                faltantes={faltantesFiscales(cliente.fiscal)}
+                faltantes={faltantesFiscales(cliente.fiscal, opcionesFinppi)}
+                opciones={opcionesFinppi}
               />
             )}
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

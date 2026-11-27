@@ -5,8 +5,9 @@ import { etiquetaLugar } from "@/domain/catalogo";
 
 /** Datos de apoyo del editor de cotizaciones (clientes, proveedores). */
 export async function datosEditor(repo: Repositorio) {
-  const [terceros, catalogo] = await Promise.all([repo.terceros(), repo.catalogo()]);
+  const [terceros, catalogo, cuentaFe] = await Promise.all([repo.terceros(), repo.catalogo(), repo.cuentaFe().catch(() => null)]);
   return {
+    opcionesFinppi: cuentaFe?.instantanea.opcionesCliente,
     lugares: [...new Set(catalogo.filter((e) => e.tipo !== "concepto" && e.tipo !== "contenedor" && e.tipo !== "producto_finppi").map(etiquetaLugar))],
     conceptos: catalogo
       .filter((e) => e.tipo === "concepto")

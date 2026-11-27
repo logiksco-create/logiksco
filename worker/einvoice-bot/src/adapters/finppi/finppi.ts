@@ -21,7 +21,7 @@ import {
   TOTALS_LABELS,
   URLS,
 } from "./selectors.ts";
-import { ErrorBot, esOpcionDeProducto, fechaComoCampo, numeroDeFila } from "../../logica.ts";
+import { ErrorBot, esOpcionDeProducto, fechaComoCampo, normalizar, numeroDeFila } from "../../logica.ts";
 import { leerValorFinppi, type PayloadEmision } from "../../../../../src/domain/einvoice.ts";
 
 /**
@@ -164,18 +164,40 @@ async function leerOpciones(page: Page, control: Locator): Promise<string[]> {
   return textos;
 }
 
-/** Elige la opción cuyo texto es EXACTAMENTE `texto` (opcionalmente filtrando al escribir). */
+/**
+ * Elige la opción cuyo texto es `texto`: primero idéntico; si no, sin tener
+ * en cuenta tildes, mayúsculas ni espacios («Medellin» = «MEDELLÍN»). Exige
+ * UNA sola coincidencia; si no la hay, el error dice qué ofrece Finppi.
+ */
 async function elegir(page: Page, control: Locator, texto: string, opts: { escribir?: string; coincide?: (t: string) => boolean } = {}) {
+  // Si ya tiene ese valor (p. ej. País = Colombia por defecto), no se toca.
+  if (!opts.coincide && normalizar(await control.innerText().catch(() => "")) === normalizar(texto)) return;
   await control.click();
   if (opts.escribir) await page.keyboard.type(opts.escribir, { delay: 40 });
-  const ops = await opciones(page);
-  const textos = (await ops.allInnerTexts()).map((t) => t.trim());
-  const indices = textos.map((t, i) => ((opts.coincide ? opts.coincide(t) : t === texto) ? i : -1)).filter((i) => i >= 0);
+  let ops = await opciones(page);
+  let textos = (await ops.allInnerTexts()).map((t) => t.trim());
+  const buscar = (f: (t: string) => boolean) => textos.map((t, i) => (f(t) ? i : -1)).filter((i) => i >= 0);
+  const coincidencias = () => {
+    let r = opts.coincide ? buscar(opts.coincide) : buscar((t) => t === texto);
+    if (!opts.coincide && r.length === 0) r = buscar((t) => normalizar(t) === normalizar(texto));
+    return r;
+  };
+  let indices = coincidencias();
+  if (indices.length === 0 && opts.escribir) {
+    // El filtro de Finppi puede no ignorar tildes: se borra lo escrito y se busca en la lista completa.
+    for (let i = 0; i < opts.escribir.length; i++) await page.keyboard.press("Backspace");
+    ops = await opciones(page);
+    textos = (await ops.allInnerTexts()).map((t) => t.trim());
+    indices = coincidencias();
+  }
   if (indices.length !== 1) {
     await page.keyboard.press("Escape");
+    const vistas = textos.filter(Boolean).slice(0, 12).map((t) => `«${t}»`).join(", ");
     throw new ErrorBot(
       "PLATFORM_VALIDATION_ERROR",
-      indices.length ? `Hay varias opciones para «${texto}» en Finppi` : `Finppi no tiene la opción «${texto}»`,
+      indices.length
+        ? `Hay varias opciones para «${texto}» en Finppi`
+        : `Finppi no tiene la opción «${texto}»${vistas ? `. Opciones que muestra: ${vistas}` : " (no mostró opciones)"}`,
     );
   }
   await ops.nth(indices[0]).click();
@@ -280,6 +302,8 @@ async function crearClienteEnPanel(page: Page, c: PayloadEmision["cliente"]) {
   const ciudad = await control(page, N.city, L.city);
   await elegir(page, ciudad, c.ciudad, { escribir: c.ciudad.split(" / ")[0] });
   await page.locator(CLIENT_PANEL.address1).fill(c.direccion);
+  const telUbicacion = page.locator(CLIENT_PANEL.locationPhone);
+  if ((await telUbicacion.count()) && c.telefono) await telUbicacion.fill(c.telefono.replace(/[^0-9]/g, ""));
   // Lectura de vuelta antes de crear (§9C.2 paso 4).
   for (const [campo, valor] of [
     [page.locator(CLIENT_PANEL.nationalId), c.numeroDocumento],
@@ -296,7 +320,40 @@ async function crearClienteEnPanel(page: Page, c: PayloadEmision["cliente"]) {
     page.getByText(/cliente creado/i).first().waitFor({ timeout: T.medio }),
     page.locator(CLIENT_PANEL.nationalId).first().waitFor({ state: "hidden", timeout: T.medio }),
   ]).catch(() => undefined);
+  if (await page.locator(CLIENT_PANEL.nationalId).first().isVisible().catch(() => false)) {
+    // Sigue abierto: Finppi rechazó algún campo. Se reporta lo que dice.
+    const textos = (await page.locator(CLIENT_PANEL.errors).allInnerTexts().catch(() => []))
+      .map((t) => t.replace(/\s+/g, " ").trim())
+      .filter((t) => t && t.length < 160);
+    const avisos = [...new Set(textos)].slice(0, 6).join(" · ");
+    throw new ErrorBot("PLATFORM_VALIDATION_ERROR", `Finppi no creó el cliente${avisos ? `: ${avisos}` : " (el panel siguió abierto sin mensaje)"}`);
+  }
   await pausa();
+}
+
+/**
+ * Lee (sin crear nada) las opciones del panel «Crear cliente»: lo abre desde
+ * el formulario de factura, lee cada desplegable y sale sin guardar.
+ */
+export async function leerOpcionesCliente(page: Page) {
+  await (await existe(page.locator(FORM.newClientBtn), T.corto, "el botón «+» de cliente")).click();
+  await existe(page.locator(CLIENT_PANEL.nationalId).first(), T.medio, "el panel «Crear cliente»");
+  const N = CLIENT_PANEL.selectNames;
+  const L = CLIENT_PANEL.selectLabels;
+  const leer = async (name: string, etiqueta: string) => {
+    try {
+      return await leerOpciones(page, await control(page, name, etiqueta));
+    } catch {
+      return [];
+    }
+  };
+  return {
+    tipoPersona: await leer(N.personType, L.personType),
+    tipoDocumento: await leer(N.docType, L.docType),
+    regimen: await leer(N.regime, L.regime),
+    responsabilidadFiscal: await leer(N.fiscalResponsibility, L.fiscalResponsibility),
+    ciudades: await leer(N.city, L.city),
+  };
 }
 
 /* ------------------------------ Factura ------------------------------ */

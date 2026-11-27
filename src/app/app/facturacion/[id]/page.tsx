@@ -121,7 +121,8 @@ export default async function DetalleFactura({ params }: PageProps<"/app/factura
   const to = totalesOriginales(lineasCop);
   const tc = totalesCop(lineasCop);
   const fiscal = cliente ? fiscalSugerido(cliente) : undefined;
-  const faltan = faltantesFiscales(cliente?.fiscal);
+  const opcionesFinppi = cuenta?.instantanea.opcionesCliente;
+  const faltan = faltantesFiscales(cliente?.fiscal, opcionesFinppi);
   const cuentaActiva = cuenta?.estado === "activa";
   const bloqueos = [
     ...(cuentaActiva ? [] : ["Conecta y verifica la cuenta de Finppi en Configuración → Facturación electrónica."]),
@@ -130,6 +131,7 @@ export default async function DetalleFactura({ params }: PageProps<"/app/factura
       trmReferencia: f.trmReferencia,
       lineas: f.lineas,
       fiscal: cliente?.fiscal,
+      opcionesFinppi,
       metodoPago: f.metodoPago,
       tipoOperacion: f.tipoOperacion,
       tipoPago: f.tipoPago,
@@ -329,7 +331,7 @@ export default async function DetalleFactura({ params }: PageProps<"/app/factura
               <TarjetaEncabezado titulo="Factura electrónica" descripcion="Revisa, confirma y el bot la emite en Finppi" />
               <div className="space-y-5 p-5 pt-0">
                 {cliente && fiscal && (
-                  <CompletarDatosFiscales terceroId={cliente.id} inicial={fiscal} faltantes={faltan} compacto />
+                  <CompletarDatosFiscales terceroId={cliente.id} inicial={fiscal} faltantes={faltan} compacto opciones={opcionesFinppi} />
                 )}
                 <CondicionesFe
                   facturaId={f.id}

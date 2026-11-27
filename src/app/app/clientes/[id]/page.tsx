@@ -27,6 +27,7 @@ export default async function Cliente({ params }: PageProps<"/app/clientes/[id]"
     t.tipo === "proveedor" ? Promise.resolve([]) : repo.accesosPortal(t.id),
     cargarFlujo(repo),
   ]);
+  const opcionesFinppi = (await repo.cuentaFe().catch(() => null))?.instantanea.opcionesCliente;
   const negocios = flujo.filter((p) => p.clienteId === t.id);
   const qs = cotizaciones.filter((q) => q.clienteId === t.id);
   const ops = operaciones.filter((o) => o.clienteId === t.id);
@@ -139,9 +140,9 @@ export default async function Cliente({ params }: PageProps<"/app/clientes/[id]"
               <TarjetaEncabezado titulo="Facturación electrónica" descripcion="Datos que exige Finppi y la DIAN" />
               <div className="p-5 pt-0">
                 {tieneRol(repo, "comercial", "contabilidad", "cumplimiento") ? (
-                  <CompletarDatosFiscales terceroId={t.id} inicial={fiscalSugerido(t)} faltantes={faltantesFiscales(t.fiscal)} />
+                  <CompletarDatosFiscales terceroId={t.id} inicial={fiscalSugerido(t)} faltantes={faltantesFiscales(t.fiscal, opcionesFinppi)} opciones={opcionesFinppi} />
                 ) : (
-                  <p className="text-[13px] text-muted">{faltantesFiscales(t.fiscal).length ? "Datos fiscales incompletos" : "Datos fiscales completos"}</p>
+                  <p className="text-[13px] text-muted">{faltantesFiscales(t.fiscal, opcionesFinppi).length ? "Datos fiscales incompletos" : "Datos fiscales completos"}</p>
                 )}
               </div>
             </Tarjeta>

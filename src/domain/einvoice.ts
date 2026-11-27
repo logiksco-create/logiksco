@@ -9,7 +9,7 @@
  * Este módulo es puro (sin dependencias de ejecución) para que lo use tanto
  * la aplicación como el worker del bot.
  */
-import type { DatosFiscales, IvaFinppi, LineaFactura, Moneda, Presentacion } from "./types";
+import type { DatosFiscales, IvaFinppi, LineaFactura, Moneda, OpcionesClienteFinppi, Presentacion } from "./types";
 
 /* ------------------------------------------------------------------ */
 /* Catálogos exactos de Finppi (Anexo A.7 y A.8). El bot elige por texto. */
@@ -129,6 +129,35 @@ export function fiscalSugerido(c: {
   };
 }
 
+/** Texto comparable con Finppi: sin tildes, mayúsculas, espacios extra ni «*». */
+export function normalizarFinppi(t: string): string {
+  return t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\*+\s*$/, "").replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+/** El valor exacto de la lista de Finppi que corresponde a `v` (o undefined). */
+export function valorEnLista(v: string, lista: string[]): string | undefined {
+  return lista.find((x) => x === v) ?? lista.find((x) => normalizarFinppi(x) === normalizarFinppi(v));
+}
+const enLista = (v: string, lista: string[]) => valorEnLista(v, lista) !== undefined;
+
+/**
+ * Ajusta los datos fiscales al texto exacto de Finppi («Medellin / Antioquia»
+ * → «MEDELLÍN / Antioquia»). Lo que no esté en las listas queda igual.
+ */
+export function ajustarAFinppi<T extends Partial<DatosFiscales>>(f: T, op?: OpcionesClienteFinppi): T {
+  if (!op) return f;
+  const r = { ...f };
+  const a = <K extends "ciudad" | "regimen" | "responsabilidadFiscal" | "tipoDocumento">(k: K, l?: string[]) => {
+    const v = r[k];
+    if (v && l?.length) r[k] = (valorEnLista(v, l) ?? v) as T[K];
+  };
+  a("ciudad", op.ciudades);
+  a("regimen", op.regimen);
+  a("responsabilidadFiscal", op.responsabilidadFiscal);
+  a("tipoDocumento", op.tipoDocumento);
+  return r;
+}
+
 const mismoTexto = (a: string, b: string) => a.trim().replace(/\s+/g, " ").toLowerCase() === b.trim().replace(/\s+/g, " ").toLowerCase();
 
 /**
@@ -143,7 +172,7 @@ export function separarNombre(completo: string): { nombres: string; apellidos: s
 }
 
 /** Campos que faltan o están mal para crear al cliente en Finppi (§9A.2). */
-export function faltantesFiscales(f: Partial<DatosFiscales> | undefined): string[] {
+export function faltantesFiscales(f: Partial<DatosFiscales> | undefined, op?: OpcionesClienteFinppi): string[] {
   const d = f ?? {};
   const faltan: string[] = [];
   for (const [k, etiqueta] of Object.entries(CAMPOS_FISCALES) as [keyof DatosFiscales, string][]) {
@@ -159,6 +188,14 @@ export function faltantesFiscales(f: Partial<DatosFiscales> | undefined): string
     faltan.push("Nombres y apellidos por separado (persona natural)");
   }
   if (d.ciudad && !/^.+ \/ .+$/.test(d.ciudad)) faltan.push("Ciudad con formato «MUNICIPIO / Departamento»");
+  // Con las listas reales de Finppi, cada valor debe existir allá (sin importar tildes ni mayúsculas).
+  const fuera = (v: string | undefined, lista?: string[]) => !!v && !!lista?.length && !enLista(v, lista);
+  if (fuera(d.ciudad, op?.ciudades)) faltan.push("Ciudad tal como está en Finppi");
+  if (fuera(d.regimen, op?.regimen) && !faltan.includes("Régimen de Finppi")) faltan.push("Régimen de Finppi");
+  if (fuera(d.responsabilidadFiscal, op?.responsabilidadFiscal) && !faltan.includes("Responsabilidad fiscal de Finppi")) {
+    faltan.push("Responsabilidad fiscal de Finppi");
+  }
+  if (fuera(d.tipoDocumento, op?.tipoDocumento) && !faltan.includes("Tipo de documento de Finppi")) faltan.push("Tipo de documento de Finppi");
   if (d.numeroDocumento && /[^0-9A-Za-z]/.test(d.numeroDocumento)) faltan.push("Documento sin puntos ni dígito de verificación");
   return faltan;
 }
@@ -455,6 +492,8 @@ export function bloqueosEmision(d: {
   trmReferencia?: number;
   lineas: LineaFactura[];
   fiscal?: Partial<DatosFiscales>;
+  /** Listas reales del panel de cliente de Finppi, si ya se leyeron. */
+  opcionesFinppi?: OpcionesClienteFinppi;
   metodoPago?: string;
   tipoOperacion?: string;
   tipoPago?: string;
@@ -469,7 +508,7 @@ export function bloqueosEmision(d: {
   if (!d.lineas.length) b.push("La factura no tiene conceptos.");
   if (d.lineas.some((l) => !l.productoFinppi)) b.push("Cada concepto necesita su producto o servicio de Finppi.");
   if (d.lineas.some((l) => !(l.cantidad > 0) || !(l.valorUnitario > 0))) b.push("Cantidades y precios deben ser mayores que cero.");
-  const faltan = faltantesFiscales(d.fiscal);
+  const faltan = faltantesFiscales(d.fiscal, d.opcionesFinppi);
   if (faltan.length) b.push(`Faltan datos fiscales del cliente: ${faltan.join(", ")}.`);
   if (!d.metodoPago) b.push("Elige el método de pago.");
   if (!d.tipoOperacion) b.push("Elige el tipo de operación.");

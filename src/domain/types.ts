@@ -515,6 +515,8 @@ export interface CuentaFe {
     leidoEl?: string;
     clientes?: number;
     productos?: number;
+    /** Listas reales del panel «Crear cliente» de Finppi (las lee el healthcheck). */
+    opcionesCliente?: OpcionesClienteFinppi;
   };
   /** Información tributaria y resolución DIAN (encabezado del PDF). */
   resolucion?: string;
@@ -560,6 +562,14 @@ export interface TrabajoFe {
   error?: string;
   resultado: Record<string, unknown>;
   logs: { paso: string; nivel: "info" | "aviso" | "error"; mensaje: string; creadoEl: string }[];
+}
+
+export interface OpcionesClienteFinppi {
+  tipoPersona?: string[];
+  tipoDocumento?: string[];
+  regimen?: string[];
+  responsabilidadFiscal?: string[];
+  ciudades?: string[];
 }
 
 export interface EstadoBotFe {

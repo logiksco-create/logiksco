@@ -132,6 +132,9 @@ export const CLIENT_PANEL = {
   locationName: 'input[name="locations.0.name"]',
   address1: 'input[name="locations.0.address.address_line1"]',
   address2: 'input[name="locations.0.address.address_line2"]',
+  locationPhone: 'input[name="locations[0].phoneNumbers[0].number"]',
+  // Mensajes de validación de Finppi bajo los campos (si el «Crear» no pasa).
+  errors: '.form__form-group-error, .invalid-feedback, [class*="error"]:not(script):not(style)',
   submit: 'button[type="submit"]:has-text("Crear")',
   // Verificado en vivo (diagnóstico 27-nov-2026): name del input oculto de cada react-select.
   selectNames: {

@@ -54,3 +54,11 @@ describe("bot Finppi: decisiones críticas", () => {
     expect(esOpcionDeProducto("SRV-FLT2 - Otro", "SRV-FLT")).toBe(false);
   });
 });
+
+describe("normalizar textos de Finppi", () => {
+  it("ignora tildes, mayúsculas, espacios y asterisco", async () => {
+    const { normalizar } = await import("../src/logica.ts");
+    expect(normalizar("MEDELLÍN /  Antioquia")).toBe(normalizar("Medellin / Antioquia"));
+    expect(normalizar("Regimen*")).toBe("regimen");
+  });
+});
