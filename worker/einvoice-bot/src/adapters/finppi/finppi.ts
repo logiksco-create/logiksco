@@ -720,7 +720,9 @@ export async function esperarBorrador(
       if (!estado) continue;
       // Debe ser de este cliente (la columna muestra el nombre, a veces cortado con «...»).
       if (cliente && !celdas.some((x) => mismoCliente(x, cliente.nombre) || soloDigitos(x).includes(cliente.documento))) continue;
-      return { fila: filas.nth(i), numero: numeroDeFila(celdas[1] ?? "", celdas[0] ?? ""), estado, porRecencia: true };
+      // En un borrador «Prefijo» ya es el número completo (BORR9341226); «#» es solo la fila.
+      const numero = /^BORR/i.test(celdas[1] ?? "") ? celdas[1] : numeroDeFila(celdas[1] ?? "", celdas[0] ?? "");
+      return { fila: filas.nth(i), numero, estado, porRecencia: true };
     }
     await new Promise((r) => setTimeout(r, 4000));
   }
