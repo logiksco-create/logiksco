@@ -2,6 +2,7 @@ import "server-only";
 import { cache } from "react";
 import type { Repositorio } from "./datos/repositorio";
 import { calcularAlertas } from "@/domain/alertas";
+import { calcularFlujo } from "@/domain/flujo";
 import { situacion170 } from "@/domain/cumplimiento";
 import { estadoEfectivo, totalesCotizacion } from "@/domain/cotizacion";
 import { hoyISO, diasEntre } from "@/domain/fechas";
@@ -21,7 +22,13 @@ export const cargarTodo = cache(async (repo: Repositorio) => {
 
 export const cargarAlertas = cache(async (repo: Repositorio) => {
   const d = await cargarTodo(repo);
-  return calcularAlertas(d);
+  return calcularAlertas({ ...d, bloquearDOSin170: repo.empresa.bloquearDOSin170 });
+});
+
+/** Flujo de todos los negocios: etapa, siguiente paso y responsable. */
+export const cargarFlujo = cache(async (repo: Repositorio) => {
+  const d = await cargarTodo(repo);
+  return calcularFlujo({ ...d, bloquearDOSin170: repo.empresa.bloquearDOSin170 });
 });
 
 export function situacionCliente(

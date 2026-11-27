@@ -49,7 +49,7 @@ export default async function Facturacion() {
         ) : (
           <div className="divide-y divide-border border-t border-border">
             {pendientes.map((p) => (
-              <div key={p.cliente.id}>
+              <div key={p.cliente.id} id={`c-${p.cliente.id}`} className="scroll-mt-20">
                 <div className="flex flex-wrap items-baseline justify-between gap-2 bg-surface-2/60 px-5 py-2.5">
                   <p className="font-medium">{p.cliente.razonSocial}</p>
                   <p className="text-xs text-muted">

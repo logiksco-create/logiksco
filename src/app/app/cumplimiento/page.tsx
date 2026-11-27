@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { FileCheck2, ShieldAlert, ShieldCheck, ShieldQuestion } from "lucide-react";
 import { contexto, tieneRol } from "@/server/contexto";
-import { cargarTodo, situacionCliente } from "@/server/consultas";
+import { cargarFlujo, cargarTodo, situacionCliente } from "@/server/consultas";
+import { TarjetaPaso } from "@/components/app/flujo";
 import { RECORDATORIOS_170 } from "@/domain/cumplimiento";
 import { Encabezado, Indicador } from "@/components/app/encabezado";
 import { Estado170Badge, Situacion170Badge } from "@/components/estados";
@@ -15,7 +16,9 @@ export const metadata = { title: "Circular 170" };
 
 export default async function Cumplimiento() {
   const repo = await contexto();
-  const { terceros, formularios, hoy, cotizaciones } = await cargarTodo(repo);
+  const [{ terceros, formularios, hoy, cotizaciones, usuarios }, flujo] = await Promise.all([cargarTodo(repo), cargarFlujo(repo)]);
+  const listosDO = flujo.filter((p) => p.etapa === "abrir_do");
+  const esperando170 = flujo.filter((p) => p.etapa === "circular170" && !p.roles.includes("cumplimiento"));
   // Última cotización aceptada por cliente: desde allí se pide el formulario 170.
   const aceptadas = new Map(
     [...cotizaciones].filter((q) => q.estado === "aceptada").sort((a, b) => a.fechaEmision.localeCompare(b.fechaEmision)).map((q) => [q.clienteId, q.id]),
@@ -42,6 +45,23 @@ export default async function Cumplimiento() {
         <Indicador etiqueta="Vencidas o sin formulario" valor={n("vencido") + n("sin_formulario")} icono={<ShieldQuestion />} detalle="DO bloqueado" />
       </div>
 
+      {(listosDO.length > 0 || esperando170.length > 0) && (
+        <div className="mt-6 grid gap-6 lg:grid-cols-2">
+          <Tarjeta>
+            <TarjetaEncabezado titulo={`Listos para abrir DO · ${listosDO.length}`} descripcion="170 vigente y cotización aceptada. Operaciones abre el DO." />
+            <div className="grid gap-2 px-5 pb-5">
+              {listosDO.length === 0 ? <p className="text-[13px] text-muted">Ninguno por ahora.</p> : listosDO.map((p) => <TarjetaPaso key={p.id} p={p} usuarios={usuarios} />)}
+            </div>
+          </Tarjeta>
+          <Tarjeta>
+            <TarjetaEncabezado titulo={`Esperando la 170 · ${esperando170.length}`} descripcion="Cotización aceptada; el cliente aún no envía o corrige su formulario." />
+            <div className="grid gap-2 px-5 pb-5">
+              {esperando170.length === 0 ? <p className="text-[13px] text-muted">Ninguno por ahora.</p> : esperando170.map((p) => <TarjetaPaso key={p.id} p={p} usuarios={usuarios} />)}
+            </div>
+          </Tarjeta>
+        </div>
+      )}
+
       <Tarjeta className="mt-6">
         <TarjetaEncabezado
           titulo="Formularios por revisar"
@@ -52,7 +72,7 @@ export default async function Cumplimiento() {
         ) : (
           <ul className="divide-y divide-border border-t border-border">
             {enRevision.map((f, i) => (
-              <li key={f.id} className="grid gap-5 p-5 lg:grid-cols-[1fr_380px]">
+              <li key={f.id} id={`f-${f.id}`} className="grid scroll-mt-20 gap-5 p-5 lg:grid-cols-[1fr_380px]">
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="font-medium">{nombre(f.terceroId)}</p>

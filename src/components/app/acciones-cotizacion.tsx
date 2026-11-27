@@ -211,7 +211,7 @@ export function BotonAbrirDO({ id, deshabilitado, className }: { id: string; des
 }
 
 /** Pide al cliente el formulario de la Circular 170 (correo + enlace para copiar). */
-export function BotonSolicitar170({ id }: { id: string }) {
+export function BotonSolicitar170({ id, etiqueta = "Pedir la Circular 170 al cliente" }: { id: string; etiqueta?: string }) {
   const [pendiente, iniciar] = useTransition();
   const [error, setError] = useState<string>();
   const [res, setRes] = useState<{ enlace: string; enviado: boolean; correo: string | null }>();
@@ -230,7 +230,7 @@ export function BotonSolicitar170({ id }: { id: string }) {
           })
         }
       >
-        {pendiente ? <LoaderCircle className="animate-spin" /> : <Send />} {res ? "Volver a pedir" : "Pedir la Circular 170 al cliente"}
+        {pendiente ? <LoaderCircle className="animate-spin" /> : <Send />} {res ? "Volver a pedir" : etiqueta}
       </Boton>
       {res && (
         <div className="space-y-1.5 rounded-lg border border-border bg-surface-2 p-3 text-[13px]">

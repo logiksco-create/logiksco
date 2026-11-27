@@ -351,7 +351,13 @@ export type TipoAlerta =
   | "f170_por_vencer"
   | "corte_facturacion"
   | "factura_rechazada"
-  | "aceptacion_por_verificar";
+  | "aceptacion_por_verificar"
+  | "cotizacion_sin_enviar"
+  | "f170_por_pedir"
+  | "f170_por_revisar"
+  | "listo_para_do"
+  | "do_sin_programar"
+  | "do_por_facturar";
 
 export type Severidad = "alta" | "media" | "baja";
 

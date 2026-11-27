@@ -6,7 +6,7 @@ import { tokenFirmado } from "../enlace-firmado";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { BLOQUES, INCOTERMS, TIPOS_SERVICIO, UNIDADES } from "@/domain/types";
+import { BLOQUES, INCOTERMS, TIPOS_SERVICIO, UNIDADES, type Rol } from "@/domain/types";
 import { modoDemo, env } from "@/lib/env";
 import { COOKIE_USUARIO_DEMO, contexto, tieneRol } from "../contexto";
 import { ErrorNegocio } from "../datos/errores";
@@ -352,6 +352,7 @@ export async function revisarFormulario(
       throw new ErrorNegocio("Indica las observaciones para el cliente");
     }
     await repo.revisarFormulario170(id, decision, observaciones?.trim());
+    let listas: { id: string; consecutivo: string }[] = [];
     // RF-17: el cliente recibe el resultado (y las observaciones si se devuelve).
     const f = (await repo.formularios170()).find((x) => x.id === id);
     const cliente = f && (await repo.tercero(f.terceroId));
@@ -371,8 +372,56 @@ export async function revisarFormulario(
         resumen: textos.join(" "),
       });
     }
+    // Siguiente paso del flujo: cotizaciones aceptadas que ya pueden abrir DO.
+    if (decision === "aprobado" && f) {
+      const [cotizaciones, operaciones] = await Promise.all([repo.cotizaciones(), repo.operaciones()]);
+      const conDO = new Set(operaciones.map((o) => o.cotizacionId));
+      listas = cotizaciones
+        .filter((q) => q.clienteId === f.terceroId && q.estado === "aceptada" && !conDO.has(q.id))
+        .map((q) => ({ id: q.id, consecutivo: q.consecutivo }));
+      if (listas.length) {
+        await avisarEquipo(repo, ["operaciones"], {
+          asunto: `Listo para abrir DO: ${listas.map((q) => q.consecutivo).join(", ")}`,
+          titulo: "Hay un cliente listo para operar",
+          parrafos: [
+            `${repo.usuario.nombre} aprobó la Circular 170 de ${cliente?.razonSocial ?? "el cliente"}.`,
+            `${listas.length === 1 ? "La cotización" : "Las cotizaciones"} ${listas.map((q) => q.consecutivo).join(", ")} ya ${listas.length === 1 ? "puede" : "pueden"} pasar a DO.`,
+          ],
+          boton: { texto: "Abrir el DO", url: `${env.appUrl}/app/cotizaciones/${listas[0].id}` },
+        });
+      }
+    }
     revalidatePath("/app", "layout");
+    return { listas };
   });
+}
+
+/** Correo interno a los usuarios activos con alguno de los roles (sin bloquear). */
+async function avisarEquipo(
+  repo: Awaited<ReturnType<typeof contexto>>,
+  roles: Rol[],
+  m: { asunto: string; titulo: string; parrafos: string[]; boton?: { texto: string; url: string } },
+) {
+  if (!correo().activo) return;
+  const para = (await repo.usuarios())
+    .filter((u) => u.activo !== false && u.correo && u.id !== repo.usuario.id && u.roles.some((r) => roles.includes(r)))
+    .map((u) => u.correo);
+  if (!para.length) return;
+  await correo()
+    .enviar({
+      para,
+      asunto: m.asunto,
+      nombreRemitente: "LOGIKS.CO",
+      html: plantillaCorreo({
+        empresa: repo.empresa.razonSocial,
+        color: repo.empresa.colorPrimario,
+        logoUrl: repo.empresa.logoUrl,
+        titulo: m.titulo,
+        parrafos: m.parrafos,
+        boton: m.boton,
+      }),
+    })
+    .catch((e) => console.error("[correo] aviso al equipo:", e instanceof Error ? e.message : e));
 }
 
 /* ------------------------------------------------------------------ */

@@ -2,6 +2,7 @@ import type { Alerta, Cotizacion, Factura, Formulario170, Operacion, Tercero } f
 import { diasEntre, fechaLegible as f } from "./fechas";
 import { estadoEfectivo, tarifasVencidas } from "./cotizacion";
 import { situacion170 } from "./cumplimiento";
+import { calcularFlujo } from "./flujo";
 
 /**
  * Motor de alertas (RF-30, RF-31). Es una función pura: recibe el estado y
@@ -28,6 +29,7 @@ export interface EntradaAlertas {
   terceros: Tercero[];
   formularios: Formulario170[];
   facturas?: Factura[];
+  bloquearDOSin170?: boolean;
 }
 
 export function calcularAlertas(e: EntradaAlertas): Alerta[] {
@@ -159,6 +161,36 @@ export function calcularAlertas(e: EntradaAlertas): Alerta[] {
       href: `/app/cotizaciones/${q.id}`,
       fecha: a.fecha.slice(0, 10),
     });
+  }
+
+  // Flujo del negocio: cada paso que depende de nuestro equipo genera su tarea
+  // para el rol responsable, así ningún cliente se queda quieto.
+  for (const p of calcularFlujo(e)) {
+    const sev = p.detenido ? "alta" : "media";
+    const quien = `${p.cliente} · ${p.referencia}`;
+    const tiempo = p.dias ? ` Lleva ${p.dias} día${p.dias === 1 ? "" : "s"} en este paso.` : "";
+    const base = { id: `flujo-${p.id}`, href: p.href, fecha: p.desde ?? hoy };
+    if (p.etapa === "cotizacion" && p.accionRapida === "enviar_cotizacion" && p.detenido) {
+      alertas.push({ ...base, tipo: "cotizacion_sin_enviar", severidad: "baja", titulo: `${p.referencia} sigue en borrador`, detalle: `${p.cliente}: envíala o descártala.${tiempo}` });
+    } else if (p.etapa === "circular170" && p.roles.includes("cumplimiento")) {
+      alertas.push({ ...base, tipo: "f170_por_revisar", severidad: sev, titulo: `Revisa la Circular 170 de ${p.cliente}`, detalle: `${p.referencia} está aceptada y espera tu aprobación para abrir el DO.${tiempo}` });
+    } else if (p.etapa === "circular170" && (!p.esperaCliente || p.detenido)) {
+      alertas.push({
+        ...base,
+        tipo: "f170_por_pedir",
+        severidad: p.esperaCliente ? "media" : sev,
+        titulo: p.esperaCliente ? `${p.cliente} no ha enviado su Circular 170` : `Pide la Circular 170 de ${p.cliente}`,
+        detalle: `${quien} está aceptada; sin la 170 no se puede abrir el DO.${tiempo}`,
+      });
+    } else if (p.etapa === "abrir_do") {
+      alertas.push({ ...base, tipo: "listo_para_do", severidad: sev, titulo: `Abre el DO de ${p.referencia}`, detalle: `${p.cliente}: aceptada y lista para operar.${tiempo}` });
+    } else if (p.etapa === "operacion" && p.accion.startsWith("Programa") && p.detenido) {
+      alertas.push({ ...base, tipo: "do_sin_programar", severidad: "media", titulo: `${p.referencia} sin fechas de hitos`, detalle: `${p.cliente}: programa las fechas estimadas para hacer seguimiento.${tiempo}` });
+    } else if (p.etapa === "facturacion" && !p.facturaId) {
+      alertas.push({ ...base, tipo: "do_por_facturar", severidad: p.detenido ? "alta" : "media", titulo: `Factura el ${p.referencia}`, detalle: `${p.cliente}: ${p.detalle.toLowerCase()} y aún no tiene prefactura.${tiempo}` });
+    } else if (p.etapa === "facturacion" && p.accion.startsWith("Emite") && p.detenido) {
+      alertas.push({ ...base, tipo: "do_por_facturar", severidad: "media", titulo: `Emite la factura del ${p.referencia}`, detalle: `${p.cliente}: la prefactura espera emisión.${tiempo}` });
+    }
   }
 
   // RF-49: rechazos de Finppi van a Contabilidad con el error.

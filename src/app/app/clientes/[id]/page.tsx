@@ -2,7 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Plus } from "lucide-react";
 import { contexto, tieneRol } from "@/server/contexto";
-import { cargarTodo, situacionCliente } from "@/server/consultas";
+import { cargarFlujo, cargarTodo, situacionCliente } from "@/server/consultas";
+import { TarjetaPaso } from "@/components/app/flujo";
 import { estadoEfectivo, totalesCotizacion } from "@/domain/cotizacion";
 import { totalesFactura } from "@/domain/facturacion";
 import { Encabezado } from "@/components/app/encabezado";
@@ -21,10 +22,12 @@ export default async function Cliente({ params }: PageProps<"/app/clientes/[id]"
   const repo = await contexto();
   const t = await repo.tercero(id);
   if (!t) notFound();
-  const [{ cotizaciones, operaciones, facturas, formularios, hoy }, accesos] = await Promise.all([
+  const [{ cotizaciones, operaciones, facturas, formularios, hoy, usuarios }, accesos, flujo] = await Promise.all([
     cargarTodo(repo),
     t.tipo === "proveedor" ? Promise.resolve([]) : repo.accesosPortal(t.id),
+    cargarFlujo(repo),
   ]);
+  const negocios = flujo.filter((p) => p.clienteId === t.id);
   const qs = cotizaciones.filter((q) => q.clienteId === t.id);
   const ops = operaciones.filter((o) => o.clienteId === t.id);
   const fs = facturas.filter((f) => f.clienteId === t.id);
@@ -56,6 +59,24 @@ export default async function Cliente({ params }: PageProps<"/app/clientes/[id]"
 
       <div className="grid gap-6 xl:grid-cols-[1fr_340px]">
         <div className="min-w-0 space-y-6">
+          {negocios.length > 0 && (
+            <Tarjeta>
+              <TarjetaEncabezado
+                titulo="Negocios en curso"
+                descripcion="En qué etapa va cada uno, qué sigue y quién lo hace."
+                accion={
+                  <Link href="/app/flujo?ver=todos" className="text-[13px] font-medium text-brand-fg hover:underline">
+                    Ver flujo
+                  </Link>
+                }
+              />
+              <div className="grid gap-2 px-5 pb-5 sm:grid-cols-2">
+                {negocios.map((p) => (
+                  <TarjetaPaso key={p.id} p={p} usuarios={usuarios} mostrarEtapa />
+                ))}
+              </div>
+            </Tarjeta>
+          )}
           <Tarjeta>
             <TarjetaEncabezado titulo="Cotizaciones" descripcion={`${qs.length} en total`} />
             <ul className="divide-y divide-border border-t border-border">

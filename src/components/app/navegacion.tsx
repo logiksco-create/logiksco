@@ -15,6 +15,7 @@ import {
   Settings,
   Ship,
   ShieldCheck,
+  Workflow,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/formato";
@@ -22,6 +23,7 @@ import { Logo } from "../marca";
 
 const principal = [
   { href: "/app", etiqueta: "Inicio", icono: LayoutDashboard, exacto: true },
+  { href: "/app/flujo", etiqueta: "Flujo de clientes", icono: Workflow },
   { href: "/app/cotizaciones", etiqueta: "Cotizaciones", icono: FileText },
   { href: "/app/operaciones", etiqueta: "Operaciones", icono: Ship },
   { href: "/app/clientes", etiqueta: "Clientes", icono: Building2 },

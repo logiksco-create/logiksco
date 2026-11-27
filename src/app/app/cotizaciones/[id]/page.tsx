@@ -8,6 +8,9 @@ import { habilitadoParaDO, situacion170 } from "@/domain/cumplimiento";
 import { hoyISO } from "@/domain/fechas";
 import { BLOQUES, TIPOS_SERVICIO, UNIDADES, type Bloque } from "@/domain/types";
 import { Encabezado } from "@/components/app/encabezado";
+import { PasoAPaso } from "@/components/app/flujo";
+import { cargarFlujo } from "@/server/consultas";
+import { etapaDe } from "@/domain/flujo";
 import { EstadoCotizacionBadge, IconoServicio, Situacion170Badge } from "@/components/estados";
 import {
   AceptacionManual,
@@ -26,14 +29,17 @@ export default async function DetalleCotizacion({ params }: PageProps<"/app/coti
   if (!q) notFound();
 
   const hoy = hoyISO();
-  const [cliente, formularios, comunicaciones, operaciones, terceros, origen] = await Promise.all([
+  const [cliente, formularios, comunicaciones, operaciones, terceros, origen, flujo, usuarios] = await Promise.all([
     repo.tercero(q.clienteId),
     repo.formularios170(q.clienteId),
     repo.comunicaciones("cotizacion", q.id),
     repo.operaciones(),
     repo.terceros(),
     q.origenId ? repo.cotizacion(q.origenId) : null,
+    cargarFlujo(repo),
+    repo.usuarios(),
   ]);
+  const pasoFlujo = etapaDe(flujo, { cotizacionId: q.id });
   const estado = estadoEfectivo(q, hoy);
   const t = totalesCotizacion(q);
   const porBloque = totalesPorBloque(q.conceptos, q.monedaPresentacion, q.trm);
@@ -90,6 +96,8 @@ export default async function DetalleCotizacion({ params }: PageProps<"/app/coti
           </>
         }
       />
+
+      <PasoAPaso paso={pasoFlujo} usuarios={usuarios} accion={!!pasoFlujo?.operacionId} className="mb-6" />
 
       <div className="grid gap-6 xl:grid-cols-[1fr_360px]">
         <div className="min-w-0 space-y-6">
@@ -169,11 +177,6 @@ export default async function DetalleCotizacion({ params }: PageProps<"/app/coti
                         <BotonSolicitar170 id={q.id} />
                       </div>
                     )}
-                    <ol className="mt-4 grid gap-1.5 text-xs text-subtle sm:grid-cols-4">
-                      {["1. Cotización aceptada ✓", "2. Cliente envía su 170", "3. Cumplimiento aprueba", "4. Abres el DO → luego se factura"].map((t) => (
-                        <li key={t} className="rounded-md bg-surface-2 px-2 py-1.5">{t}</li>
-                      ))}
-                    </ol>
                   </div>
                 </div>
               )}

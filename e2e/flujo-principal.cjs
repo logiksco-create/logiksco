@@ -36,6 +36,14 @@ const B = process.env.BASE_URL ?? 'http://localhost:3000';
   await tarjeta.getByRole('button', { name: 'Aprobar' }).click();
   await p.waitForLoadState('networkidle'); await p.waitForTimeout(800);
   paso('Cumplimiento aprobó');
+  await p.getByRole('heading', { name: /Listos para abrir DO · [1-9]/ }).waitFor();
+  await p.getByText('Abre el DO').first().waitFor();
+  paso('queda en «Listos para abrir DO» con su responsable');
+
+  // 3b. El tablero de flujo lo muestra en la etapa «Abrir DO».
+  await p.goto(B + '/app/flujo?ver=todos&etapa=abrir_do');
+  await p.locator('article', { hasText: 'Textiles Rionegro SAS' }).getByRole('button', { name: 'Abrir DO' }).waitFor();
+  paso('el flujo de clientes lo muestra listo para abrir DO');
 
   // 4. Diego abre DO
   await p.selectOption('select[name=usuario]', 'u-diego'); await p.getByRole('button', { name: 'Ver como' }).first().click();

@@ -11,6 +11,9 @@ import { Subidor } from "@/components/app/subidor";
 import { ListaArchivos } from "@/components/app/lista-archivos";
 import { CostosReales } from "@/components/app/costos-reales";
 import { Encabezado } from "@/components/app/encabezado";
+import { PasoAPaso } from "@/components/app/flujo";
+import { cargarFlujo } from "@/server/consultas";
+import { etapaDe } from "@/domain/flujo";
 import { EstadoDOBadge, IconoServicio } from "@/components/estados";
 import { FilaHito, NotificarCliente, SolicitudProveedor } from "@/components/app/acciones-operacion";
 import { BotonDuplicar } from "@/components/app/acciones-cotizacion";
@@ -28,13 +31,15 @@ export default async function DetalleOperacion({ params, searchParams }: PagePro
   if (!op) notFound();
 
   const hoy = hoyISO();
-  const [cliente, cotizacion, comunicaciones, usuarios, documentos] = await Promise.all([
+  const [cliente, cotizacion, comunicaciones, usuarios, documentos, flujo] = await Promise.all([
     repo.tercero(op.clienteId),
     repo.cotizacion(op.cotizacionId),
     repo.comunicaciones("operacion", op.id),
     repo.usuarios(),
     repo.documentosDO(op.id),
+    cargarFlujo(repo),
   ]);
+  const pasoFlujo = etapaDe(flujo, { operacionId: op.id });
   const responsable = usuarios.find((u) => u.id === op.responsableId);
   const actual = hitoActual(op);
   const salida = fechaSalida(op);
@@ -97,6 +102,8 @@ export default async function DetalleOperacion({ params, searchParams }: PagePro
           </>
         }
       />
+
+      <PasoAPaso paso={pasoFlujo} usuarios={usuarios} accion={pasoFlujo?.etapa === "facturacion"} className="mb-6" />
 
       {vencidas.length > 0 && (
         <div className="mb-6 flex flex-col gap-3 rounded-xl border border-danger/25 bg-danger-soft p-4 text-[13.5px] sm:flex-row sm:items-center sm:justify-between">

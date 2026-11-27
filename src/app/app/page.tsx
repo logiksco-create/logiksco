@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowRight, CircleCheck, FileText, PlaneLanding, PlaneTakeoff, Ship, TrendingUp } from "lucide-react";
+import { ArrowRight, CircleCheck, ListTodo, FileText, PlaneLanding, PlaneTakeoff, Ship, TrendingUp } from "lucide-react";
 import { contexto } from "@/server/contexto";
-import { cargarAlertas, cargarTodo, metricasComerciales } from "@/server/consultas";
+import { cargarAlertas, cargarFlujo, cargarTodo, metricasComerciales } from "@/server/consultas";
+import { esMio } from "@/domain/flujo";
+import { EmbudoFlujo, TarjetaPaso } from "@/components/app/flujo";
 import { Encabezado, Indicador } from "@/components/app/encabezado";
 import { AlertaItem } from "@/components/app/alerta-item";
 import { EstadoDOBadge, IconoServicio } from "@/components/estados";
@@ -24,7 +26,9 @@ export default async function Inicio() {
   const repo = await contexto();
   // Empresa recién registrada: primero el asistente de bienvenida.
   if (repo.empresa.configurada === false && repo.usuario.roles.includes("admin")) redirect("/app/bienvenida");
-  const [datos, alertas, m] = await Promise.all([cargarTodo(repo), cargarAlertas(repo), metricasComerciales(repo)]);
+  const [datos, alertas, m, flujo] = await Promise.all([cargarTodo(repo), cargarAlertas(repo), metricasComerciales(repo), cargarFlujo(repo)]);
+  const mios = flujo.filter((p) => esMio(p, repo.usuario));
+  const mostrar = (mios.length ? mios : flujo.filter((p) => p.detenido)).slice(0, 6);
   const { operaciones, terceros, usuarios, hoy } = datos;
   const activas = operaciones.filter((o) => o.estado !== "cerrado" && o.estado !== "entregado");
   const cliente = (id: string) => terceros.find((t) => t.id === id)?.razonSocial ?? "—";
@@ -46,6 +50,38 @@ export default async function Inicio() {
         titulo={`${saludo()}, ${repo.usuario.nombre.split(" ")[0]}`}
         descripcion={`Así va la operación de ${repo.empresa.razonSocial} hoy.`}
       />
+
+      <Tarjeta className="mb-6">
+        <TarjetaEncabezado
+          titulo={mios.length ? `Tus siguientes pasos · ${mios.length}` : "Tus siguientes pasos"}
+          descripcion={
+            mios.length
+              ? "Negocios que esperan algo de ti, los detenidos primero."
+              : flujo.some((p) => p.detenido)
+                ? "No tienes pendientes. Estos negocios del equipo están detenidos."
+                : "Nada pendiente de tu parte. Todos los negocios avanzan."
+          }
+          accion={
+            <Link href="/app/flujo" className="inline-flex items-center gap-1 text-[13px] font-medium text-brand-fg hover:underline">
+              Ver el flujo <ArrowRight className="size-3.5" />
+            </Link>
+          }
+        />
+        <div className="px-5 pb-5">
+          <EmbudoFlujo pasos={flujo} href={(e) => (e ? `/app/flujo?ver=todos&etapa=${e}` : "/app/flujo")} />
+          {mostrar.length === 0 ? (
+            <p className="mt-4 flex items-center gap-2 text-sm text-muted">
+              <ListTodo className="size-4" /> Cuando un cliente necesite algo de ti, aparecerá aquí.
+            </p>
+          ) : (
+            <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+              {mostrar.map((p) => (
+                <TarjetaPaso key={p.id} p={p} usuarios={usuarios} mostrarEtapa />
+              ))}
+            </div>
+          )}
+        </div>
+      </Tarjeta>
 
       <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <Indicador

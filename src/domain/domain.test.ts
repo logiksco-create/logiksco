@@ -15,6 +15,7 @@ import {
   tocaRecordatorio,
 } from "./cumplimiento";
 import { calcularAlertas } from "./alertas";
+import { calcularFlujo, esMio } from "./flujo";
 import { diasEntre, sumarDias, sumarMeses } from "./fechas";
 import type { Alerta, Concepto, Cotizacion, Formulario170, Operacion, Tercero } from "./types";
 
@@ -233,7 +234,8 @@ describe("alertas (RF-30, RF-31)", () => {
       terceros: [],
       formularios: [],
     });
-    expect(alertas).toHaveLength(0);
+    // Solo queda pendiente facturarla.
+    expect(alertas.map((a) => a.tipo)).toEqual(["do_por_facturar"]);
   });
 
   it("detecta tarifas vencidas por fecha", () => {
@@ -394,5 +396,69 @@ describe("logo de la empresa", () => {
     expect(esImagenValida(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0]))).toBe("image/png");
     expect(esImagenValida(new Uint8Array([0xff, 0xd8, 0xff, 0xe0]))).toBe("image/jpeg");
     expect(esImagenValida(new TextEncoder().encode("<svg onload=alert(1)>"))).toBeNull();
+  });
+});
+
+describe("flujo del negocio: ningún cliente queda en el limbo", () => {
+  const hoy = "2026-11-27";
+  const t: Tercero = { id: "t1", empresaId: "e1", tipo: "cliente", nit: "1", razonSocial: "Luis", ciudad: "", contactos: [] };
+  const f170 = (p: Partial<Formulario170>): Formulario170 => ({
+    id: "f",
+    empresaId: "e1",
+    terceroId: "t1",
+    version: 1,
+    estado: "aprobado",
+    aprobadoEl: "2026-11-27",
+    vigenteHasta: "2027-11-27",
+    datos: {} as Formulario170["datos"],
+    ...p,
+  });
+  const aceptada = cotizacion({ estado: "aceptada", vigenteHasta: "2026-12-20", aceptacion: { nombre: "L", correo: "l@x.co", canal: "pdf", fecha: "2026-11-25T10:00:00Z" } });
+  const base = { hoy, terceros: [t], operaciones: [] as Operacion[], facturas: [] };
+
+  it("cliente sin cotizaciones: el comercial debe cotizar", () => {
+    const [p] = calcularFlujo({ ...base, cotizaciones: [], formularios: [] });
+    expect(p.etapa).toBe("cotizacion");
+    expect(p.href).toContain("/app/cotizaciones/nueva?cliente=t1");
+  });
+
+  it("aceptada sin 170: pedirla (comercial) y alerta; detenida al pasar un día", () => {
+    const flujo = calcularFlujo({ ...base, cotizaciones: [aceptada], formularios: [] });
+    expect(flujo[0]).toMatchObject({ etapa: "circular170", accionRapida: "pedir_170", roles: ["comercial"], detenido: true, dias: 2 });
+    const alertas = calcularAlertas({ ...base, cotizaciones: [aceptada], formularios: [] });
+    expect(alertas.find((a) => a.tipo === "f170_por_pedir")?.severidad).toBe("alta");
+  });
+
+  it("170 en revisión: le toca a Cumplimiento", () => {
+    const flujo = calcularFlujo({ ...base, cotizaciones: [aceptada], formularios: [f170({ estado: "en_revision", aprobadoEl: undefined, vigenteHasta: undefined, diligenciadoEl: "2026-11-27T08:00:00Z" })] });
+    expect(flujo[0]).toMatchObject({ etapa: "circular170", roles: ["cumplimiento"], detenido: false });
+    expect(esMio(flujo[0], { id: "x", roles: ["cumplimiento"] })).toBe(true);
+    expect(esMio(flujo[0], { id: "u1", roles: ["comercial"] })).toBe(false);
+  });
+
+  it("170 aprobada y sin DO: lista para abrir DO (Operaciones o Comercial)", () => {
+    const flujo = calcularFlujo({ ...base, cotizaciones: [aceptada], formularios: [f170({})] });
+    expect(flujo[0]).toMatchObject({ etapa: "abrir_do", accionRapida: "abrir_do", dias: 0 });
+    expect(esMio(flujo[0], { id: "z", roles: ["operaciones"] })).toBe(true);
+    expect(calcularAlertas({ ...base, cotizaciones: [aceptada], formularios: [f170({})] }).map((a) => a.tipo)).toContain("listo_para_do");
+  });
+
+  it("sin bloqueo por 170 la aceptada pasa directo a abrir DO", () => {
+    const flujo = calcularFlujo({ ...base, cotizaciones: [aceptada], formularios: [], bloquearDOSin170: false });
+    expect(flujo[0].etapa).toBe("abrir_do");
+  });
+
+  it("DO entregado sin factura va a Contabilidad; emitida queda completa", () => {
+    const op: Operacion = {
+      id: "o1", empresaId: "e1", consecutivo: "DO-1", cotizacionId: aceptada.id, clienteId: "t1", responsableId: "u2",
+      tipo: "maritimo_fcl", origen: "A", destino: "B", estado: "entregado", abiertoEl: "2026-11-01", trm: 4000, conceptos: [],
+      hitos: [{ id: "h", nombre: "Entrega", real: "2026-11-20" }],
+    };
+    const sinFactura = calcularFlujo({ ...base, operaciones: [op], cotizaciones: [aceptada], formularios: [f170({})] });
+    expect(sinFactura).toHaveLength(1);
+    expect(sinFactura[0]).toMatchObject({ etapa: "facturacion", roles: ["contabilidad"], detenido: true });
+    const factura = { id: "fa", empresaId: "e1", clienteId: "t1", estado: "emitida", moneda: "USD", trm: 4000, lineas: [], operaciones: ["o1"], creadoEl: "2026-11-26T00:00:00Z", numero: "FE1" } as const;
+    const completo = calcularFlujo({ ...base, operaciones: [op], cotizaciones: [aceptada], formularios: [f170({})], facturas: [{ ...factura, lineas: [], operaciones: ["o1"] }] });
+    expect(completo[0].etapa).toBe("completado");
   });
 });

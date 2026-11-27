@@ -39,7 +39,7 @@ export async function tareaDiaria(sv: SupabaseClient) {
         repo.usuarios(),
         repo.facturas(),
       ]);
-      const alertas = calcularAlertas({ hoy, cotizaciones, operaciones, terceros, formularios, facturas });
+      const alertas = calcularAlertas({ hoy, cotizaciones, operaciones, terceros, formularios, facturas, bloquearDOSin170: repo.empresa.bloquearDOSin170 });
 
       // 1. Persistir
       const { data: abiertas } = await sv.from("alertas").select("clave").eq("empresa_id", repo.empresa.id).eq("estado", "abierta");
