@@ -1005,6 +1005,11 @@ export class SupabaseRepositorio implements Repositorio {
     falla(error);
   }
 
+  async sincronizarProductosFe() {
+    const { error } = await this.db.rpc("fe_sincronizar_productos", { p_empresa: this.empresa.id });
+    falla(error);
+  }
+
   async guardarModoEmisionFe(m: "borrador" | "real") {
     const { error } = await this.db.rpc("fe_guardar_modo", { p_empresa: this.empresa.id, p_modo: m });
     falla(error);
@@ -1045,7 +1050,7 @@ export class SupabaseRepositorio implements Repositorio {
       .eq("empresa_id", this.empresa.id)
       .order("creado_el", { ascending: false })
       .limit(20);
-    q = facturaId ? q.eq("factura_id", facturaId) : q.eq("tipo", "healthcheck");
+    q = facturaId ? q.eq("factura_id", facturaId) : q.in("tipo", ["healthcheck", "productos"]);
     const { data, error } = await q;
     falla(error);
     return (data ?? []).map(mapTrabajo);

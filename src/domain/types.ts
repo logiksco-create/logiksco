@@ -520,7 +520,7 @@ export const ESTADOS_TRABAJO_FE = {
 export interface TrabajoFe {
   id: string;
   facturaId?: string;
-  tipo: "emitir" | "healthcheck" | "reconciliar";
+  tipo: "emitir" | "healthcheck" | "reconciliar" | "productos";
   estado: keyof typeof ESTADOS_TRABAJO_FE;
   dryRun: boolean;
   creadoEl: string;

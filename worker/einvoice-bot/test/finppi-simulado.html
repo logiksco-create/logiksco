@@ -205,11 +205,27 @@ function panelCliente() {
   p.append(crear); document.body.append(p);
 }
 
+/* ------------------------------- Productos ------------------------------- */
+// 12 productos en páginas de 10, con paginación numérica como el resto de Finppi.
+function listadoProductos() {
+  const todos = Array.from({ length: 12 }, (_, i) => i < 3 ? PRODUCTOS[i] : [`P-${String(i).padStart(3, '0')}`, `Servicio ${i}`, 'IVA-19', 1000 * i]);
+  let pagina = 1;
+  const pintar = () => {
+    const filas = todos.slice((pagina - 1) * 10, pagina * 10);
+    app.innerHTML = `<h2>Productos</h2><button>Crear</button><table><tbody>${filas.map((p, i) => `<tr><td>${i + 1}</td><td>${p[1]}</td><td>${p[0]}</td><td>Servicio</td><td>${fmt(p[3])}</td><td></td><td>…</td></tr>`).join('')}</tbody></table>
+      <p>${(pagina - 1) * 10 + 1} al ${Math.min(pagina * 10, todos.length)} de ${todos.length}</p>
+      <ul class="pagination"><li><a class="pagination__link">1</a></li><li><a class="pagination__link">2</a></li></ul>`;
+    app.querySelectorAll('.pagination__link').forEach((a) => a.addEventListener('click', () => { pagina = Number(a.textContent); pintar(); }));
+  };
+  pintar();
+}
+
 /* ------------------------------- Rutas ------------------------------- */
 const ruta = location.pathname;
 if (!S.sesion || ruta === '/') login();
 else if (ruta === '/income/invoice/edit') formulario();
-else if (ruta === '/customers' || ruta === '/products') app.innerHTML = `<p>1 al ${ruta === '/customers' ? S.clientes.length : 3} de ${ruta === '/customers' ? S.clientes.length : 3}</p>`;
+else if (ruta === '/products') listadoProductos();
+else if (ruta === '/customers') app.innerHTML = `<p>1 al ${S.clientes.length} de ${S.clientes.length}</p>`;
 else listado();
 </script>
 </body>

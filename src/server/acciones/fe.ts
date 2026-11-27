@@ -108,6 +108,20 @@ export async function probarConexionFinppi(): Promise<R> {
   });
 }
 
+/** El bot lee (solo lectura) los productos de Finppi y carga al catálogo los que falten. */
+export async function traerProductosFinppi(): Promise<R> {
+  return intentar(async () => {
+    const repo = await contexto();
+    if (!tieneRol(repo, "contabilidad")) throw new ErrorNegocio("Solo Contabilidad o el Administrador");
+    await repo.sincronizarProductosFe();
+    if (!modoDemo) {
+      await despertarBot("productos");
+      return "El bot está leyendo tus productos de Finppi; aparecerán aquí en un par de minutos.";
+    }
+    return "Productos de Finppi cargados al catálogo (simulación del demo)";
+  });
+}
+
 export async function desconectarFinppi(): Promise<R> {
   return intentar(async () => {
     const repo = await contexto();

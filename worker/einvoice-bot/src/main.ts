@@ -2,7 +2,7 @@ import { config } from "./config.ts";
 import * as db from "./db.ts";
 import { ADAPTER_VERSION } from "./adapters/finppi/selectors.ts";
 import { ErrorBot, debePausar, type CodigoError } from "./logica.ts";
-import { ReintentoProgramado, emitir, healthcheck, reconciliar } from "./flujos.ts";
+import { ReintentoProgramado, emitir, healthcheck, reconciliar, sincronizarProductos } from "./flujos.ts";
 import { cerrarNavegador } from "./navegador.ts";
 
 /**
@@ -19,6 +19,7 @@ async function procesar(job: db.Job) {
   try {
     if (job.tipo === "healthcheck") await healthcheck(job);
     else if (job.tipo === "emitir") await emitir(job);
+    else if (job.tipo === "productos") await sincronizarProductos(job);
     else await reconciliar(job);
     await db.actualizarJob(job.id, { estado: "ok", terminado_el: new Date().toISOString(), adapter_version: ADAPTER_VERSION });
     ultimos.push(null);

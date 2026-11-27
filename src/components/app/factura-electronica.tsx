@@ -32,6 +32,7 @@ import {
   cambiarPresentacionFactura,
   cambiarModoEmision,
   descartarPrueba,
+  traerProductosFinppi,
 } from "@/server/acciones/fe";
 import { AreaTexto, Boton, Campo, Entrada, Insignia, Selector } from "@/components/ui";
 import { cn } from "@/lib/formato";
@@ -793,6 +794,32 @@ export function BotonDescartarPrueba({ facturaId }: { facturaId: string }) {
       >
         {pendiente ? <LoaderCircle className="animate-spin" /> : <RefreshCw />}
         {confirmar ? "¿Seguro? Vuelve a prefactura" : "Descartar prueba"}
+      </Boton>
+      <Mensaje r={r} />
+    </div>
+  );
+}
+
+/** El bot lee los productos de Finppi (solo lectura) y los carga al catálogo. */
+export function BotonTraerProductos({ activa }: { activa: boolean }) {
+  const [r, setR] = useState<R>(null);
+  const [pendiente, iniciar] = useTransition();
+  const router = useRouter();
+  return (
+    <div className="space-y-1.5">
+      <Boton
+        variante="secundario"
+        tamano="sm"
+        disabled={pendiente || !activa}
+        title={activa ? undefined : "Primero conecta y verifica tu cuenta de Finppi"}
+        onClick={() =>
+          iniciar(async () => {
+            setR(await traerProductosFinppi());
+            router.refresh();
+          })
+        }
+      >
+        {pendiente ? <LoaderCircle className="animate-spin" /> : <RefreshCw />} Traer de Finppi
       </Boton>
       <Mensaje r={r} />
     </div>

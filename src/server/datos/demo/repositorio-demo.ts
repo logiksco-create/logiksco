@@ -511,6 +511,36 @@ export class DemoRepositorio implements Repositorio {
     this.healthcheckSimulado();
   }
 
+  async sincronizarProductosFe() {
+    const s = estado();
+    if (s.cuentaFe?.estado !== "activa") throw new ErrorNegocio("Primero conecta y verifica tu cuenta de Finppi");
+    // Simulación: «Finppi» tiene estos productos; se cargan los que falten.
+    const finppi = [
+      { codigo: "SRV-MAN", nombre: "Agenciamiento y manejo de carga" },
+      { codigo: "SRV-FLT", nombre: "Flete internacional" },
+      { codigo: "TER-REE", nombre: "Reembolso de gastos a terceros" },
+      { codigo: "SRV-ADU", nombre: "Agenciamiento aduanero" },
+      { codigo: "SRV-SEG", nombre: "Seguro de carga" },
+    ];
+    const ya = new Set(s.catalogoPropio.filter((e) => e.tipo === "producto_finppi").map((e) => e.codigo));
+    const nuevos = finppi.filter((p) => !ya.has(p.codigo));
+    for (const p of nuevos) s.catalogoPropio.push({ id: id(), tipo: "producto_finppi", nombre: p.nombre, codigo: p.codigo, base: false, datos: {} });
+    const t = ahora();
+    s.trabajosFe.unshift({
+      id: id(),
+      tipo: "productos",
+      estado: "ok",
+      dryRun: false,
+      creadoEl: t,
+      terminadoEl: t,
+      resultado: { leidos: finppi.length, nuevos: nuevos.length },
+      logs: [
+        { paso: "productos", nivel: "info", mensaje: "Leyendo el listado de productos y servicios de Finppi… (simulado)", creadoEl: t },
+        { paso: "productos", nivel: "info", mensaje: `${finppi.length} productos leídos en Finppi: ${nuevos.length} nuevos en el catálogo de LOGIKS, ${finppi.length - nuevos.length} ya estaban.`, creadoEl: t },
+      ],
+    });
+  }
+
   async guardarModoEmisionFe(m: "borrador" | "real") {
     if (!this.usuario.roles.includes("admin")) throw new ErrorNegocio("Solo el Administrador cambia el modo de emisión");
     const s = estado();
@@ -652,7 +682,7 @@ export class DemoRepositorio implements Repositorio {
   }
 
   async trabajosFe(facturaId?: string) {
-    return estado().trabajosFe.filter((j) => (facturaId ? j.facturaId === facturaId : j.tipo === "healthcheck"));
+    return estado().trabajosFe.filter((j) => (facturaId ? j.facturaId === facturaId : j.tipo === "healthcheck" || j.tipo === "productos"));
   }
 
   async estadoBotFe(): Promise<EstadoBotFe> {

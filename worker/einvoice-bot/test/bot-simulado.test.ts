@@ -25,6 +25,7 @@ const h = vi.hoisted(() => {
     archivos: {} as Record<string, Uint8Array>,
     nuevosJobs: [] as Record<string, unknown>[],
     clave: "Cl4ve-Secreta",
+    productos: [] as { codigo: string; nombre: string }[],
   };
 });
 
@@ -43,6 +44,10 @@ vi.mock("../src/db.ts", () => ({
   subirArchivo: async (ruta: string, bytes: Uint8Array) => void (h.archivos[ruta] = bytes),
   factura: async (id: string) => ({ id, ...h.facturas[id] }),
   db: { from: () => ({ insert: async (f: Record<string, unknown>) => void h.nuevosJobs.push(f) }) },
+  cargarProductosFinppi: async (_e: string, p: { codigo: string; nombre: string }[]) => {
+    h.productos = p;
+    return { nuevos: p.length, existentes: 0, omitidos: 0 };
+  },
 }));
 
 /* Finppi simulado: toda petición a app.finppi.com se responde localmente. */
@@ -197,6 +202,15 @@ describe.skipIf(!hayNavegador)("bot contra Finppi simulado", () => {
     expect(texto).not.toContain("Punto de no retorno: «Enviar»");
     expect(h.libro).toHaveLength(0);
   }, 120_000);
+
+  it("productos: lee todas las páginas del listado de Finppi (solo lectura)", async () => {
+    h.logs.length = 0;
+    await flujos.sincronizarProductos(job({ tipo: "productos", factura_id: null }));
+    expect(h.productos).toHaveLength(12);
+    expect(h.productos.map((p) => p.codigo)).toContain("SRV-MAN");
+    expect(h.productos.map((p) => p.codigo)).toContain("P-011");
+    expect(h.logs.join("\n")).toContain("12 productos leídos en Finppi");
+  }, 60_000);
 
   it("cero saltos: si Finppi ofrece un número que no sigue al libro, bloquea", async () => {
     h.libro = [{ numero: "SETT5", prefijo: "SETT", seq: 5, estado: "emitido" }];

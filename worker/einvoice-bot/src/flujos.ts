@@ -145,6 +145,23 @@ async function healthcheckInterno(job: Job) {
   });
 }
 
+/* =========================== Productos (lectura) =========================== */
+
+export async function sincronizarProductos(job: Job) {
+  await conSesion(job, async (page) => {
+    await db.log(job, "productos", "Leyendo el listado de productos y servicios de Finppi…");
+    const productos = await finppi.leerProductos(page);
+    if (!productos.length) throw new ErrorBot("SELECTOR_NOT_FOUND", "No se pudo leer ningún producto del listado de Finppi");
+    const r = await db.cargarProductosFinppi(job.empresa_id, productos);
+    await db.log(
+      job,
+      "productos",
+      `${productos.length} productos leídos en Finppi: ${r.nuevos} nuevos en el catálogo de LOGIKS, ${r.existentes} ya estaban${r.omitidos ? `, ${r.omitidos} omitidos por nombre repetido` : ""}.`,
+    );
+    await db.actualizarJob(job.id, { resultado: { leidos: productos.length, ...r } });
+  });
+}
+
 /* ================================= Emitir ================================= */
 
 export async function emitir(job: Job) {

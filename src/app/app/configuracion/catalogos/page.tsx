@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
-import { contexto } from "@/server/contexto";
+import { contexto, tieneRol } from "@/server/contexto";
+import { BotonTraerProductos } from "@/components/app/factura-electronica";
 import { hitosDe } from "@/domain/operacion";
 import { BLOQUES, TIPOS_CATALOGO, TIPOS_SERVICIO, type TipoCatalogo, type TipoServicio } from "@/domain/types";
 import { Encabezado } from "@/components/app/encabezado";
@@ -15,7 +16,7 @@ export default async function Catalogos({ searchParams }: PageProps<"/app/config
   const tipo: TipoCatalogo = typeof t === "string" && t in TIPOS_CATALOGO ? (t as TipoCatalogo) : "concepto";
   const repo = await contexto();
   const admin = repo.usuario.roles.includes("admin");
-  const entradas = await repo.catalogo(tipo);
+  const [entradas, cuentaFe] = await Promise.all([repo.catalogo(tipo), tipo === "producto_finppi" ? repo.cuentaFe() : Promise.resolve(null)]);
   const propias = entradas.filter((e) => !e.base);
   const base = entradas.filter((e) => e.base);
 
@@ -53,6 +54,7 @@ export default async function Catalogos({ searchParams }: PageProps<"/app/config
               El bot lo elige por ese código; si no existe en Finppi, la emisión se detiene sin emitir.
             </p>
           )}
+          {tipo === "producto_finppi" && (tieneRol(repo, "contabilidad")) && <BotonTraerProductos activa={cuentaFe?.estado === "activa"} />}
           {admin && <AgregarCatalogo tipo={tipo} />}
           <div>
             <p className="mb-2 text-xs font-medium tracking-wide text-subtle uppercase">De tu empresa · {propias.length}</p>

@@ -11,7 +11,7 @@ export interface Job {
   id: string;
   empresa_id: string;
   factura_id: string | null;
-  tipo: "emitir" | "healthcheck" | "reconciliar";
+  tipo: "emitir" | "healthcheck" | "reconciliar" | "productos";
   dry_run: boolean;
   payload: Record<string, unknown>;
   intentos: number;
@@ -125,4 +125,39 @@ export async function trabajosProximos(ms: number): Promise<number> {
     .lte("disponible_el", new Date(Date.now() + ms).toISOString());
   revisar(error, "trabajos próximos");
   return count ?? 0;
+}
+
+/** Carga en el catálogo de LOGIKS los productos de Finppi que falten (por código). */
+export async function cargarProductosFinppi(
+  empresaId: string,
+  productos: { codigo: string; nombre: string; tipo?: string; precio?: string }[],
+): Promise<{ nuevos: number; existentes: number; omitidos: number }> {
+  const { data: actuales, error } = await db
+    .from("catalogos")
+    .select("codigo, nombre")
+    .eq("empresa_id", empresaId)
+    .eq("tipo", "producto_finppi");
+  revisar(error, "catálogo");
+  const codigos = new Set((actuales ?? []).map((x) => x.codigo));
+  const nombres = new Set((actuales ?? []).map((x) => String(x.nombre).toLowerCase()));
+  const filas: Record<string, unknown>[] = [];
+  let omitidos = 0;
+  for (const p of productos) {
+    if (codigos.has(p.codigo)) continue;
+    // El catálogo no admite dos nombres iguales: se distingue con el código.
+    let nombre = p.nombre || p.codigo;
+    if (nombres.has(nombre.toLowerCase())) nombre = `${nombre} (${p.codigo})`;
+    if (nombres.has(nombre.toLowerCase())) {
+      omitidos++;
+      continue;
+    }
+    nombres.add(nombre.toLowerCase());
+    codigos.add(p.codigo);
+    filas.push({ empresa_id: empresaId, tipo: "producto_finppi", codigo: p.codigo.slice(0, 30), nombre: nombre.slice(0, 120), datos: { tipoFinppi: p.tipo, precio: p.precio, origen: "finppi" } });
+  }
+  if (filas.length) {
+    const { error: e2 } = await db.from("catalogos").insert(filas);
+    revisar(e2, "cargar productos");
+  }
+  return { nuevos: filas.length, existentes: productos.length - filas.length - omitidos, omitidos };
 }

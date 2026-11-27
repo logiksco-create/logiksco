@@ -133,6 +133,8 @@ export interface Repositorio {
   guardarCredencialesFe(usuario: string, clave: string, versionConsentimiento: string): Promise<void>;
   desconectarFe(): Promise<void>;
   probarConexionFe(): Promise<void>;
+  /** Encola la lectura (solo lectura) de los productos de Finppi al catálogo. */
+  sincronizarProductosFe(): Promise<void>;
   guardarTextosFe(t: { resolucion: string; condiciones: string }): Promise<void>;
   /** Monedas que ve el cliente por defecto en facturas en USD. */
   guardarPresentacionFe(p: Presentacion): Promise<void>;

@@ -150,6 +150,12 @@ export const PRODUCTS_LIST = {
   // columnas: 0 #, 1 Nombre, 2 Código, 3 Tipo, 4 Precio, 5 Descripción, 6 Opciones
   rows: 'main tbody tr',
 };
+// Paginación del listado: enlaces numéricos (por confirmar en vivo; respaldo: «siguiente»).
+export const PAGINATION = {
+  link: '.pagination__link, .pagination a, .pagination button',
+  next: '.pagination__link--arrow:not([disabled]), [aria-label="Next"], [aria-label="Siguiente"]',
+};
+
 export const PRODUCT_FORM = {
   name: 'input[name="name"]',
   code: 'input[name="code"]',

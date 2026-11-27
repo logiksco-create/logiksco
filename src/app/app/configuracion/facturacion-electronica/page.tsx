@@ -12,6 +12,7 @@ import {
   RefrescoEnVivo,
   SelectorPresentacion,
   SelectorModoEmision,
+  BotonTraerProductos,
 } from "@/components/app/factura-electronica";
 import { Insignia, Tarjeta, TarjetaEncabezado, clasesBoton } from "@/components/ui";
 import { fechaHora } from "@/lib/formato";
@@ -29,7 +30,7 @@ export default async function ConfiguracionFe() {
   const admin = repo.usuario.roles.includes("admin");
   const contable = admin || repo.usuario.roles.includes("contabilidad");
   const ultimo = trabajos[0];
-  const probando = !!ultimo && (ultimo.estado === "en_cola" || ultimo.estado === "corriendo");
+  const probando = trabajos.some((j) => j.estado === "en_cola" || j.estado === "corriendo");
   const s = cuenta?.instantanea ?? {};
   const conectada = !!cuenta?.tieneCredenciales;
 
@@ -97,7 +98,7 @@ export default async function ConfiguracionFe() {
               {ultimo && (
                 <div className="rounded-lg border border-border p-3">
                   <p className="mb-2 text-xs text-subtle">
-                    Última prueba · {fechaHora(ultimo.creadoEl)} · {ESTADOS_TRABAJO_FE[ultimo.estado]}
+                    {ultimo.tipo === "productos" ? "Productos de Finppi" : "Última prueba"} · {fechaHora(ultimo.creadoEl)} · {ESTADOS_TRABAJO_FE[ultimo.estado]}
                   </p>
                   <ol className="space-y-1 text-[13px]">
                     {ultimo.logs.map((l, i) => (
@@ -148,6 +149,11 @@ export default async function ConfiguracionFe() {
                 </Link>
               }
             />
+            {contable && (
+              <div className="px-5 pb-3">
+                <BotonTraerProductos activa={cuenta?.estado === "activa"} />
+              </div>
+            )}
             <ul className="divide-y divide-border border-t border-border text-[13px]">
               {productos.length === 0 && <li className="px-5 py-3 text-muted">Aún no hay productos.</li>}
               {productos.map((p) => (

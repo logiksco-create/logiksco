@@ -11,6 +11,7 @@ import {
   PAGINATION_TEXT,
   PRODUCTS_LIST,
   REACT_SELECT,
+  PAGINATION,
   SELECT_LABELS,
   SELECT_NAMES,
   ITEM_SELECT_NAMES,
@@ -428,6 +429,54 @@ export async function descargar(page: Page, fila: Locator, tipo: "pdf" | "xml"):
   if (!ruta) throw new ErrorBot("PDF_INVALID", `No se pudo descargar el ${tipo.toUpperCase()}`);
   const { readFile } = await import("node:fs/promises");
   return new Uint8Array(await readFile(ruta));
+}
+
+/* --------------------------- Productos (lectura) --------------------------- */
+
+export interface ProductoFinppi {
+  codigo: string;
+  nombre: string;
+  tipo?: string;
+  precio?: string;
+}
+
+/**
+ * Lee el listado de productos y servicios de Finppi, página por página.
+ * Solo lectura: nunca abre «Crear» ni edita.
+ * Columnas: 0 #, 1 Nombre, 2 Código, 3 Tipo, 4 Precio, 5 Descripción, 6 Opciones.
+ */
+export async function leerProductos(page: Page): Promise<ProductoFinppi[]> {
+  await page.goto(PRODUCTS_LIST.url, { waitUntil: "domcontentloaded", timeout: T.medio });
+  await existe(page.locator(PRODUCTS_LIST.rows), T.medio, "el listado de productos");
+  const vistos = new Map<string, ProductoFinppi>();
+  for (let pagina = 1; pagina <= 60; pagina++) {
+    const filas = page.locator(PRODUCTS_LIST.rows);
+    const n = await filas.count();
+    const antes = vistos.size;
+    for (let i = 0; i < n; i++) {
+      const c = (await filas.nth(i).locator("td").allInnerTexts()).map((x) => x.replace(/\s+/g, " ").trim());
+      if (c.length < 3 || !c[2]) continue;
+      vistos.set(c[2], { codigo: c[2], nombre: c[1], tipo: c[3] || undefined, precio: c[4] || undefined });
+    }
+    // Siguiente página: enlace con el número siguiente o la flecha.
+    const siguiente = page.locator(PAGINATION.link).filter({ hasText: new RegExp(`^\\s*${pagina + 1}\\s*$`) }).first();
+    const flecha = page.locator(PAGINATION.next).last();
+    const boton = (await siguiente.count()) ? siguiente : (await flecha.count()) ? flecha : null;
+    if (!boton || (vistos.size === antes && pagina > 1)) break;
+    const primera = await filas.first().innerText().catch(() => "");
+    await boton.click().catch(() => undefined);
+    // Esperar a que cambie la tabla.
+    const cambio = await page
+      .waitForFunction(
+        `(() => { const f = document.querySelector(${JSON.stringify(PRODUCTS_LIST.rows)}); return !!f && f.innerText !== ${JSON.stringify(primera)}; })()`,
+        undefined,
+        { timeout: T.corto },
+      )
+      .then(() => true)
+      .catch(() => false);
+    if (!cambio) break;
+  }
+  return [...vistos.values()];
 }
 
 /* ------------------------------ Healthcheck ------------------------------ */
