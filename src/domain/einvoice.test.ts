@@ -81,7 +81,7 @@ describe("facturación electrónica: datos fiscales", () => {
 
   it("detecta faltantes y formatos de Finppi", () => {
     expect(faltantesFiscales(fiscal)).toEqual([]);
-    expect(faltantesFiscales({ ...fiscal, ciudad: "Medellín" })).toContain("Ciudad con formato «MUNICIPIO / Departamento»");
+    expect(faltantesFiscales({ ...fiscal, ciudad: "Medallo" })).toContain("Ciudad de la lista de Finppi");
     expect(faltantesFiscales({ ...fiscal, email: "malo" })).toContain("Correo de facturación válido");
     expect(faltantesFiscales({ ...fiscal, celular: "" })).toContain("Celular");
   });
@@ -206,7 +206,17 @@ describe("valores exactos de las listas de Finppi", () => {
   });
   it("marca la ciudad que no existe en Finppi", async () => {
     const { faltantesFiscales } = await import("./einvoice");
-    expect(faltantesFiscales({ ciudad: "Medellin / Antioquia" }, op)).not.toContain("Ciudad tal como está en Finppi");
-    expect(faltantesFiscales({ ciudad: "Medallo / Antioquia" }, op)).toContain("Ciudad tal como está en Finppi");
+    expect(faltantesFiscales({ ciudad: "Medellin / Antioquia" }, op)).not.toContain("Ciudad de la lista de Finppi");
+    expect(faltantesFiscales({ ciudad: "Medallo / Antioquia" }, op)).toContain("Ciudad de la lista de Finppi");
+  });
+});
+
+describe("ciudades de Finppi incluidas en la plataforma", () => {
+  it("deduce la ciudad exacta cuando es única y no adivina si hay dos", async () => {
+    const { ciudadFinppi } = await import("./einvoice");
+    expect(ciudadFinppi("Medellin / Antioquia")).toBe("MEDELLÍN / Antioquia");
+    expect(ciudadFinppi("Medellín")).toBe("MEDELLÍN / Antioquia");
+    expect(ciudadFinppi("Rionegro, Antioquia")).toBe("RIONEGRO / Antioquia");
+    expect(ciudadFinppi("Rionegro")).toBeUndefined();
   });
 });

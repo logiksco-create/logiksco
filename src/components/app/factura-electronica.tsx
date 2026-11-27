@@ -18,7 +18,8 @@ import {
   Unplug,
   X,
 } from "lucide-react";
-import { FINPPI, TEXTO_CONSENTIMIENTO, separarNombre, valorEnLista } from "@/domain/einvoice";
+import { FINPPI, TEXTO_CONSENTIMIENTO, ciudadFinppi, separarNombre, valorEnLista } from "@/domain/einvoice";
+import { CIUDADES_FINPPI } from "@/domain/finppi-listas";
 import type { DatosFiscales, OpcionesClienteFinppi, Presentacion } from "@/domain/types";
 import { Combo } from "@/components/ui/combo";
 import {
@@ -89,9 +90,10 @@ export function FormDatosFiscales({
   const tiposDoc = lista(opciones?.tipoDocumento, FINPPI.tipoDocumento);
   const regimenes = lista(opciones?.regimen, FINPPI.regimen);
   const responsabilidades = lista(opciones?.responsabilidadFiscal, FINPPI.responsabilidadFiscal);
-  const ciudades = opciones?.ciudades ?? [];
+  const ciudades = opciones?.ciudades?.length ? opciones.ciudades : CIUDADES_FINPPI;
   const inicialEn = (v: string, l: string[]) => valorEnLista(v, l) ?? v;
-  const [ciudad, setCiudad] = useState(ciudades.length ? inicialEn(inicial.ciudad, ciudades) : inicial.ciudad);
+  // Solo se guarda una ciudad de la lista de Finppi.
+  const [ciudad, setCiudad] = useState(ciudadFinppi(inicial.ciudad, ciudades) ?? "");
   const [estado, accion, pendiente] = useActionState(guardarDatosFiscales.bind(null, terceroId), null);
   const enviar = useEnvio(accion);
   const [persona, setPersona] = useState(inicial.tipoPersona);
@@ -163,21 +165,15 @@ export function FormDatosFiscales({
         <Campo etiqueta="País">
           <Entrada name="pais" defaultValue={inicial.pais} required />
         </Campo>
-        <Campo etiqueta="Ciudad" ayuda={ciudades.length ? "De la lista de Finppi: escribe para buscar" : "Como en Finppi: MUNICIPIO / Departamento"}>
-          {ciudades.length ? (
-            <>
-              <Combo
-                valor={ciudad}
-                opciones={ciudades.map((c) => ({ valor: c, etiqueta: c }))}
-                alElegir={(o) => setCiudad(o.valor)}
-                placeholder="Busca el municipio…"
-                ariaLabel="Ciudad"
-              />
-              <input type="hidden" name="ciudad" value={ciudad} />
-            </>
-          ) : (
-            <Entrada name="ciudad" value={ciudad} onChange={(e) => setCiudad(e.target.value)} required placeholder="LA CEJA / Antioquia" />
-          )}
+        <Campo etiqueta="Ciudad" ayuda={ciudad ? "De la lista de Finppi" : inicial.ciudad ? `«${inicial.ciudad}» no está en Finppi: búscala en la lista` : "Escribe para buscar el municipio"}>
+          <Combo
+            valor={ciudad}
+            opciones={ciudades.map((c) => ({ valor: c, etiqueta: c }))}
+            alElegir={(o) => setCiudad(o.valor)}
+            placeholder="Busca el municipio…"
+            ariaLabel="Ciudad"
+          />
+          <input type="hidden" name="ciudad" value={ciudad} />
         </Campo>
         <Campo etiqueta="Dirección principal" className="sm:col-span-2">
           <Entrada name="direccion" defaultValue={inicial.direccion} required />

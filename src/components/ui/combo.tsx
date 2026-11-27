@@ -71,8 +71,10 @@ export function Combo({
   const conCrear = !!crear;
   const total = visibles.length + (conCrear ? 1 : 0);
 
+  const [capa, setCapa] = useState<HTMLElement>();
   // Posición del panel (en el body, para no quedar recortado por tarjetas).
   const ubicar = () => {
+    setCapa(caja.current?.closest("dialog") ?? document.body);
     const r = caja.current?.getBoundingClientRect();
     if (!r) return;
     const abajo = window.innerHeight - r.bottom;
@@ -218,7 +220,9 @@ export function Combo({
               </li>
             )}
           </ul>,
-          document.body,
+          // Dentro de un <dialog> modal la lista debe ir en el mismo diálogo
+          // (capa superior); en el body quedaría oculta detrás.
+          capa ?? document.body,
         )}
     </div>
   );

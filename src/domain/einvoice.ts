@@ -10,6 +10,7 @@
  * la aplicación como el worker del bot.
  */
 import type { DatosFiscales, IvaFinppi, LineaFactura, Moneda, OpcionesClienteFinppi, Presentacion } from "./types";
+import { CIUDADES_FINPPI } from "./finppi-listas";
 
 /* ------------------------------------------------------------------ */
 /* Catálogos exactos de Finppi (Anexo A.7 y A.8). El bot elige por texto. */
@@ -111,7 +112,7 @@ export function fiscalSugerido(c: {
 }): DatosFiscales {
   const contacto = c.contactos?.find((x) => x.correo) ?? c.contactos?.[0];
   const juridica = (c.fiscal?.tipoPersona ?? "Juridica") === "Juridica";
-  return {
+  const f: DatosFiscales = {
     tipoPersona: juridica ? "Juridica" : "Natural",
     tipoDocumento: juridica ? "Nit" : "Cédula de ciudadanía",
     numeroDocumento: documentoLimpio(c.nit),
@@ -122,11 +123,13 @@ export function fiscalSugerido(c: {
     regimen: "Responsable de iva",
     responsabilidadFiscal: "No aplica (ninguna de las anteriores)",
     pais: "Colombia",
-    ciudad: c.ciudad ?? "",
+    ciudad: ciudadFinppi(c.ciudad) ?? c.ciudad ?? "",
     direccion: c.direccion ?? "",
     telefono: contacto?.telefono ?? "",
     ...Object.fromEntries(Object.entries(c.fiscal ?? {}).filter(([, v]) => v !== undefined && v !== "")),
   };
+  // La ciudad siempre al texto exacto de Finppi cuando se puede deducir.
+  return { ...f, ciudad: ciudadFinppi(f.ciudad) ?? f.ciudad };
 }
 
 /** Texto comparable con Finppi: sin tildes, mayúsculas, espacios extra ni «*». */
@@ -135,23 +138,39 @@ export function normalizarFinppi(t: string): string {
 }
 
 /** El valor exacto de la lista de Finppi que corresponde a `v` (o undefined). */
-export function valorEnLista(v: string, lista: string[]): string | undefined {
+export function valorEnLista(v: string, lista: readonly string[]): string | undefined {
   return lista.find((x) => x === v) ?? lista.find((x) => normalizarFinppi(x) === normalizarFinppi(v));
 }
-const enLista = (v: string, lista: string[]) => valorEnLista(v, lista) !== undefined;
+const enLista = (v: string, lista: readonly string[]) => valorEnLista(v, lista) !== undefined;
+
+/**
+ * Ciudad de Finppi a partir de lo que escribió el usuario: «Medellín»,
+ * «Medellin, Antioquia» o «medellin / antioquia» → «MEDELLÍN / Antioquia».
+ * Solo si hay UNA coincidencia (Rionegro existe en Antioquia y Santander).
+ */
+export function ciudadFinppi(texto: string | undefined, lista: readonly string[] = CIUDADES_FINPPI): string | undefined {
+  if (!texto?.trim()) return undefined;
+  const exacta = valorEnLista(texto, lista);
+  if (exacta) return exacta;
+  const [mun, dep] = texto.split(/\s*[\/,]\s*/).map(normalizarFinppi);
+  const candidatas = lista.filter((c) => {
+    const [m, d] = c.split(" / ").map(normalizarFinppi);
+    return m === mun && (!dep || d === dep);
+  });
+  return candidatas.length === 1 ? candidatas[0] : undefined;
+}
 
 /**
  * Ajusta los datos fiscales al texto exacto de Finppi («Medellin / Antioquia»
  * → «MEDELLÍN / Antioquia»). Lo que no esté en las listas queda igual.
  */
-export function ajustarAFinppi<T extends Partial<DatosFiscales>>(f: T, op?: OpcionesClienteFinppi): T {
-  if (!op) return f;
+export function ajustarAFinppi<T extends Partial<DatosFiscales>>(f: T, op: OpcionesClienteFinppi = {}): T {
   const r = { ...f };
-  const a = <K extends "ciudad" | "regimen" | "responsabilidadFiscal" | "tipoDocumento">(k: K, l?: string[]) => {
+  const a = <K extends "regimen" | "responsabilidadFiscal" | "tipoDocumento">(k: K, l?: string[]) => {
     const v = r[k];
     if (v && l?.length) r[k] = (valorEnLista(v, l) ?? v) as T[K];
   };
-  a("ciudad", op.ciudades);
+  if (r.ciudad) r.ciudad = (ciudadFinppi(r.ciudad, op.ciudades?.length ? op.ciudades : CIUDADES_FINPPI) ?? r.ciudad) as T["ciudad"];
   a("regimen", op.regimen);
   a("responsabilidadFiscal", op.responsabilidadFiscal);
   a("tipoDocumento", op.tipoDocumento);
@@ -187,10 +206,9 @@ export function faltantesFiscales(f: Partial<DatosFiscales> | undefined, op?: Op
   if (d.tipoPersona === "Natural" && d.nombres?.trim() && d.apellidos?.trim() && mismoTexto(d.nombres, d.apellidos)) {
     faltan.push("Nombres y apellidos por separado (persona natural)");
   }
-  if (d.ciudad && !/^.+ \/ .+$/.test(d.ciudad)) faltan.push("Ciudad con formato «MUNICIPIO / Departamento»");
   // Con las listas reales de Finppi, cada valor debe existir allá (sin importar tildes ni mayúsculas).
-  const fuera = (v: string | undefined, lista?: string[]) => !!v && !!lista?.length && !enLista(v, lista);
-  if (fuera(d.ciudad, op?.ciudades)) faltan.push("Ciudad tal como está en Finppi");
+  const fuera = (v: string | undefined, lista?: readonly string[]) => !!v && !!lista?.length && !enLista(v, lista);
+  if (fuera(d.ciudad, op?.ciudades?.length ? op.ciudades : CIUDADES_FINPPI)) faltan.push("Ciudad de la lista de Finppi");
   if (fuera(d.regimen, op?.regimen) && !faltan.includes("Régimen de Finppi")) faltan.push("Régimen de Finppi");
   if (fuera(d.responsabilidadFiscal, op?.responsabilidadFiscal) && !faltan.includes("Responsabilidad fiscal de Finppi")) {
     faltan.push("Responsabilidad fiscal de Finppi");

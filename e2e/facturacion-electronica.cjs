@@ -35,7 +35,10 @@ let pagina;
   paso('la cotización muestra los datos que faltan para Finppi');
   await p.getByRole('button', { name: 'Completar' }).click();
   const d = p.locator('dialog[open]');
-  await d.locator('[name=ciudad]').fill('RIONEGRO / Antioquia');
+  // Ciudad: buscador con la lista de Finppi (dentro del diálogo).
+  const ciudad = d.getByRole('combobox', { name: 'Ciudad' });
+  await ciudad.click(); await ciudad.fill('rionegro');
+  await d.getByRole('listbox').getByRole('option', { name: 'RIONEGRO / Antioquia' }).click();
   await d.locator('[name=direccion]').fill('Km 2 vía Llanogrande');
   await d.locator('[name=celular]').fill('3001112233');
   await d.locator('[name=telefono]').fill('6045551111');

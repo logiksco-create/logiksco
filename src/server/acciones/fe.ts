@@ -2,6 +2,7 @@
 
 import { randomInt } from "node:crypto";
 import { revalidatePath } from "next/cache";
+import { CIUDADES_FINPPI } from "@/domain/finppi-listas";
 import { z } from "@/lib/zod";
 import { contexto, tieneRol } from "../contexto";
 import { ErrorNegocio } from "../datos/errores";
@@ -10,6 +11,7 @@ import {
   VERSION_CONSENTIMIENTO,
   bloqueosEmision,
   ajustarAFinppi,
+  ciudadFinppi,
   fiscalSugerido,
   payloadEmision,
   referenciaFactura,
@@ -63,7 +65,11 @@ const esquemaFiscal = z.object({
   regimen: z.enum(FINPPI.regimen as unknown as [string, ...string[]]),
   responsabilidadFiscal: z.enum(FINPPI.responsabilidadFiscal as unknown as [string, ...string[]]),
   pais: texto(60, "Escribe el país"),
-  ciudad: z.string().trim().regex(/^.+ \/ .+$/, "Ciudad como «MUNICIPIO / Departamento», ej. LA CEJA / Antioquia").max(120),
+  ciudad: z
+    .string()
+    .trim()
+    .transform((v) => ciudadFinppi(v) ?? v)
+    .refine((v) => CIUDADES_FINPPI.includes(v), "Elige la ciudad de la lista de Finppi"),
   direccion: texto(200, "Escribe la dirección principal"),
   telefono: z.string().trim().regex(/^\+?[0-9 ]{7,15}$/, "Teléfono inválido"),
 });
