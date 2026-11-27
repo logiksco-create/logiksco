@@ -123,8 +123,10 @@ function listado() {
     }
   };
   const b = app.querySelector('.table__search-input');
-  b.addEventListener('keydown', (e) => { if (e.key === 'Enter') pintar(b.value.trim()); });
-  pintar();
+  // Como Finppi: el filtro del buscador se mantiene al volver al listado por el menú.
+  b.addEventListener('keydown', (e) => { if (e.key === 'Enter') { S.filtroListado = b.value.trim(); guardar(); pintar(S.filtroListado); } });
+  b.value = S.filtroListado || '';
+  pintar(S.filtroListado || '');
 }
 
 /* ------------------------------- Formulario ------------------------------- */

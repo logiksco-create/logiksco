@@ -605,7 +605,7 @@ export async function buscarEnListado(page: Page, texto: string): Promise<FilaLi
   await buscador.fill(texto);
   await page.keyboard.press("Enter");
   await page.locator(LIST.resultsText).first().waitFor({ timeout: T.medio }).catch(() => undefined);
-  const filas = page.locator(LIST.rows);
+  const filas = filasListado(page);
   const n = await filas.count();
   for (let i = 0; i < n; i++) {
     const celdas = (await filas.nth(i).locator("td").allInnerTexts()).map((x) => x.trim());
@@ -661,6 +661,11 @@ export async function guardarBorrador(page: Page) {
   return { url: new URL(page.url()).pathname, mensajes };
 }
 
+/** Filas del listado; si no están dentro de <main>, en cualquier tabla. */
+function filasListado(page: Page): Locator {
+  return page.locator(`${LIST.rows}, tbody tr`).filter({ has: page.locator("td") });
+}
+
 /** ¿La celda es este cliente? Acepta el nombre cortado: «Luis Miguel Ortiz R...». */
 export function mismoCliente(celda: string, nombre: string): boolean {
   const c = normalizar(celda);
@@ -673,7 +678,7 @@ export function mismoCliente(celda: string, nombre: string): boolean {
 
 /** Texto de las primeras filas del listado (para explicar si no se encontró algo). */
 async function resumenListado(page: Page): Promise<string> {
-  const filas = page.locator(LIST.rows);
+  const filas = filasListado(page);
   const n = Math.min(await filas.count().catch(() => 0), 5);
   const r: string[] = [];
   for (let i = 0; i < n; i++) r.push((await filas.nth(i).locator("td").allInnerTexts()).map((x) => x.trim()).filter(Boolean).join(" | "));
@@ -699,8 +704,15 @@ export async function esperarBorrador(
       if (f && esBorrador(f.estado)) return f;
     }
     await irAFacturas(page).catch(() => undefined);
-    await page.locator(LIST.rows).first().waitFor({ timeout: T.corto }).catch(() => undefined);
-    const filas = page.locator(LIST.rows);
+    // El filtro del buscador se queda puesto al volver al listado: se borra.
+    const buscador = page.locator(LIST.search).first();
+    if (await buscador.isVisible().catch(() => false)) {
+      await buscador.fill("");
+      await page.keyboard.press("Enter");
+    }
+    await filasListado(page).first().waitFor({ timeout: T.medio }).catch(() => undefined);
+    await page.waitForTimeout(1000);
+    const filas = filasListado(page);
     const n = await filas.count().catch(() => 0);
     for (let i = 0; i < n; i++) {
       const celdas = (await filas.nth(i).locator("td").allInnerTexts()).map((x) => x.trim());
