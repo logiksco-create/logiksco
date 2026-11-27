@@ -122,6 +122,11 @@ export const CLIENT_PANEL = {
   nationalId: 'input[name="nationalID"]',
   name: 'input[name="name"]',
   lastname: 'input[name="lastname"]',
+  // Persona jurídica: Finppi cambia «Nombres/Apellidos» por la razón social.
+  // Se prueba por name y, si no, por la etiqueta visible del campo.
+  nameAlternatives: ['name', 'businessName', 'companyName', 'legalName', 'socialReason', 'razonSocial', 'tradeName'],
+  nameLabels: ['Razón social', 'Razón Social', 'Nombre o razón social', 'Nombres', 'Nombre'],
+  lastnameLabels: ['Apellidos', 'Apellido'],
   email: 'input[name="contacts[0].email"]',
   phone: 'input[name="contacts[0].phoneNumber.number"]',
   locationName: 'input[name="locations.0.name"]',

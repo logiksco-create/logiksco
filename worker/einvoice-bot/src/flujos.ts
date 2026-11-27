@@ -29,7 +29,14 @@ async function conSesion<T>(job: Job, fn: (page: Page, secretos: string[]) => Pr
     await finppi.iniciarSesion(page, cred.usuario, cred.clave);
     await db.actualizarCuenta(job.empresa_id, { ultimo_login_ok: new Date().toISOString() });
     return await fn(page, secretos);
-  } catch (e) {
+  } catch (e0) {
+    // Un elemento de Finppi que no aparece no se arregla reintentando: se
+    // trata como selector no encontrado y se guarda la estructura de la página.
+    const msg = e0 instanceof Error ? e0.message : "";
+    const e =
+      !(e0 instanceof ErrorBot) && /waiting for (locator|getBy)/.test(msg)
+        ? new ErrorBot("SELECTOR_NOT_FOUND", `Finppi no mostró ${msg.match(/waiting for (.+)/)?.[1]?.trim() ?? "un elemento esperado"}`)
+        : e0;
     if (e instanceof ErrorBot && ["SELECTOR_NOT_FOUND", "PLATFORM_VALIDATION_ERROR", "VALUES_MISMATCH"].includes(e.codigo)) {
       await guardarDiagnostico(job, page, secretos).catch((x) => console.error("[diagnóstico]", x instanceof Error ? x.message : x));
     }

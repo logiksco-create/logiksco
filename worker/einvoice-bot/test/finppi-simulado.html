@@ -191,8 +191,17 @@ function formulario() {
 
 function panelCliente() {
   const p = document.createElement('div'); p.id = 'panel';
-  const campos = ['nationalID', 'name', 'lastname', 'contacts[0].email', 'contacts[0].phoneNumber.number', 'locations.0.name', 'locations.0.address.address_line1', 'locations.0.address.address_line2'];
-  p.append(campo('Tipo de persona', selector(['Natural', 'Juridica'])), campo('Tipo de documento', selector(['Cédula de ciudadanía', 'Nit'])));
+  const campos = ['nationalID', 'contacts[0].email', 'contacts[0].phoneNumber.number', 'locations.0.name', 'locations.0.address.address_line1', 'locations.0.address.address_line2'];
+  // Como Finppi: «Nombres/Apellidos» para persona natural; «Razón social» (otro name) para jurídica.
+  const nombres = document.createElement('div');
+  const pintarNombres = (t) => {
+    nombres.innerHTML = '';
+    if (t === 'Juridica') nombres.append(campo('Razón social', input('companyLegalName')));
+    else nombres.append(campo('Nombres', input('name')), campo('Apellidos', input('lastname')));
+  };
+  pintarNombres('Natural');
+  p.append(campo('Tipo de persona', selector(['Natural', 'Juridica'], pintarNombres)), campo('Tipo de documento', selector(['Cédula de ciudadanía', 'Nit'])));
+  p.append(nombres);
   for (const c of campos) p.append(input(c));
   p.append(campo('Régimen', selector(['Responsable de iva', 'No responsable de iva'])), campo('Responsabilidad fiscal', selector(['No aplica (ninguna de las anteriores)', 'Gran contribuyente'])),
     campo('País', selector(['Colombia', 'Ecuador'])), campo('Ciudad', selector(['LA CEJA / Antioquia', 'MEDELLÍN / Antioquia', 'RIONEGRO / Antioquia'])));
@@ -200,7 +209,8 @@ function panelCliente() {
   crear.onclick = (e) => {
     e.preventDefault();
     const v = (n) => p.querySelector(`[name="${n}"]`).value;
-    S.clientes.push({ doc: v('nationalID'), nombre: v('name'), dir: v('locations.0.address.address_line1'), tel: v('contacts[0].phoneNumber.number') }); guardar();
+    const nom = p.querySelector('[name="name"]') ? v('name') + ' ' + v('lastname') : v('companyLegalName');
+    S.clientes.push({ doc: v('nationalID'), nombre: nom.trim(), dir: v('locations.0.address.address_line1'), tel: v('contacts[0].phoneNumber.number') }); guardar();
     p.innerHTML = 'Cliente creado';
     setTimeout(() => p.remove(), 300);
   };

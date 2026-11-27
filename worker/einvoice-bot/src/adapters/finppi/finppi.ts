@@ -44,6 +44,33 @@ async function existe(l: Locator, ms = T.corto, que = "elemento"): Promise<Locat
   }
 }
 
+/**
+ * Campo de texto visible por su name (en orden) o, si no, por la etiqueta
+ * que Finppi muestra encima. Espera un poco: algunos campos aparecen solo
+ * después de elegir el tipo de persona.
+ */
+async function campoTexto(
+  page: Page,
+  o: { names: readonly string[]; etiquetas?: readonly string[]; que: string; obligatorio?: boolean; ms?: number },
+): Promise<Locator | null> {
+  const limite = Date.now() + (o.ms ?? T.corto);
+  const libre = 'not(@type="hidden") and not(starts-with(@id,"react-select"))';
+  do {
+    for (const n of o.names) {
+      const l = page.locator(`input[name="${n}"]:visible, textarea[name="${n}"]:visible`).first();
+      if (await l.count()) return l;
+    }
+    for (const e of o.etiquetas ?? []) {
+      const sel = LABEL_TAGS.flatMap((tag) => [`${tag}:text-is("${e}")`, `${tag}:text-is("${e}*")`, `${tag}:text-is("${e} *")`]).join(", ");
+      const l = page.locator(sel).first().locator(`xpath=following::input[${libre}][1]`);
+      if ((await l.count()) && (await l.isVisible().catch(() => false))) return l;
+    }
+    await page.waitForTimeout(300);
+  } while (Date.now() < limite);
+  if (o.obligatorio === false) return null;
+  throw new ErrorBot("SELECTOR_NOT_FOUND", `No se encontró el campo «${o.que}» en Finppi`);
+}
+
 /* ------------------------------ Sesión ------------------------------ */
 
 export async function iniciarSesion(page: Page, usuario: string, clave: string) {
@@ -224,8 +251,23 @@ async function crearClienteEnPanel(page: Page, c: PayloadEmision["cliente"]) {
   await elegirPorEtiqueta(page, L.personType, c.tipoPersona);
   await elegirPorEtiqueta(page, L.docType, c.tipoDocumento);
   await page.locator(CLIENT_PANEL.nationalId).fill(c.numeroDocumento);
-  await page.locator(CLIENT_PANEL.name).fill(c.nombres);
-  await page.locator(CLIENT_PANEL.lastname).fill(c.apellidos);
+  const juridica = c.tipoPersona === "Juridica";
+  const nombre = await campoTexto(page, {
+    names: CLIENT_PANEL.nameAlternatives,
+    etiquetas: CLIENT_PANEL.nameLabels,
+    que: juridica ? "Razón social" : "Nombres",
+  });
+  await nombre!.fill(c.nombres);
+  // Apellidos: solo personas naturales (en jurídica Finppi no lo pide).
+  const apellido = await campoTexto(page, {
+    names: ["lastname"],
+    etiquetas: CLIENT_PANEL.lastnameLabels,
+    que: "Apellidos",
+    obligatorio: !juridica,
+    ms: juridica ? 1_000 : undefined,
+  });
+  if (apellido && c.apellidos && c.apellidos !== c.nombres) await apellido.fill(c.apellidos);
+  else if (apellido && !juridica) await apellido.fill(c.apellidos);
   await page.locator(CLIENT_PANEL.email).fill(c.email);
   await page.locator(CLIENT_PANEL.phone).fill(c.celular);
   await elegirPorEtiqueta(page, L.regime, c.regimen);
@@ -238,12 +280,12 @@ async function crearClienteEnPanel(page: Page, c: PayloadEmision["cliente"]) {
   await elegir(page, ciudad, c.ciudad, { escribir: c.ciudad.split(" / ")[0] });
   await page.locator(CLIENT_PANEL.address1).fill(c.direccion);
   // Lectura de vuelta antes de crear (§9C.2 paso 4).
-  for (const [sel, valor] of [
-    [CLIENT_PANEL.nationalId, c.numeroDocumento],
-    [CLIENT_PANEL.name, c.nombres],
-    [CLIENT_PANEL.email, c.email],
+  for (const [campo, valor] of [
+    [page.locator(CLIENT_PANEL.nationalId), c.numeroDocumento],
+    [nombre!, c.nombres],
+    [page.locator(CLIENT_PANEL.email), c.email],
   ] as const) {
-    if ((await page.locator(sel).inputValue()).trim() !== valor.trim()) {
+    if ((await campo.inputValue()).trim() !== valor.trim()) {
       throw new ErrorBot("VALUES_MISMATCH", "Los datos del cliente no quedaron como se escribieron");
     }
   }

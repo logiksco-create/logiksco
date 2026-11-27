@@ -181,6 +181,17 @@ describe.skipIf(!hayNavegador)("bot contra Finppi simulado", () => {
     expect(h.logs.join("\n")).toContain("Cliente creado en Finppi: Tecnomédica Andina SAS");
   }, 90_000);
 
+  it("cliente nuevo persona natural: llena nombres y apellidos", async () => {
+    h.logs.length = 0;
+    h.libro = [];
+    const nuevo = {
+      ...payload,
+      cliente: { ...payload.cliente, tipoPersona: "Natural", tipoDocumento: "Cédula de ciudadanía", numeroDocumento: "1017000111", nombres: "Ana María", apellidos: "Gómez Ruiz", ciudad: "MEDELLÍN / Antioquia" },
+    };
+    await flujos.emitir(job({ dry_run: true, payload: nuevo }));
+    expect(h.logs.join("\n")).toContain("Cliente creado en Finppi: Ana María");
+  }, 90_000);
+
   it("reconciliar: si no la encuentra aceptada, pide revisión y nunca emite", async () => {
     h.facturas["fac-2"] = { referencia: "LG-NOEXIS", numero_esperado: "SETT9" };
     await flujos.reconciliar(job({ tipo: "reconciliar", factura_id: "fac-2" }));
