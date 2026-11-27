@@ -148,7 +148,10 @@ function formulario() {
     for (const f of filas) { const b = Number(f.precio.value) * Number(f.cant.value); sub += b; iva += Math.round(b * PCT[f.iva.valor || 'Ninguno']) / 100; }
     const t = Math.round((sub + iva) * 100) / 100;
     const v = { 'Subtotal': sub, 'Descuento detalle (-)': 0, 'Descuentos globales (-)': 0, 'Subtotal base gravable': sub, 'INC (+)': 0, 'IVA (+)': iva, 'Retención en la Fuente (-)': 0, 'Rete IVA (-)': 0, 'Rete ICA (-)': NaN, 'Total': t };
-    totales.innerHTML = Object.entries(v).map(([k, x]) => `<div><span>${k}</span> <span>${Number.isNaN(x) ? '$NaN' : fmt(x)}</span></div>`).join('');
+    const pintar = (w) => { totales.innerHTML = Object.entries(w).map(([k, x]) => `<div><span>${k}</span> <span>${Number.isNaN(x) ? '$NaN' : fmt(x)}</span></div>`).join(''); };
+    // Como Finppi: mientras recalcula muestra «$NaN» un instante.
+    pintar({ ...v, 'Subtotal': NaN, 'Total': NaN });
+    clearTimeout(form.recalc); form.recalc = setTimeout(() => pintar(v), 1200);
     form.total = t;
   };
   const agregar = () => {

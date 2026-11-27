@@ -502,13 +502,36 @@ export async function llenarFactura(page: Page, p: PayloadEmision) {
 }
 
 /** Lee los totales del formulario (tras cargar los ítems). NaN = fallo. */
-export async function leerTotales(page: Page): Promise<Record<string, number>> {
+async function leerTotalesUnaVez(page: Page): Promise<Record<string, number>> {
   const r: Record<string, number> = {};
   for (const etiqueta of TOTALS_LABELS) {
-    const el = page.getByText(etiqueta, { exact: true }).last();
+    // Solo la etiqueta visible (puede haber copias ocultas, p. ej. en modales).
+    const el = page.getByText(etiqueta, { exact: true }).filter({ visible: true }).last();
     if (!(await el.count())) continue;
     const valor = await el.locator("xpath=following::*[normalize-space(text())][1]").innerText().catch(() => "NaN");
     r[etiqueta] = leerValorFinppi(valor);
+  }
+  return r;
+}
+
+/**
+ * Totales del formulario. Finppi los recalcula después de cada cambio y por un
+ * instante puede mostrar «NaN»: se lee hasta que no haya NaN y dos lecturas
+ * seguidas coincidan (máx. ~15 s). Si sigue en NaN, se devuelve NaN (aborta).
+ */
+export async function leerTotales(page: Page): Promise<Record<string, number>> {
+  // Sacar el foco del último campo para que Finppi recalcule.
+  await page.keyboard.press("Tab").catch(() => undefined);
+  let anterior = "";
+  let r: Record<string, number> = {};
+  for (let k = 0; k < 20; k++) {
+    await page.waitForTimeout(750);
+    r = await leerTotalesUnaVez(page);
+    const firma = JSON.stringify(r);
+    // Los que se comparan con lo aprobado no pueden ser NaN.
+    const sinNaN = ["Subtotal", "IVA (+)", "Total"].every((k) => !(k in r) || !Number.isNaN(r[k]));
+    if ("Total" in r && sinNaN && firma === anterior) return r;
+    anterior = firma;
   }
   if (!("Total" in r)) throw new ErrorBot("SELECTOR_NOT_FOUND", "No se encontraron los totales del formulario");
   return r;
