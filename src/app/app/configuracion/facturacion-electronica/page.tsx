@@ -80,6 +80,11 @@ export default async function ConfiguracionFe() {
                   <p className="mt-3 text-xs text-white/50">
                     Leído {fechaHora(s.leidoEl)}. El número es una referencia: cambia si alguien emite directamente en Finppi.
                   </p>
+                  <p className="mt-1 text-xs text-white/50">
+                    {s.opcionesCliente?.ciudades?.length
+                      ? `Listas para crear clientes: ${s.opcionesCliente.ciudades.length} ciudades, ${s.opcionesCliente.regimen?.length ?? 0} regímenes, ${s.opcionesCliente.tipoDocumento?.length ?? 0} tipos de documento.`
+                      : "Aún no se han leído las listas de Finppi para crear clientes: dale «Actualizar datos de Finppi»."}
+                  </p>
                 </>
               ) : (
                 <p className="mt-2 text-[13.5px] text-white/70">

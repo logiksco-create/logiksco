@@ -547,7 +547,7 @@ export function AccionesConexion({ admin, conectada }: { admin: boolean; conecta
       <div className="flex flex-wrap gap-2">
         {conectada && (
           <Boton variante="secundario" tamano="sm" disabled={pendiente} onClick={() => iniciar(async () => setR(await probarConexionFinppi()))}>
-            {pendiente ? <LoaderCircle className="animate-spin" /> : <RefreshCw />} Actualizar
+            {pendiente ? <LoaderCircle className="animate-spin" /> : <RefreshCw />} Actualizar datos de Finppi
           </Boton>
         )}
         {admin && conectada && (
