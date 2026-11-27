@@ -39,7 +39,11 @@ async function verificarEmpresa(job: Job, page: Page) {
   const cabecera = await finppi.textoCabecera(page);
   if (!mismoNit(cabecera, emp.nit)) {
     await db.actualizarCuenta(job.empresa_id, { estado: "empresa_distinta" });
-    throw new ErrorBot("WRONG_COMPANY", `La cuenta de Finppi no corresponde al NIT ${emp.nit}`);
+    const visto = cabecera.match(/NIT\D{0,6}([\d.\-\s]{6,20})/i)?.[1]?.trim();
+    throw new ErrorBot(
+      "WRONG_COMPANY",
+      `La cuenta de Finppi no corresponde al NIT de la empresa en LOGIKS (${emp.nit})${visto ? `: Finppi muestra NIT ${visto}` : ""}`,
+    );
   }
   await db.log(job, "empresa", `Empresa verificada: ${emp.razon_social}`);
   return emp;
