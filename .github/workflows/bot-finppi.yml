@@ -85,7 +85,11 @@ jobs:
 
       - name: Chromium
         if: steps.cola.outputs.vacia != 'si'
-        run: npx playwright install --with-deps chromium
+        # El repositorio de Microsoft del runner a veces responde 403 y rompe
+        # «apt-get update»; no se necesita para Chromium.
+        run: |
+          sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list /etc/apt/sources.list.d/microsoft*.list
+          npx playwright install --with-deps chromium
 
       - name: Procesar la cola
         if: steps.cola.outputs.vacia != 'si'
