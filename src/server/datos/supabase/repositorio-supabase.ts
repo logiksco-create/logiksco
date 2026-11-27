@@ -981,6 +981,7 @@ export class SupabaseRepositorio implements Repositorio {
       resolucion: data.resolucion ?? undefined,
       condiciones: data.condiciones ?? undefined,
       presentacion: data.presentacion ?? undefined,
+      modoEmision: data.modo_emision ?? "borrador",
     };
   }
 
@@ -1001,6 +1002,16 @@ export class SupabaseRepositorio implements Repositorio {
 
   async probarConexionFe() {
     const { error } = await this.db.rpc("fe_probar_conexion", { p_empresa: this.empresa.id });
+    falla(error);
+  }
+
+  async guardarModoEmisionFe(m: "borrador" | "real") {
+    const { error } = await this.db.rpc("fe_guardar_modo", { p_empresa: this.empresa.id, p_modo: m });
+    falla(error);
+  }
+
+  async descartarPruebaFe(facturaId: string) {
+    const { error } = await this.db.rpc("fe_descartar_prueba", { p_factura: facturaId });
     falla(error);
   }
 

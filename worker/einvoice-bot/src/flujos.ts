@@ -1,4 +1,4 @@
-import { createHmac } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 import type { Page } from "playwright";
 import { config } from "./config.ts";
 import * as db from "./db.ts";
@@ -82,7 +82,10 @@ export async function healthcheck(job: Job) {
 export async function emitir(job: Job) {
   if (!job.factura_id) throw new Error("Trabajo de emisión sin factura");
   const p = job.payload as unknown as PayloadEmision;
-  const pruebaPorSeguridad = !job.dry_run && !config.permitirEmision;
+  // «borrador» (modo prueba) pulsa «Guardar»; «real» pulsa «Enviar» y además
+  // exige FE_PERMITIR_EMISION=si en el servidor del bot.
+  const modo = p.modo === "real" ? "real" : "borrador";
+  const pruebaPorSeguridad = !job.dry_run && modo === "real" && !config.permitirEmision;
   const dryRun = job.dry_run || pruebaPorSeguridad;
   let despuesDeEnviar = false;
 
@@ -100,8 +103,9 @@ export async function emitir(job: Job) {
       const serie = partirConsecutivo(ofrecido);
       const ultimo = serie ? await db.ultimoConsecutivo(job.empresa_id, serie.prefijo) : null;
       const v = verificarConsecutivo(ofrecido, ultimo);
-      if (!v.ok) throw new ErrorBot("CONSECUTIVE_GAP", v.mensaje);
-      await db.log(job, "consecutivo", `Finppi ofrece ${ofrecido}: es el siguiente esperado`);
+      if (!v.ok && modo === "real") throw new ErrorBot("CONSECUTIVE_GAP", v.mensaje);
+      if (!v.ok) await db.log(job, "consecutivo", `${v.mensaje} (modo prueba: se continúa)`, "aviso");
+      else await db.log(job, "consecutivo", `Finppi ofrece ${ofrecido}: es el siguiente esperado`);
       await finppi.elegirNumero(page, ofrecido);
 
       const cliente = await finppi.elegirCliente(page, p.cliente, p.crearCliente);
@@ -149,6 +153,13 @@ export async function emitir(job: Job) {
         return;
       }
 
+      if (modo === "borrador") {
+        await guardarComoBorrador(job, page, p, ofrecido, () => {
+          despuesDeEnviar = true;
+        });
+        return;
+      }
+
       // Punto de no retorno: se marca en BD y se espera la escritura ANTES del clic.
       await db.actualizarFactura(job.factura_id!, { numero_esperado: ofrecido });
       await finppi.enviar(page, { numero: ofrecido, total: p.totales.total }, async () => {
@@ -166,6 +177,67 @@ export async function emitir(job: Job) {
   } catch (e) {
     await manejarError(job, e, despuesDeEnviar);
   }
+}
+
+/**
+ * MODO PRUEBA: mismo proceso que la emisión, pero se pulsa «Guardar». El
+ * documento queda como borrador en Finppi (sin DIAN, sin CUFE) y en LOGIKS
+ * como factura de prueba. Además responde una pregunta de la Fase 0: ¿un
+ * borrador consume consecutivo?
+ */
+async function guardarComoBorrador(job: Job, page: Page, p: PayloadEmision, ofrecido: string, marcar: () => void) {
+  await db.actualizarFactura(job.factura_id!, { numero_esperado: ofrecido });
+  await db.actualizarJob(job.id, { punto_no_retorno: true, adapter_version: ADAPTER_VERSION });
+  await db.log(job, "guardar", "Modo prueba: se pulsa «Guardar» (borrador). No va a la DIAN.");
+  marcar();
+  await finppi.guardarBorrador(page);
+
+  const fila = await finppi.esperarBorrador(page, [ofrecido, p.referencia]);
+  await db.log(job, "resultado", `Guardada en Finppi como borrador ${fila.numero || ""}${fila.porRecencia ? " (identificado como el borrador más reciente)" : ""}`, fila.porRecencia ? "aviso" : "info");
+
+  let pdfRuta: string | null = null;
+  let sha: string | null = null;
+  try {
+    const pdf = await finppi.descargar(page, fila.fila, "pdf");
+    pdfRuta = `${job.empresa_id}/fe/${job.factura_id}/borrador.pdf`;
+    await db.subirArchivo(pdfRuta, pdf, "application/pdf");
+    sha = createHash("sha256").update(pdf).digest("hex");
+    await db.log(job, "archivos", "PDF del borrador guardado");
+  } catch {
+    await db.log(job, "archivos", "Finppi no ofrece PDF para el borrador", "aviso");
+  }
+
+  // ¿Guardar consumió el consecutivo? (pregunta abierta de la Fase 0)
+  let despues: string | null = null;
+  try {
+    await finppi.irAFacturas(page);
+    await finppi.abrirFormularioFactura(page);
+    despues = await finppi.leerNumeroOfrecido(page);
+    await finppi.irAFacturas(page);
+    await db.log(
+      job,
+      "consecutivo",
+      despues === ofrecido
+        ? `El borrador NO consumió consecutivo: Finppi sigue ofreciendo ${ofrecido}`
+        : `El borrador SÍ consumió consecutivo: antes ${ofrecido}, ahora ${despues}`,
+      despues === ofrecido ? "info" : "aviso",
+    );
+  } catch {
+    await db.log(job, "consecutivo", "No se pudo releer el consecutivo después de guardar", "aviso");
+  }
+
+  await db.actualizarFactura(job.factura_id!, {
+    estado: "emitida",
+    simulada: true,
+    numero_esperado: fila.numero || ofrecido,
+    fecha_validacion: new Date().toISOString(),
+    pdf_finppi_path: pdfRuta,
+    pdf_finppi_sha256: sha,
+    error: null,
+    error_codigo: null,
+  });
+  await db.actualizarJob(job.id, { resultado: { borrador: true, numero: fila.numero || ofrecido, numeroDespues: despues } });
+  await avisarLogiks(job.factura_id!);
 }
 
 /** Descarga PDF/XML originales, valida y deja la factura emitida. */

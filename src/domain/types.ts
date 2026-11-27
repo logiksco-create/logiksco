@@ -491,6 +491,8 @@ export interface CuentaFe {
   condiciones?: string;
   /** Monedas que ve el cliente en facturas en USD (por defecto de la empresa). */
   presentacion?: Presentacion;
+  /** «borrador»: modo prueba (el bot pulsa «Guardar»); «real»: va a la DIAN. */
+  modoEmision?: "borrador" | "real";
 }
 
 /**

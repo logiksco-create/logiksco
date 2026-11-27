@@ -25,9 +25,14 @@ LOGIKS (Vercel) ──encola──▶ fe_jobs (Supabase) ◀──reclama── 
   `fe_consecutivos`; si no, bloquea (`CONSECUTIVE_GAP`) y pide revisión.
 - **Un trabajo por empresa** y **una emisión activa por factura** (índices
   únicos en la base). Pausa global con 2 `SELECTOR_NOT_FOUND` seguidos.
-- **Modo prueba por defecto**: mientras `FE_PERMITIR_EMISION` no sea `si`,
-  toda emisión se detiene antes de «Enviar».
-- Nunca usa «Guardar», «Duplicar», «Reenviar» ni «Eliminar» de Finppi.
+- **Modo de emisión por empresa** (Configuración → Facturación electrónica):
+  - **Prueba** (por defecto): el bot hace todo el proceso y pulsa **«Guardar»**
+    (borrador) en vez de «Enviar». Nada va a la DIAN; la factura queda en
+    LOGIKS como prueba (sin CUFE, sin envío al cliente) y se puede descartar.
+    El bot también registra si el borrador consumió consecutivo.
+  - **Real**: pulsa «Enviar». Además exige `FE_PERMITIR_EMISION=si` en el
+    servidor del bot; si no, se detiene antes de «Enviar».
+- Nunca usa «Duplicar», «Reenviar» ni «Eliminar» de Finppi; «Guardar» solo en modo prueba.
 - Las credenciales viven en Supabase Vault; solo `fe_credenciales()` con la
   llave de servicio las lee. Los logs enmascaran correos y claves.
 - Todos los selectores están en `src/adapters/finppi/selectors.ts`.

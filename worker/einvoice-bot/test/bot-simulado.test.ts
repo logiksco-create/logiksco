@@ -87,6 +87,7 @@ async function pdfMinimo(numero: string): Promise<Buffer> {
 
 const payload = {
   referencia: "LG-PRUEB2",
+  modo: "real",
   nitEmisor: "901456789",
   tipoFactura: "Factura de venta nacional",
   moneda: "COP - Peso colombiano",
@@ -176,6 +177,23 @@ describe.skipIf(!hayNavegador)("bot contra Finppi simulado", () => {
     expect(h.facturas["fac-2"].estado).toBe("revision");
     expect(h.facturas["fac-2"].numero).toBeUndefined();
   }, 60_000);
+
+  it("modo prueba: pulsa «Guardar», queda como borrador y la factura de prueba en LOGIKS", async () => {
+    h.logs.length = 0;
+    h.libro = [];
+    h.facturas["fac-3"] = {};
+    await flujos.emitir(job({ factura_id: "fac-3", payload: { ...payload, modo: "borrador" } }));
+    const f = h.facturas["fac-3"];
+    expect(f.estado).toBe("emitida");
+    expect(f.simulada).toBe(true);
+    expect(f.cufe).toBeUndefined();
+    const texto = h.logs.join("\n");
+    expect(texto).toContain("Modo prueba: se pulsa «Guardar»");
+    expect(texto).toContain("Guardada en Finppi como borrador");
+    expect(texto).toContain("El borrador NO consumió consecutivo");
+    expect(texto).not.toContain("Punto de no retorno: «Enviar»");
+    expect(h.libro).toHaveLength(0);
+  }, 120_000);
 
   it("cero saltos: si Finppi ofrece un número que no sigue al libro, bloquea", async () => {
     h.libro = [{ numero: "SETT5", prefijo: "SETT", seq: 5, estado: "emitido" }];

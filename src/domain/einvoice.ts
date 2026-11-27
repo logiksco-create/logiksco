@@ -372,6 +372,8 @@ export function verificarConsecutivo(ofrecido: string, ultimoConocido: string | 
 
 export interface PayloadEmision {
   referencia: string;
+  /** «borrador»: modo prueba, el bot pulsa «Guardar». «real»: pulsa «Enviar» (DIAN). */
+  modo?: "borrador" | "real";
   /** NIT de la empresa emisora: el bot verifica que sea la cuenta correcta. */
   nitEmisor: string;
   tipoFactura: string;

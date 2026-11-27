@@ -136,6 +136,9 @@ export interface Repositorio {
   guardarTextosFe(t: { resolucion: string; condiciones: string }): Promise<void>;
   /** Monedas que ve el cliente por defecto en facturas en USD. */
   guardarPresentacionFe(p: Presentacion): Promise<void>;
+  guardarModoEmisionFe(m: "borrador" | "real"): Promise<void>;
+  /** Devuelve a prefactura una factura de prueba (sin CUFE). */
+  descartarPruebaFe(facturaId: string): Promise<void>;
   /** Congela los valores aprobados y encola la emisión (o la prueba sin emitir). */
   encolarEmision(facturaId: string, d: { payload: PayloadEmision; dryRun: boolean; enviarAlEmitir: boolean }): Promise<void>;
   /** Trabajos del bot (de una factura, o los de conexión si no se indica). */

@@ -35,6 +35,7 @@ import {
   EstadoBot,
   RefrescoEnVivo,
   SelectorPresentacion,
+  BotonDescartarPrueba,
 } from "@/components/app/factura-electronica";
 import { EstadoFacturaBadge } from "@/components/estado-factura";
 import { Insignia, Tarjeta, TarjetaEncabezado, clasesBoton } from "@/components/ui";
@@ -136,6 +137,8 @@ export default async function DetalleFactura({ params }: PageProps<"/app/factura
   ];
   const plazo = f.vencimiento ? Math.max(0, diasEntre(hoy, f.vencimiento)) : cliente?.acuerdo?.plazoPagoDias ?? 0;
   const modo = presentacionEfectiva(f, cuenta);
+  /** Factura de prueba: el bot pulsó «Guardar» en Finppi (sin DIAN ni CUFE). */
+  const prueba = !!f.simulada && !f.cufe;
   const trmTexto = f.trmReferencia?.toLocaleString("es-CO", { minimumFractionDigits: 2 });
 
   return (
@@ -149,9 +152,9 @@ export default async function DetalleFactura({ params }: PageProps<"/app/factura
         }
         titulo={
           <span className="flex flex-wrap items-center gap-3">
-            <span className="font-mono">{f.numero ?? `Prefactura PF-${f.id.slice(0, 6).toUpperCase()}`}</span>
+            <span className="font-mono">{f.numero ?? (prueba ? f.numeroEsperado ?? "Prueba" : `Prefactura PF-${f.id.slice(0, 6).toUpperCase()}`)}</span>
             <EstadoFacturaBadge estado={f.estado} />
-            {f.simulada && <Insignia tono="alerta">Simulación</Insignia>}
+            {f.simulada && <Insignia tono="alerta">{prueba ? "Prueba · borrador en Finppi" : "Simulación"}</Insignia>}
           </span>
         }
         descripcion={
@@ -230,15 +233,17 @@ export default async function DetalleFactura({ params }: PageProps<"/app/factura
           {f.estado === "emitida" ? (
             <Tarjeta className="overflow-hidden">
               <div className="bg-gradient-to-br from-[#0a0f1f] to-[#1a2550] p-5 text-white">
-                <p className="text-[12px] text-white/60">Factura electrónica {f.simulada ? "(simulada)" : "aceptada"}</p>
-                <p className="mt-1 font-mono text-2xl font-semibold">{f.numero}</p>
+                <p className="text-[12px] text-white/60">
+                  {prueba ? "Prueba: guardada en Finppi como borrador" : `Factura electrónica ${f.simulada ? "(simulada)" : "aceptada"}`}
+                </p>
+                <p className="mt-1 font-mono text-2xl font-semibold">{f.numero ?? f.numeroEsperado}</p>
                 <p className="mt-2 text-2xl font-semibold tracking-tight tabular">{dinero(to.total, f.moneda)}</p>
                 {f.moneda === "USD" && (
                   <p className="font-mono text-xs text-white/70">
                     = {pesosExactos(f.totalCop ?? tc.total)} · TRM {trmTexto}
                   </p>
                 )}
-                <p className="mt-3 text-xs text-white/60">Validada {fechaHora(f.fechaValidacion)}</p>
+                <p className="mt-3 text-xs text-white/60">{prueba ? "Guardada" : "Validada"} {fechaHora(f.fechaValidacion)}</p>
               </div>
               <div className="space-y-4 p-5">
                 {f.cufe && (
@@ -259,7 +264,7 @@ export default async function DetalleFactura({ params }: PageProps<"/app/factura
                   </a>
                   {f.pdfFinppiRuta && (
                     <a href={`/app/facturacion/${f.id}/original?tipo=pdf`} target="_blank" className={clasesBoton({ variante: "secundario" })}>
-                      <FileText /> PDF original DIAN (Finppi)
+                      <FileText /> {prueba ? "PDF del borrador (Finppi)" : "PDF original DIAN (Finppi)"}
                     </a>
                   )}
                   {f.xmlRuta && (
@@ -268,10 +273,20 @@ export default async function DetalleFactura({ params }: PageProps<"/app/factura
                     </a>
                   )}
                 </div>
-                {contable && <BotonEnviarCliente facturaId={f.id} yaEnviada={!!f.enviadaClienteEl} />}
+                {contable && !prueba && <BotonEnviarCliente facturaId={f.id} yaEnviada={!!f.enviadaClienteEl} />}
                 {f.enviadaClienteEl && <p className="text-xs text-subtle">Enviada al cliente {fechaHora(f.enviadaClienteEl)}</p>}
-                {f.simulada && (
-                  <p className="rounded-lg bg-warning-soft p-2.5 text-xs text-warning">Emisión simulada del modo demo: el CUFE es ficticio y no existe en la DIAN.</p>
+                {prueba ? (
+                  <>
+                    <p className="rounded-lg bg-warning-soft p-2.5 text-xs text-warning">
+                      Modo prueba: el bot hizo todo el proceso y pulsó «Guardar». No fue a la DIAN, no tiene CUFE y no se envió al cliente.
+                      Revisa el borrador en Finppi y bórralo allá si no lo necesitas.
+                    </p>
+                    {contable && <BotonDescartarPrueba facturaId={f.id} />}
+                  </>
+                ) : (
+                  f.simulada && (
+                    <p className="rounded-lg bg-warning-soft p-2.5 text-xs text-warning">Emisión simulada del modo demo: el CUFE es ficticio y no existe en la DIAN.</p>
+                  )
                 )}
               </div>
             </Tarjeta>
@@ -328,6 +343,7 @@ export default async function DetalleFactura({ params }: PageProps<"/app/factura
                       proximo: cuenta?.instantanea.proximaFactura,
                       bloqueos,
                       simulacion: modoDemo,
+                      modo: cuenta?.modoEmision === "real" ? "real" : "borrador",
                     }}
                   />
                 ) : (

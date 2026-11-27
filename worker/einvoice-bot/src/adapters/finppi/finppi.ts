@@ -340,6 +340,49 @@ export async function esperarAceptada(page: Page, numero: string): Promise<FilaL
   throw new ErrorBot("TIMEOUT", `La factura ${numero} no apareció «Aceptada» en el listado a tiempo`);
 }
 
+/**
+ * MODO PRUEBA: pulsa «Guardar» (borrador) en vez de «Enviar». No va a la
+ * DIAN. Si Finppi pide confirmación, se acepta solo si el modal no habla de
+ * enviar/emitir a la DIAN.
+ */
+export async function guardarBorrador(page: Page) {
+  await (await existe(page.locator(FORM.save), T.corto, "el botón «Guardar»")).click();
+  const si = page.getByRole("button", { name: /^(Continuar|Sí|Si|Aceptar)\b/ }).first();
+  if (await si.waitFor({ state: "visible", timeout: 4000 }).then(() => true).catch(() => false)) {
+    const texto = (await page.locator('[role="dialog"], .modal, .swal2-popup').first().innerText().catch(() => "")).toLowerCase();
+    if (/dian|emitir|enviar/.test(texto) && !/borrador|guardar/.test(texto)) {
+      await page.getByRole("button", { name: /No, Cancelar|Cancelar/ }).first().click().catch(() => undefined);
+      throw new ErrorBot("PLATFORM_VALIDATION_ERROR", "Al guardar, Finppi pidió confirmar un envío a la DIAN; se canceló");
+    }
+    await si.click();
+  }
+}
+
+/**
+ * Busca el documento guardado en el listado: por número, luego por
+ * referencia y, si no, el borrador más reciente.
+ */
+export async function esperarBorrador(page: Page, candidatos: string[]): Promise<FilaListado & { porRecencia?: boolean }> {
+  const limite = Date.now() + T.largo;
+  while (Date.now() < limite) {
+    for (const c of candidatos.filter(Boolean)) {
+      const f = await buscarEnListado(page, c).catch(() => null);
+      if (f && f.estado === LIST.statusDraft) return f;
+    }
+    await irAFacturas(page).catch(() => undefined);
+    const filas = page.locator(LIST.rows);
+    const n = await filas.count().catch(() => 0);
+    for (let i = 0; i < n; i++) {
+      const celdas = (await filas.nth(i).locator("td").allInnerTexts()).map((x) => x.trim());
+      if (celdas.length >= 7 && celdas[5] === LIST.statusDraft) {
+        return { fila: filas.nth(i), numero: numeroDeFila(celdas[1], celdas[0]), estado: celdas[5], porRecencia: true };
+      }
+    }
+    await new Promise((r) => setTimeout(r, 4000));
+  }
+  throw new ErrorBot("TIMEOUT", "El borrador no apareció en el listado de Finppi a tiempo");
+}
+
 /** Descarga PDF o XML desde los íconos de Opciones (orden verificado: 0 XML, 1 PDF). */
 export async function descargar(page: Page, fila: Locator, tipo: "pdf" | "xml"): Promise<Uint8Array> {
   const iconos = fila.locator("td").last().locator("svg, i, button, a");

@@ -495,6 +495,7 @@ export class DemoRepositorio implements Repositorio {
       resolucion: s.cuentaFe?.resolucion,
       condiciones: s.cuentaFe?.condiciones,
       presentacion: s.cuentaFe?.presentacion,
+      modoEmision: s.cuentaFe?.modoEmision,
     };
     this.healthcheckSimulado();
   }
@@ -508,6 +509,31 @@ export class DemoRepositorio implements Repositorio {
   async probarConexionFe() {
     if (!estado().cuentaFe?.tieneCredenciales) throw new ErrorNegocio("Primero guarda las credenciales de Finppi");
     this.healthcheckSimulado();
+  }
+
+  async guardarModoEmisionFe(m: "borrador" | "real") {
+    if (!this.usuario.roles.includes("admin")) throw new ErrorNegocio("Solo el Administrador cambia el modo de emisión");
+    const s = estado();
+    s.cuentaFe ??= { estado: "desconectada", tieneCredenciales: false, instantanea: {} };
+    s.cuentaFe.modoEmision = m;
+  }
+
+  async descartarPruebaFe(facturaId: string) {
+    this.exigirContabilidad();
+    const f = await this.factura(facturaId);
+    if (!f) throw new ErrorNegocio("La factura no existe");
+    if (!f.simulada) throw new ErrorNegocio("Solo se descartan facturas de prueba");
+    Object.assign(f, {
+      estado: "borrador",
+      simulada: false,
+      numero: undefined,
+      numeroEsperado: undefined,
+      referencia: undefined,
+      cufe: undefined,
+      fechaValidacion: undefined,
+      enviadaClienteEl: undefined,
+      error: undefined,
+    } satisfies Partial<Factura>);
   }
 
   async guardarPresentacionFe(p: Presentacion) {
@@ -581,6 +607,26 @@ export class DemoRepositorio implements Repositorio {
     if (d.dryRun) {
       logs.push({ paso: "dry_run", nivel: "info", mensaje: "Prueba sin emitir: se detuvo antes de «Enviar». Nada se emitió.", creadoEl: t });
       s.trabajosFe.unshift({ id: id(), facturaId, tipo: "emitir", estado: "ok", dryRun: true, creadoEl: t, terminadoEl: t, resultado: { numeroOfrecido: numero }, logs });
+      return;
+    }
+    if (p.modo !== "real") {
+      // Modo prueba: «Guardar» en Finppi; el borrador no consume consecutivo.
+      logs.push(
+        { paso: "guardar", nivel: "info", mensaje: "Modo prueba: se pulsa «Guardar» (borrador). No va a la DIAN. (simulado)", creadoEl: t },
+        { paso: "resultado", nivel: "info", mensaje: `Guardada en Finppi como borrador ${numero}`, creadoEl: t },
+        { paso: "consecutivo", nivel: "info", mensaje: `El borrador NO consumió consecutivo: Finppi sigue ofreciendo ${numero}`, creadoEl: t },
+      );
+      Object.assign(f, {
+        estado: "emitida",
+        simulada: true,
+        referencia: f.referencia ?? p.referencia,
+        numeroEsperado: numero,
+        fechaValidacion: t,
+        totalCop: p.totales.total,
+        error: undefined,
+        errorCodigo: undefined,
+      } satisfies Partial<Factura>);
+      s.trabajosFe.unshift({ id: id(), facturaId, tipo: "emitir", estado: "ok", dryRun: false, creadoEl: t, terminadoEl: t, resultado: { borrador: true, numero }, logs });
       return;
     }
     s.ultimoConsecutivoFe += 1;

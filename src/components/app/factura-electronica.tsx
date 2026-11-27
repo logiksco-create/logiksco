@@ -30,6 +30,8 @@ import {
   probarConexionFinppi,
   cambiarPresentacionEmpresa,
   cambiarPresentacionFactura,
+  cambiarModoEmision,
+  descartarPrueba,
 } from "@/server/acciones/fe";
 import { AreaTexto, Boton, Campo, Entrada, Insignia, Selector } from "@/components/ui";
 import { cn } from "@/lib/formato";
@@ -340,6 +342,8 @@ export interface ResumenEmision {
   proximo?: string;
   bloqueos: string[];
   simulacion: boolean;
+  /** «borrador»: modo prueba (Guardar en Finppi). */
+  modo: "borrador" | "real";
 }
 
 export function BotonEmitir({ facturaId, resumen, reintento }: { facturaId: string; resumen: ResumenEmision; reintento?: boolean }) {
@@ -429,6 +433,15 @@ export function BotonEmitir({ facturaId, resumen, reintento }: { facturaId: stri
                   <b>Entiendo</b> que la emisión no se puede deshacer y que debo verificar que la DIAN la haya aceptado.
                 </span>
               </label>
+              {resumen.modo === "borrador" && !resumen.simulacion && (
+                <p className="flex gap-2 rounded-lg border border-warning/40 bg-warning-soft p-2.5 text-xs text-warning">
+                  <FlaskConical className="mt-0.5 size-3.5 shrink-0" />
+                  <span>
+                    <b>Modo prueba:</b> el bot hace todo el proceso en Finppi pero pulsa «Guardar» (borrador). No va a la DIAN, no genera
+                    CUFE y no se envía al cliente. La factura queda marcada como prueba y puedes descartarla.
+                  </span>
+                </p>
+              )}
               {resumen.simulacion && (
                 <p className="rounded-lg bg-warning-soft p-2.5 text-xs text-warning">
                   Modo demo: la emisión se simula al instante con un CUFE ficticio. Nada llega a Finppi ni a la DIAN.
@@ -444,7 +457,7 @@ export function BotonEmitir({ facturaId, resumen, reintento }: { facturaId: stri
               {pendiente ? <LoaderCircle className="animate-spin" /> : <FlaskConical />} Probar sin emitir
             </Boton>
             <Boton onClick={() => ejecutar(false)} disabled={pendiente || bloqueada || !confirmo}>
-              {pendiente ? <LoaderCircle className="animate-spin" /> : <Send />} Emitir ahora
+              {pendiente ? <LoaderCircle className="animate-spin" /> : <Send />} {resumen.modo === "borrador" ? "Guardar en Finppi (prueba)" : "Emitir ahora"}
             </Boton>
           </div>
         </div>
@@ -674,6 +687,106 @@ export function SelectorPresentacion({
           </button>
         ))}
       </div>
+      <Mensaje r={r} />
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Modo de emisión (prueba / real) y descartar pruebas                 */
+/* ------------------------------------------------------------------ */
+
+export function SelectorModoEmision({ valor, editable }: { valor: "borrador" | "real"; editable: boolean }) {
+  const [actual, setActual] = useState(valor);
+  const [confirmar, setConfirmar] = useState(false);
+  const [r, setR] = useState<R>(null);
+  const [pendiente, iniciar] = useTransition();
+  const router = useRouter();
+  const guardar = (v: "borrador" | "real") =>
+    iniciar(async () => {
+      const x = await cambiarModoEmision(v);
+      setR(x);
+      if (x?.ok) setActual(v);
+      setConfirmar(false);
+      router.refresh();
+    });
+  const opciones = [
+    { v: "borrador" as const, titulo: "Prueba", detalle: "El bot hace todo y pulsa «Guardar» en Finppi. No va a la DIAN." },
+    { v: "real" as const, titulo: "Real", detalle: "El bot pulsa «Enviar»: la factura va a la DIAN." },
+  ];
+  return (
+    <div className="space-y-2">
+      <div role="radiogroup" aria-label="Modo de emisión" className="grid gap-2 sm:grid-cols-2">
+        {opciones.map((o) => (
+          <button
+            key={o.v}
+            type="button"
+            role="radio"
+            aria-checked={actual === o.v}
+            disabled={!editable || pendiente}
+            onClick={() => (o.v === "real" && actual !== "real" ? setConfirmar(true) : o.v !== actual && guardar(o.v))}
+            className={cn(
+              "rounded-xl border p-3 text-left transition-colors disabled:cursor-default",
+              actual === o.v
+                ? o.v === "real"
+                  ? "border-success/40 bg-success-soft"
+                  : "border-warning/40 bg-warning-soft"
+                : "border-border hover:border-border-strong",
+            )}
+          >
+            <span className="flex items-center gap-2 text-[13.5px] font-semibold">
+              {o.v === "real" ? <ShieldCheck className="size-4" /> : <FlaskConical className="size-4" />} {o.titulo}
+              {actual === o.v && <Insignia tono={o.v === "real" ? "exito" : "alerta"}>activo</Insignia>}
+            </span>
+            <span className="mt-1 block text-xs text-muted">{o.detalle}</span>
+          </button>
+        ))}
+      </div>
+      {confirmar && (
+        <div className="space-y-2 rounded-lg border border-danger/30 bg-danger-soft p-3 text-[13px] text-danger">
+          <p>
+            <b>¿Pasar a modo real?</b> Desde ahora, al confirmar una factura el bot la enviará a la DIAN y no se puede deshacer. Hazlo
+            solo cuando las pruebas con «Guardar» salieron bien. El servidor del bot además debe tener la emisión habilitada.
+          </p>
+          <div className="flex gap-2">
+            <Boton tamano="sm" onClick={() => guardar("real")} disabled={pendiente}>
+              {pendiente ? <LoaderCircle className="animate-spin" /> : <ShieldCheck />} Sí, pasar a real
+            </Boton>
+            <Boton tamano="sm" variante="secundario" onClick={() => setConfirmar(false)}>
+              Seguir en prueba
+            </Boton>
+          </div>
+        </div>
+      )}
+      <Mensaje r={r} />
+    </div>
+  );
+}
+
+export function BotonDescartarPrueba({ facturaId }: { facturaId: string }) {
+  const [r, setR] = useState<R>(null);
+  const [confirmar, setConfirmar] = useState(false);
+  const [pendiente, iniciar] = useTransition();
+  const router = useRouter();
+  return (
+    <div className="space-y-2">
+      <Boton
+        variante="secundario"
+        className={cn("w-full", confirmar && "border-danger/40 text-danger")}
+        disabled={pendiente}
+        onClick={() => {
+          if (!confirmar) return setConfirmar(true);
+          iniciar(async () => {
+            const x = await descartarPrueba(facturaId);
+            setR(x);
+            setConfirmar(false);
+            router.refresh();
+          });
+        }}
+      >
+        {pendiente ? <LoaderCircle className="animate-spin" /> : <RefreshCw />}
+        {confirmar ? "¿Seguro? Vuelve a prefactura" : "Descartar prueba"}
+      </Boton>
       <Mensaje r={r} />
     </div>
   );

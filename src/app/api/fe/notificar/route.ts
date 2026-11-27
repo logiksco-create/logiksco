@@ -36,7 +36,8 @@ export async function POST(request: Request) {
   const f = await repo.factura(facturaId);
   if (!f) return new Response("No encontrada", { status: 404 });
 
-  if (f.estado === "emitida" && f.enviarAlEmitir && !f.enviadaClienteEl) {
+  // Las pruebas (borrador en Finppi) no se envían solas al cliente.
+  if (f.estado === "emitida" && !f.simulada && f.enviarAlEmitir && !f.enviadaClienteEl) {
     try {
       const r = await enviarFacturaAlCliente(repo, f);
       return Response.json({ ok: true, enviado: r.enviado });

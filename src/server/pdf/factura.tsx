@@ -174,7 +174,7 @@ export async function pdfFactura(d: DatosPdfFactura) {
               <View style={{ width: 5, height: 5, borderRadius: 2.5, backgroundColor: m.color, marginRight: 4 }} />
               <Text style={[e.etiqueta, { color: m.oscuro, fontSize: 6 }]}>Factura electrónica de venta</Text>
             </View>
-            <Text style={{ fontFamily: "Grotesk", fontWeight: 700, fontSize: 21, color: T.tinta, letterSpacing: -0.4, marginTop: 2 }}>{f.numero ?? "PREFACTURA"}</Text>
+            <Text style={{ fontFamily: "Grotesk", fontWeight: 700, fontSize: 21, color: T.tinta, letterSpacing: -0.4, marginTop: 2 }}>{f.numero ?? (f.simulada ? f.numeroEsperado ?? "PRUEBA" : "PREFACTURA")}</Text>
             <Text style={{ fontFamily: "Mono", fontSize: 6.5, color: T.suave, marginTop: 2, textAlign: "right" }}>
               {emitida ? `Generada ${fechaHora(generada)}` : "Vista previa · sin validez fiscal"}
             </Text>
@@ -194,7 +194,7 @@ export async function pdfFactura(d: DatosPdfFactura) {
                   paddingVertical: 2,
                 }}
               >
-                {f.simulada ? "SIMULACIÓN · DEMO" : "BORRADOR"}
+                {f.simulada ? (f.cufe ? "SIMULACIÓN · DEMO" : "PRUEBA · NO DIAN") : "BORRADOR"}
               </Text>
             ) : null}
           </View>

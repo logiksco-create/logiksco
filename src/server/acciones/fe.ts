@@ -210,6 +210,8 @@ export async function emitirFacturaElectronica(
     });
     if (bloqueos.length) throw new ErrorNegocio(bloqueos[0]);
     const venc = f.vencimiento && f.vencimiento >= hoy ? f.vencimiento : hoy;
+    const cuenta = await repo.cuentaFe();
+    const modo = cuenta?.modoEmision === "real" ? "real" : "borrador";
     const payload = payloadEmision({
       referencia: f.referencia ?? referenciaFactura((n) => randomInt(n)),
       nitEmisor: repo.empresa.nit,
@@ -224,15 +226,20 @@ export async function emitirFacturaElectronica(
       moneda: f.moneda,
       trmReferencia: f.trmReferencia ?? 1,
     });
+    payload.modo = modo;
     await repo.encolarEmision(facturaId, { payload, dryRun: o.dryRun, enviarAlEmitir: o.enviarAlEmitir });
 
     // En el demo la emisión simulada termina al instante.
     const despues = await repo.factura(facturaId);
+    if (despues?.estado === "emitida" && despues.simulada && !despues.cufe) {
+      return `Guardada en Finppi como borrador ${despues.numeroEsperado ?? ""} (modo prueba: no fue a la DIAN)`;
+    }
     if (despues?.estado === "emitida" && despues.simulada && o.enviarAlEmitir) {
       await enviarFacturaAlCliente(repo, despues);
       return `Emitida ${despues.numero} (simulación) y enviada al cliente`;
     }
     if (o.dryRun) return "Prueba enviada al bot: llenará Finppi y se detendrá antes de emitir.";
+    if (modo === "borrador") return "Enviada al bot en modo prueba: llenará Finppi y pulsará «Guardar» (no va a la DIAN).";
     return despues?.estado === "emitida" ? `Emitida ${despues.numero}` : "Enviada al bot. La verás emitida en unos segundos.";
   });
 }
@@ -266,5 +273,24 @@ export async function cambiarPresentacionEmpresa(valor: string): Promise<R> {
     if (!tieneRol(repo, "contabilidad")) throw new ErrorNegocio("Solo Contabilidad o el Administrador cambian esto");
     await repo.guardarPresentacionFe(presentacion.parse(valor));
     return "Guardado para las próximas facturas";
+  });
+}
+
+export async function cambiarModoEmision(valor: string): Promise<R> {
+  return intentar(async () => {
+    const repo = await contexto();
+    if (!repo.usuario.roles.includes("admin")) throw new ErrorNegocio("Solo el Administrador cambia el modo de emisión");
+    const m = z.enum(["borrador", "real"]).parse(valor);
+    await repo.guardarModoEmisionFe(m);
+    return m === "real" ? "Modo real: las facturas irán a la DIAN" : "Modo prueba: el bot solo guardará borradores en Finppi";
+  });
+}
+
+/** Una factura de prueba vuelve a prefactura para emitirla de verdad. */
+export async function descartarPrueba(facturaId: string): Promise<R> {
+  return intentar(async () => {
+    const repo = await repoContable();
+    await repo.descartarPruebaFe(z.string().min(1).parse(facturaId));
+    return "La prueba se descartó: la factura volvió a prefactura";
   });
 }

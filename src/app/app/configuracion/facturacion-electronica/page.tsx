@@ -11,6 +11,7 @@ import {
   FormResolucion,
   RefrescoEnVivo,
   SelectorPresentacion,
+  SelectorModoEmision,
 } from "@/components/app/factura-electronica";
 import { Insignia, Tarjeta, TarjetaEncabezado, clasesBoton } from "@/components/ui";
 import { fechaHora } from "@/lib/formato";
@@ -108,6 +109,16 @@ export default async function ConfiguracionFe() {
                   </ol>
                 </div>
               )}
+            </div>
+          </Tarjeta>
+
+          <Tarjeta>
+            <TarjetaEncabezado
+              titulo="Modo de emisión"
+              descripcion="Mientras pruebas, el bot hace todo el proceso pero pulsa «Guardar» en Finppi en vez de «Enviar»."
+            />
+            <div className="p-5 pt-0">
+              <SelectorModoEmision valor={cuenta?.modoEmision === "real" ? "real" : "borrador"} editable={admin} />
             </div>
           </Tarjeta>
 

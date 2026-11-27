@@ -61,9 +61,38 @@ let pagina;
   paso('TRM de referencia aplicada');
   await foto('2-prefactura');
 
-  // 4. Un clic: confirmar y emitir.
+  // 4a. Modo prueba (por defecto): el bot pulsa «Guardar» en Finppi.
+  const facturaUrl = p.url();
   await p.getByRole('button', { name: 'Emitir factura electrónica' }).click();
-  const m = p.locator('dialog[open]');
+  let m = p.locator('dialog[open]');
+  await m.getByText('Va a la DIAN en').waitFor();
+  await m.getByLabel(/Entiendo/).check();
+  await m.getByRole('button', { name: 'Guardar en Finppi (prueba)' }).click();
+  await p.getByText('Prueba: guardada en Finppi como borrador').waitFor();
+  paso('modo prueba: guardada como borrador en Finppi, sin DIAN');
+  await foto('3b-prueba');
+  await p.getByRole('button', { name: 'Descartar prueba' }).click();
+  await p.getByRole('button', { name: /Seguro\? Vuelve a prefactura/ }).click();
+  await p.getByRole('button', { name: 'Emitir factura electrónica' }).waitFor();
+  paso('prueba descartada: vuelve a prefactura');
+
+  // 4b. El Administrador pasa a modo real.
+  await p.selectOption('select[name=usuario]', 'u-diego');
+  await p.getByRole('button', { name: 'Ver como' }).first().click();
+  await p.waitForTimeout(2500);
+  await p.goto(B + '/app/configuracion/facturacion-electronica');
+  await p.getByRole('radio', { name: /Real/ }).click();
+  await p.getByRole('button', { name: 'Sí, pasar a real' }).click();
+  await p.getByText('Modo real: las facturas irán a la DIAN').waitFor();
+  paso('modo real activado');
+  await p.selectOption('select[name=usuario]', 'u-julian');
+  await p.getByRole('button', { name: 'Ver como' }).first().click();
+  await p.waitForTimeout(2500);
+  await p.goto(facturaUrl);
+
+  // 4c. Un clic: confirmar y emitir.
+  await p.getByRole('button', { name: 'Emitir factura electrónica' }).click();
+  m = p.locator('dialog[open]');
   await m.getByText('Va a la DIAN en').waitFor();
   await foto('3-confirmar');
   await m.getByLabel(/Entiendo/).check();
