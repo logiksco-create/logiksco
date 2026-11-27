@@ -66,9 +66,9 @@ describe("normalizar textos de Finppi", () => {
 describe("cliente en el listado de Finppi", () => {
   it("reconoce el nombre cortado con «...»", async () => {
     const { mismoCliente } = await import("../src/adapters/finppi/finppi.ts");
-    expect(mismoCliente("Luis Miguel Ortiz R...", "Luis Miguel Ortiz Restrepo")).toBe(true);
-    expect(mismoCliente("Luis Miguel Ortiz Restrepo", "Luis Miguel Ortiz Restrepo")).toBe(true);
-    expect(mismoCliente("Luis Fernando Gó...", "Luis Miguel Ortiz Restrepo")).toBe(false);
-    expect(mismoCliente("Lu...", "Luis Miguel Ortiz Restrepo")).toBe(false);
+    expect(mismoCliente("Ana María Gómez R...", "Ana María Gómez Ruiz")).toBe(true);
+    expect(mismoCliente("Ana María Gómez Ruiz", "Ana María Gómez Ruiz")).toBe(true);
+    expect(mismoCliente("Ana Lucía Pér...", "Ana María Gómez Ruiz")).toBe(false);
+    expect(mismoCliente("An...", "Ana María Gómez Ruiz")).toBe(false);
   });
 });

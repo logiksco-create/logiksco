@@ -103,7 +103,7 @@ function listado() {
     document.getElementById('res').textContent = `${filas.length} resultados encontrados`;
     for (const f of filas) {
       const tr = document.createElement('tr');
-      // Como Finppi: el cliente se ve por nombre y cortado («Luis Miguel Ortiz R...»).
+      // Como Finppi: el cliente se ve por nombre y cortado («Ana María Gómez R...»).
       const nom = S.clientes.find((c) => c.doc === f.cliente)?.nombre ?? f.cliente;
       const cli = nom.length > 19 ? nom.slice(0, 19) + '...' : nom;
       if (f.estado === 'Borrador') {

@@ -666,7 +666,7 @@ function filasListado(page: Page): Locator {
   return page.locator(`${LIST.rows}, tbody tr`).filter({ has: page.locator("td") });
 }
 
-/** ¿La celda es este cliente? Acepta el nombre cortado: «Luis Miguel Ortiz R...». */
+/** ¿La celda es este cliente? Acepta el nombre cortado: «Ana María Gómez R...». */
 export function mismoCliente(celda: string, nombre: string): boolean {
   const c = normalizar(celda);
   const n = normalizar(nombre);
