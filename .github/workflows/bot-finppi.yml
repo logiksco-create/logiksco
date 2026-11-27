@@ -34,7 +34,8 @@ permissions:
 
 jobs:
   bot:
-    runs-on: ubuntu-latest
+    # Fijo: Playwright soporta oficialmente Ubuntu 24.04 (ubuntu-latest ya es 26.04).
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     defaults:
       run:
@@ -80,7 +81,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: chromium-${{ runner.os }}-${{ hashFiles('worker/einvoice-bot/package-lock.json') }}
+          key: chromium-ubuntu2404-${{ hashFiles('worker/einvoice-bot/package-lock.json') }}
 
       - name: Chromium
         if: steps.cola.outputs.vacia != 'si'
