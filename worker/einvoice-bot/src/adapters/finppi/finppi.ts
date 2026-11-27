@@ -230,37 +230,104 @@ export async function elegirNumero(page: Page, numero: string) {
   });
 }
 
-/** Busca al cliente por documento; si no existe y se autorizó, lo crea con el panel «+». */
-export async function elegirCliente(page: Page, c: PayloadEmision["cliente"], crear: boolean): Promise<"existente" | "creado"> {
+/** Nombre con el que Finppi muestra al cliente en el buscador de la factura. */
+export function nombreEnFinppi(c: PayloadEmision["cliente"]): string {
+  return c.tipoPersona === "Natural" && c.apellidos && normalizar(c.apellidos) !== normalizar(c.nombres)
+    ? `${c.nombres} ${c.apellidos}`
+    : c.nombres;
+}
+
+const soloDigitos = (t: string) => t.replace(/[^0-9A-Za-z]/g, "");
+
+/**
+ * ¿El documento ya existe en Finppi? Se consulta el listado de Clientes,
+ * cuyo buscador SÍ filtra por identificación (el de la factura solo por nombre).
+ * Devuelve el nombre con el que está registrado, o null.
+ */
+export async function buscarClienteEnListado(page: Page, documento: string): Promise<string | null> {
+  await page.goto(CUSTOMERS_LIST.url, { waitUntil: "domcontentloaded", timeout: T.medio });
+  const buscador = await existe(page.locator(CUSTOMERS_LIST.search), T.medio, "el buscador de Clientes");
+  await buscador.fill(documento);
+  await page.waitForTimeout(1500);
+  await page.waitForLoadState("networkidle", { timeout: T.corto }).catch(() => undefined);
+  for (const fila of await page.locator(CUSTOMERS_LIST.rows).all()) {
+    const celdas = (await fila.locator("td").allInnerTexts()).map((t) => t.trim());
+    if (celdas[2] && soloDigitos(celdas[2]).includes(documento)) return celdas[1] ?? "";
+  }
+  return null;
+}
+
+/**
+ * Elige al cliente en la factura. El buscador de Finppi filtra por nombre:
+ * se intenta por documento y luego por nombre, y siempre se confirma que la
+ * identificación que Finppi autocompleta sea la del cliente.
+ * Solo crea al cliente si NO existe en el listado de Finppi (nunca duplica).
+ */
+export async function elegirCliente(
+  page: Page,
+  c: PayloadEmision["cliente"],
+  opts: { crear: boolean; nombreRegistrado: string | null },
+): Promise<"existente" | "creado"> {
   const ctrl = await control(page, SELECT_NAMES.client, SELECT_LABELS.client);
-  const intentar = async () => {
+  const intentar = async (texto: string) => {
     await ctrl.click();
-    await page.keyboard.type(c.numeroDocumento, { delay: 40 });
+    await page.keyboard.press("ControlOrMeta+a").catch(() => undefined);
+    await page.keyboard.press("Backspace").catch(() => undefined);
+    await page.keyboard.type(texto, { delay: 40 });
     const ops = await opciones(page);
     const textos = (await ops.allInnerTexts()).map((t) => t.trim());
-    const i = textos.findIndex((t) => t.replace(/[^0-9A-Za-z]/g, "").includes(c.numeroDocumento));
+    let i = textos.findIndex((t) => soloDigitos(t).includes(c.numeroDocumento));
+    if (i < 0) {
+      const porNombre = textos.map((t, k) => (normalizar(t).includes(normalizar(texto)) ? k : -1)).filter((k) => k >= 0);
+      const exactos = porNombre.filter((k) => normalizar(textos[k]) === normalizar(texto));
+      const elegidos = exactos.length ? exactos : porNombre;
+      if (elegidos.length > 1) {
+        await page.keyboard.press("Escape");
+        throw new ErrorBot("PLATFORM_VALIDATION_ERROR", `Hay ${elegidos.length} clientes llamados «${texto}» en Finppi: deja uno solo`);
+      }
+      i = elegidos[0] ?? -1;
+    }
     if (i < 0) {
       await page.keyboard.press("Escape");
       return false;
     }
-    if (textos.filter((t) => t.replace(/[^0-9A-Za-z]/g, "").includes(c.numeroDocumento)).length > 1) {
-      await page.keyboard.press("Escape");
-      throw new ErrorBot("PLATFORM_VALIDATION_ERROR", "Hay más de un cliente con ese documento en Finppi");
-    }
     await ops.nth(i).click();
     return true;
   };
+  const nombres = [...new Set([opts.nombreRegistrado, nombreEnFinppi(c), c.nombres].filter((x): x is string => !!x?.trim()))];
+  const buscar = async () => {
+    if (await intentar(c.numeroDocumento)) return true;
+    for (const n of nombres) if (await intentar(n)) return true;
+    return false;
+  };
+
   let resultado: "existente" | "creado" = "existente";
-  if (!(await intentar())) {
-    if (!crear) throw new ErrorBot("PLATFORM_VALIDATION_ERROR", "El cliente no existe en Finppi y no se autorizó crearlo");
+  if (!(await buscar())) {
+    if (opts.nombreRegistrado !== null) {
+      throw new ErrorBot(
+        "PLATFORM_VALIDATION_ERROR",
+        `El cliente ya existe en Finppi como «${opts.nombreRegistrado}», pero no aparece en el buscador de la factura`,
+      );
+    }
+    if (!opts.crear) throw new ErrorBot("PLATFORM_VALIDATION_ERROR", "El cliente no existe en Finppi y no se autorizó crearlo");
     await crearClienteEnPanel(page, c);
     resultado = "creado";
-    if (!(await intentar())) throw new ErrorBot("PLATFORM_VALIDATION_ERROR", "Se creó el cliente pero no aparece en Finppi");
+    let ok = false;
+    for (const espera of [0, 2000, 5000]) {
+      if (espera) await page.waitForTimeout(espera);
+      if ((ok = await buscar())) break;
+    }
+    if (!ok) {
+      throw new ErrorBot(
+        "PLATFORM_VALIDATION_ERROR",
+        `Se creó el cliente «${nombreEnFinppi(c)}» en Finppi, pero aún no aparece en el buscador de la factura. Al reintentar se usará, no se vuelve a crear.`,
+      );
+    }
   }
   // El formulario autocompleta la identificación: debe coincidir (no se sobrescribe).
-  const id = (await page.locator(FORM.clientId).inputValue({ timeout: T.corto })).replace(/[^0-9A-Za-z]/g, "");
+  const id = soloDigitos(await page.locator(FORM.clientId).inputValue({ timeout: T.corto }));
   if (!id.includes(c.numeroDocumento)) {
-    throw new ErrorBot("VALUES_MISMATCH", `La identificación del cliente en Finppi (${id}) no coincide`);
+    throw new ErrorBot("VALUES_MISMATCH", `La identificación del cliente elegido en Finppi (${id || "vacía"}) no coincide con ${c.numeroDocumento}`);
   }
   return resultado;
 }
@@ -326,7 +393,9 @@ async function crearClienteEnPanel(page: Page, c: PayloadEmision["cliente"]) {
       .map((t) => t.replace(/\s+/g, " ").trim())
       .filter((t) => t && t.length < 160);
     const avisos = [...new Set(textos)].slice(0, 6).join(" · ");
-    throw new ErrorBot("PLATFORM_VALIDATION_ERROR", `Finppi no creó el cliente${avisos ? `: ${avisos}` : " (el panel siguió abierto sin mensaje)"}`);
+    if (avisos) throw new ErrorBot("PLATFORM_VALIDATION_ERROR", `Finppi no creó el cliente: ${avisos}`);
+    // Sin mensajes de error: se cierra el panel; la búsqueda confirma si quedó creado.
+    await page.keyboard.press("Escape").catch(() => undefined);
   }
   await pausa();
 }

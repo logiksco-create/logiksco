@@ -185,6 +185,17 @@ describe.skipIf(!hayNavegador)("bot contra Finppi simulado", () => {
     expect(h.logs.join("\n")).toContain("Cliente creado en Finppi: Tecnomédica Andina SAS");
   }, 90_000);
 
+  it("cliente que ya existe en Finppi con otro nombre: lo usa y NO lo crea otra vez", async () => {
+    h.logs.length = 0;
+    h.libro = [];
+    const mismo = { ...payload, cliente: { ...payload.cliente, nombres: "Flores Montaña (nombre distinto en LOGIKS)", apellidos: "x" } };
+    await flujos.emitir(job({ dry_run: true, payload: mismo }));
+    const texto = h.logs.join("\n");
+    expect(texto).toContain("ya existe en Finppi como «Flores La Montaña SAS»: no se crea");
+    expect(texto).toContain("Cliente encontrado");
+    expect(texto).not.toContain("Cliente creado");
+  }, 90_000);
+
   it("cliente nuevo persona natural: llena nombres y apellidos", async () => {
     h.logs.length = 0;
     h.libro = [];

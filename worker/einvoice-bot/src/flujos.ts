@@ -213,6 +213,15 @@ export async function emitir(job: Job) {
           await db.marcarProductoEnFinppi(job.empresa_id, prod.codigo);
         }
       }
+      // ¿El cliente ya existe en Finppi? (por identificación, en el listado de Clientes)
+      const nombreRegistrado = await finppi.buscarClienteEnListado(page, p.cliente.numeroDocumento);
+      await db.log(
+        job,
+        "cliente",
+        nombreRegistrado !== null
+          ? `El cliente ${p.cliente.numeroDocumento} ya existe en Finppi${nombreRegistrado ? ` como «${nombreRegistrado}»` : ""}: no se crea`
+          : `El cliente ${p.cliente.numeroDocumento} no existe en Finppi${p.crearCliente ? ": se creará" : ""}`,
+      );
       await finppi.irAFacturas(page);
       await finppi.abrirFormularioFactura(page);
       const emp = await verificarEmpresa(job, page);
@@ -228,7 +237,7 @@ export async function emitir(job: Job) {
       else await db.log(job, "consecutivo", `Finppi ofrece ${ofrecido}: es el siguiente esperado`);
       await finppi.elegirNumero(page, ofrecido);
 
-      const cliente = await finppi.elegirCliente(page, p.cliente, p.crearCliente);
+      const cliente = await finppi.elegirCliente(page, p.cliente, { crear: p.crearCliente, nombreRegistrado });
       await db.log(job, "cliente", `${cliente === "creado" ? "Cliente creado en Finppi" : "Cliente encontrado"}: ${p.cliente.nombres}`);
 
       await finppi.llenarFactura(page, p);

@@ -127,8 +127,9 @@ function formulario() {
   form.append(campo('Tipo de factura', selector(['Factura de venta nacional', 'Factura de exportación'], null, 'Factura de venta nacional', 'national')));
   form.append(campo('Moneda', selector(['COP - Peso colombiano', 'USD - Dólar estadounidense'], null, 'COP - Peso colombiano', 'currency')));
   const id = input('clientnationalID'), dir = input('clientaddress'), tel = input('clientnumber');
-  form.append(campo('Cliente', selector(() => S.clientes.map((c) => `${c.nombre} - ${c.doc}`), (o) => {
-    const c = S.clientes.find((x) => o.endsWith(x.doc)); id.value = c.doc; dir.value = c.dir; tel.value = c.tel;
+  // Como Finppi: el buscador de la factura muestra y filtra solo por NOMBRE.
+  form.append(campo('Cliente', selector(() => S.clientes.map((c) => c.nombre), (o) => {
+    const c = S.clientes.find((x) => x.nombre === o); id.value = c.doc; dir.value = c.dir; tel.value = c.tel;
   }, '', 'invoiceClientId')));
   const mas = Object.assign(document.createElement('button'), { type: 'button', id: 'TooltipSearchInvoice-newCliente', textContent: '+' });
   mas.onclick = panelCliente; form.append(mas, id, dir, tel, input('seller'));
@@ -250,13 +251,27 @@ function formularioProducto() {
   app.append(f);
 }
 
+/* ------------------------------- Clientes ------------------------------- */
+// Como Finppi: el listado de clientes SÍ filtra por identificación.
+function listadoClientes() {
+  app.innerHTML = '<main><input placeholder="Buscar cliente..."><button>Crear</button><table><tbody></tbody></table><p></p></main>';
+  const q = app.querySelector('input'), tb = app.querySelector('tbody');
+  const pintar = () => {
+    const f = q.value.trim().toLowerCase();
+    const l = S.clientes.filter((c) => !f || c.doc.includes(f) || c.nombre.toLowerCase().includes(f));
+    tb.innerHTML = l.map((c, i) => `<tr><td>${i + 1}</td><td>${c.nombre}</td><td>${c.doc}</td><td>${c.tel}</td><td></td><td></td></tr>`).join('');
+    app.querySelector('p').textContent = `1 al ${l.length} de ${l.length}`;
+  };
+  q.addEventListener('input', pintar); pintar();
+}
+
 /* ------------------------------- Rutas ------------------------------- */
 const ruta = location.pathname;
 if (!S.sesion || ruta === '/') login();
 else if (ruta === '/income/invoice/edit') formulario();
 else if (ruta === '/products') listadoProductos();
 else if (ruta === '/products/edit') formularioProducto();
-else if (ruta === '/customers') app.innerHTML = `<p>1 al ${S.clientes.length} de ${S.clientes.length}</p>`;
+else if (ruta === '/customers') listadoClientes();
 else listado();
 </script>
 </body>
