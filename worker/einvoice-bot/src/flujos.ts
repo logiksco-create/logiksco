@@ -52,6 +52,24 @@ async function verificarEmpresa(job: Job, page: Page) {
 /* =============================== Healthcheck =============================== */
 
 export async function healthcheck(job: Job) {
+  try {
+    await healthcheckInterno(job);
+  } catch (e) {
+    // La tarjeta de conexión debe reflejar el problema (no quedarse «Verificando»).
+    if (e instanceof ErrorBot) {
+      const estado =
+        e.codigo === "INVALID_CREDENTIALS" ? "credenciales_invalidas"
+        : e.codigo === "ACCOUNT_LOCKED_OR_CHALLENGE" ? "bloqueada"
+        : e.codigo === "WRONG_COMPANY" ? "empresa_distinta"
+        : null;
+      if (estado) await db.actualizarCuenta(job.empresa_id, { estado });
+      await db.log(job, "error", e.message, "error");
+    }
+    throw e;
+  }
+}
+
+async function healthcheckInterno(job: Job) {
   await conSesion(job, async (page) => {
     await finppi.irAFacturas(page);
     await finppi.abrirFormularioFactura(page);

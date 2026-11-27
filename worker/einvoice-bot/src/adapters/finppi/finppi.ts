@@ -54,14 +54,27 @@ export async function iniciarSesion(page: Page, usuario: string, clave: string) 
     .then(() => true)
     .catch(() => false);
   if (ok) return;
+  // Mensaje que muestre Finppi (aviso, alerta o texto de error), sin datos del formulario.
+  const aviso = (
+    await page
+      .locator('[role="alert"], .Toastify__toast, .alert, .invalid-feedback, .error, .swal2-popup, [class*="error"]')
+      .allInnerTexts()
+      .catch(() => [] as string[])
+  )
+    .map((t) => t.replace(/\s+/g, " ").trim())
+    .filter(Boolean)
+    .join(" · ")
+    .slice(0, 200);
+  const donde = new URL(page.url()).pathname;
+  const detalle = `${aviso ? ` Finppi dice: «${aviso}».` : ""} (página ${donde})`;
   if (await page.locator(LOGIN.password).isVisible().catch(() => false)) {
     const texto = (await page.locator("body").innerText().catch(() => "")).toLowerCase();
     if (/captcha|bloquead|verificaci[oó]n|c[oó]digo/.test(texto)) {
-      throw new ErrorBot("ACCOUNT_LOCKED_OR_CHALLENGE", "Finppi pidió una verificación adicional o la cuenta está bloqueada");
+      throw new ErrorBot("ACCOUNT_LOCKED_OR_CHALLENGE", `Finppi pidió una verificación adicional o la cuenta está bloqueada.${detalle}`);
     }
-    throw new ErrorBot("INVALID_CREDENTIALS", "Finppi rechazó el usuario o la contraseña");
+    throw new ErrorBot("INVALID_CREDENTIALS", `Finppi no dejó entrar con el usuario y la contraseña guardados.${detalle}`);
   }
-  throw new ErrorBot("TIMEOUT", "Finppi no respondió al iniciar sesión");
+  throw new ErrorBot("TIMEOUT", `Finppi no mostró el menú después de iniciar sesión.${detalle}`);
 }
 
 /** Entra por el menú (así se fija invoice.view = factura) y verifica el título. */
