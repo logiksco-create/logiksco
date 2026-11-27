@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CalendarClock, Clock, FileWarning, ReceiptText, ShieldAlert, TriangleAlert, Plane } from "lucide-react";
+import { CalendarClock, Clock, FileCheck2, FileWarning, ReceiptText, ShieldAlert, TriangleAlert, Plane } from "lucide-react";
 import type { Alerta } from "@/domain/types";
 import { cn } from "@/lib/formato";
 
@@ -11,6 +11,7 @@ const iconos = {
   f170_por_vencer: ShieldAlert,
   corte_facturacion: CalendarClock,
   factura_rechazada: ReceiptText,
+  aceptacion_por_verificar: FileCheck2,
 } as const;
 
 const severidad = {

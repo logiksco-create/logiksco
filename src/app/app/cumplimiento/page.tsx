@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { FileCheck2, ShieldAlert, ShieldCheck, ShieldQuestion } from "lucide-react";
 import { contexto, tieneRol } from "@/server/contexto";
 import { cargarTodo, situacionCliente } from "@/server/consultas";
@@ -14,7 +15,11 @@ export const metadata = { title: "Circular 170" };
 
 export default async function Cumplimiento() {
   const repo = await contexto();
-  const { terceros, formularios, hoy } = await cargarTodo(repo);
+  const { terceros, formularios, hoy, cotizaciones } = await cargarTodo(repo);
+  // Última cotización aceptada por cliente: desde allí se pide el formulario 170.
+  const aceptadas = new Map(
+    [...cotizaciones].filter((q) => q.estado === "aceptada").sort((a, b) => a.fechaEmision.localeCompare(b.fechaEmision)).map((q) => [q.clienteId, q.id]),
+  );
   const clientes = terceros.filter((t) => t.tipo === "cliente");
   const filas = clientes.map((t) => ({ t, s: situacionCliente(formularios, t.id, hoy) }));
   const enRevision = formularios.filter((f) => f.estado === "en_revision");
@@ -128,9 +133,14 @@ export default async function Cumplimiento() {
                       <a href={`/app/cumplimiento/${ref.id}/pdf`} target="_blank" rel="noopener" className="text-[13px] font-medium text-brand-fg hover:underline">
                         PDF v{ref.version}
                       </a>
-                    ) : (
+                    ) : null}
+                    {(s.tipo === "sin_formulario" || s.tipo === "vencido") && aceptadas.get(t.id) ? (
+                      <Link href={`/app/cotizaciones/${aceptadas.get(t.id)}`} className="block text-[13px] font-medium text-brand-fg hover:underline">
+                        Pedir 170
+                      </Link>
+                    ) : !ref ? (
                       <span className="text-xs text-subtle">—</span>
-                    )}
+                    ) : null}
                   </Td>
                 </tr>
               );

@@ -171,3 +171,11 @@ describe("presentación al cliente", () => {
     expect(presentacionEfectiva({ presentacion: "cop" }, { presentacion: "ambas" })).toBe("cop");
   });
 });
+
+import { siguienteCodigoProducto } from "./einvoice";
+describe("productos", () => {
+  it("propone el siguiente código LG-NNN", () => {
+    expect(siguienteCodigoProducto([])).toBe("LG-001");
+    expect(siguienteCodigoProducto(["OIK01", "LG-009", undefined, "lg-010"])).toBe("LG-011");
+  });
+});

@@ -1,6 +1,8 @@
 "use server";
 
 import { z } from "@/lib/zod";
+import { siguienteCodigoProducto } from "@/domain/einvoice";
+import { tokenFirmado } from "../enlace-firmado";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -156,7 +158,8 @@ export async function enviarCotizacion(id: string) {
     const token = await repo.emitirEnlace(id);
     const enlace = `${env.appUrl}/c/${token}`;
     await repo.cambiarEstadoCotizacion(id, "enviada", `Enviada a ${contacto.correo}`);
-    const pdf = await pdfCotizacion({ q, empresa: repo.empresa, cliente: cliente!, enlace });
+    // El PDF adjunto lleva el enlace firmado de esta versión (sirve aunque se reenvíe el correo).
+    const pdf = await pdfCotizacion({ q, empresa: repo.empresa, cliente: cliente!, enlace: `${env.appUrl}/c/${tokenFirmado(q.id, q.version)}` });
     const { enviado } = await notificar(repo, {
       entidad: "cotizacion",
       entidadId: id,
@@ -177,6 +180,17 @@ export async function enviarCotizacion(id: string) {
   });
 }
 
+/** Tarea de verificación de una aceptación en línea (enlace o PDF). */
+export async function verificarAceptacion(id: string) {
+  return ejecutar(async () => {
+    const repo = await contexto();
+    exigirRol(tieneRol(repo, "comercial"));
+    await repo.verificarAceptacion(z.string().min(1).parse(id));
+    revalidatePath(`/app/cotizaciones/${id}`);
+    revalidatePath("/app", "layout");
+  });
+}
+
 export async function aceptarManual(id: string, evidencia: string) {
   return ejecutar(async () => {
     const repo = await contexto();
@@ -184,6 +198,45 @@ export async function aceptarManual(id: string, evidencia: string) {
     const nota = z.string().trim().min(5, "Describe la evidencia (correo, fecha)").max(500).parse(evidencia);
     await repo.cambiarEstadoCotizacion(id, "aceptada", `Aceptación manual registrada: ${nota}`);
     revalidatePath(`/app/cotizaciones/${id}`);
+  });
+}
+
+/**
+ * Pide al cliente su formulario de la Circular 170: genera un enlace seguro
+ * nuevo (el de la cotización aceptada muestra el formulario) y lo envía al
+ * contacto. Devuelve el enlace para copiarlo (WhatsApp, etc.).
+ */
+export async function solicitar170(cotizacionId: string) {
+  return ejecutar(async () => {
+    const repo = await contexto();
+    exigirRol(tieneRol(repo, "comercial", "cumplimiento"));
+    const q = await repo.cotizacion(cotizacionId);
+    if (!q) throw new ErrorNegocio("La cotización no existe");
+    if (q.estado !== "aceptada") throw new ErrorNegocio("Primero el cliente debe aceptar la cotización");
+    const cliente = await repo.tercero(q.clienteId);
+    const contacto = cliente?.contactos.find((c) => c.id === q.contactoId) ?? cliente?.contactos.find((c) => c.correo);
+    const token = await repo.emitirEnlace(cotizacionId);
+    const enlace = `${env.appUrl}/c/${token}`;
+    let enviado = false;
+    if (contacto?.correo) {
+      const r = await notificar(repo, {
+        entidad: "cotizacion",
+        entidadId: cotizacionId,
+        para: [contacto.correo],
+        asunto: `Formulario de conocimiento del cliente (Circular 170) · ${q.consecutivo}`,
+        titulo: "Necesitamos tu formulario de la Circular 170",
+        parrafos: [
+          `Hola ${contacto.nombre.split(" ")[0]},`,
+          `Gracias por aceptar la cotización ${q.consecutivo}. Antes de iniciar tu operación, la DIAN nos exige conocer a nuestros clientes (Circular 170).`,
+          "Diligéncialo en línea en pocos minutos desde el botón y adjunta los soportes (RUT, cámara de comercio, cédula del representante).",
+        ],
+        boton: { texto: "Diligenciar formulario 170", url: enlace },
+        resumen: `Solicitud del formulario 170 con enlace seguro: ${enlace}`,
+      });
+      enviado = r.enviado;
+    }
+    revalidatePath(`/app/cotizaciones/${cotizacionId}`);
+    return { enlace, enviado, correo: contacto?.correo ?? null };
   });
 }
 
@@ -352,6 +405,69 @@ export async function crearTercero(_: unknown, formData: FormData) {
     });
     revalidatePath("/app/clientes");
     return { id: t.id };
+  });
+}
+
+/** Crear cliente, prospecto o proveedor sin salir de la cotización. */
+export async function crearTerceroRapido(entrada: {
+  tipo: "cliente" | "prospecto" | "proveedor";
+  nit: string;
+  razonSocial: string;
+  ciudad: string;
+  contactoNombre?: string;
+  contactoCargo?: string;
+  contactoCorreo?: string;
+  contactoTelefono?: string;
+}) {
+  return ejecutar(async () => {
+    const repo = await contexto();
+    exigirRol(tieneRol(repo, "comercial", "operaciones"));
+    const d = esquemaTercero
+      .extend({ contactoTelefono: z.string().trim().max(40).optional() })
+      .parse(Object.fromEntries(Object.entries(entrada).map(([k, v]) => [k, typeof v === "string" ? v : v])));
+    const t = await repo.crearTercero({
+      tipo: d.tipo,
+      nit: d.nit,
+      razonSocial: d.razonSocial,
+      ciudad: d.ciudad,
+      contacto: d.contactoNombre
+        ? { nombre: d.contactoNombre, cargo: d.contactoCargo ?? "", correo: d.contactoCorreo ?? "", ...(d.contactoTelefono ? { telefono: d.contactoTelefono } : {}) }
+        : undefined,
+    });
+    revalidatePath("/app/clientes");
+    return t;
+  });
+}
+
+/* ------------------------------------------------------------------ */
+/* Productos (catálogo de facturación electrónica)                      */
+/* ------------------------------------------------------------------ */
+
+const esquemaProducto = z.object({
+  id: z.string().optional(),
+  nombre: z.string().trim().min(2, "Escribe el nombre del producto o servicio").max(120),
+  codigo: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+    z.string().trim().regex(/^[0-9A-Za-z._\-]{1,30}$/, "Código: letras, números, punto, guion (sin espacios)").optional(),
+  ),
+  iva: z.enum(["Ninguno", "IVA-0", "IVA-5", "IVA-19"]),
+});
+
+/**
+ * Crea o edita un producto con su IVA preestablecido. Si no se escribe
+ * código, se asigna el siguiente LG-NNN. Si aún no existe en Finppi, el bot
+ * lo crea allá al facturar.
+ */
+export async function guardarProducto(entrada: z.input<typeof esquemaProducto>) {
+  return ejecutar(async () => {
+    const repo = await contexto();
+    exigirRol(tieneRol(repo, "comercial", "contabilidad"));
+    const d = esquemaProducto.parse(entrada);
+    const existentes = await repo.catalogo("producto_finppi");
+    const codigo = d.codigo ?? siguienteCodigoProducto(existentes.map((e) => e.codigo));
+    const p = await repo.guardarProducto({ id: d.id, nombre: d.nombre, codigo, iva: d.iva });
+    revalidatePath("/app/configuracion/catalogos");
+    return p;
   });
 }
 

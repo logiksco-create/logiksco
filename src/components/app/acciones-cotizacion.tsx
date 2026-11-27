@@ -7,6 +7,8 @@ import {
   aceptarManual,
   duplicarCotizacion,
   enviarCotizacion,
+  solicitar170,
+  verificarAceptacion,
 } from "@/server/acciones/app";
 import { AreaTexto, Boton, Selector } from "@/components/ui";
 import { cn } from "@/lib/formato";
@@ -202,6 +204,82 @@ export function BotonAbrirDO({ id, deshabilitado, className }: { id: string; des
         }
       >
         {pendiente ? <LoaderCircle className="animate-spin" /> : <Ship />} Abrir DO
+      </Boton>
+      <Error mensaje={error} />
+    </div>
+  );
+}
+
+/** Pide al cliente el formulario de la Circular 170 (correo + enlace para copiar). */
+export function BotonSolicitar170({ id }: { id: string }) {
+  const [pendiente, iniciar] = useTransition();
+  const [error, setError] = useState<string>();
+  const [res, setRes] = useState<{ enlace: string; enviado: boolean; correo: string | null }>();
+  const [copiado, setCopiado] = useState(false);
+  return (
+    <div className="space-y-2">
+      <Boton
+        tamano="sm"
+        disabled={pendiente}
+        onClick={() =>
+          iniciar(async () => {
+            setError(undefined);
+            const r = await solicitar170(id);
+            if (r.ok) setRes(r.datos);
+            else setError(r.error);
+          })
+        }
+      >
+        {pendiente ? <LoaderCircle className="animate-spin" /> : <Send />} {res ? "Volver a pedir" : "Pedir la Circular 170 al cliente"}
+      </Boton>
+      {res && (
+        <div className="space-y-1.5 rounded-lg border border-border bg-surface-2 p-3 text-[13px]">
+          <p className="text-muted">
+            {res.correo
+              ? res.enviado
+                ? `Enviado a ${res.correo}.`
+                : `Registrado para ${res.correo} (el envío de correos aún no está configurado: compártele el enlace).`
+              : "El cliente no tiene contacto con correo: compártele este enlace."}
+          </p>
+          <div className="flex items-center gap-2">
+            <code className="min-w-0 flex-1 truncate rounded bg-surface px-2 py-1 font-mono text-xs">{res.enlace}</code>
+            <Boton
+              variante="secundario"
+              tamano="sm"
+              onClick={async () => {
+                await navigator.clipboard.writeText(res.enlace).catch(() => undefined);
+                setCopiado(true);
+                setTimeout(() => setCopiado(false), 2000);
+              }}
+            >
+              {copiado ? <Check /> : <Copy />} {copiado ? "Copiado" : "Copiar"}
+            </Boton>
+          </div>
+        </div>
+      )}
+      <Error mensaje={error} />
+    </div>
+  );
+}
+
+/** Marca como verificada la aceptación en línea (cierra la tarea). */
+export function BotonVerificarAceptacion({ id }: { id: string }) {
+  const [pendiente, iniciar] = useTransition();
+  const [error, setError] = useState<string>();
+  return (
+    <div>
+      <Boton
+        tamano="sm"
+        variante="secundario"
+        disabled={pendiente}
+        onClick={() =>
+          iniciar(async () => {
+            const r = await verificarAceptacion(id);
+            if (!r.ok) setError(r.error);
+          })
+        }
+      >
+        {pendiente ? <LoaderCircle className="animate-spin" /> : <Check />} Marcar como verificada
       </Boton>
       <Error mensaje={error} />
     </div>

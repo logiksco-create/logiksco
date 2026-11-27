@@ -374,6 +374,8 @@ export interface PayloadEmision {
   referencia: string;
   /** «borrador»: modo prueba, el bot pulsa «Guardar». «real»: pulsa «Enviar» (DIAN). */
   modo?: "borrador" | "real";
+  /** Productos creados en LOGIKS que quizá no existen en Finppi: el bot los crea antes. */
+  productosNuevos?: { codigo: string; nombre: string; iva: IvaFinppi }[];
   /** NIT de la empresa emisora: el bot verifica que sea la cuenta correcta. */
   nitEmisor: string;
   tipoFactura: string;
@@ -464,4 +466,13 @@ export function bloqueosEmision(d: {
 /** Presentación al cliente: la de la factura, si no la de la empresa; por defecto solo USD. */
 export function presentacionEfectiva(f: { presentacion?: Presentacion }, cuenta?: { presentacion?: Presentacion } | null): Presentacion {
   return f.presentacion ?? cuenta?.presentacion ?? "usd";
+}
+
+/** Código para un producto nuevo si el usuario no escribe uno: LG-001, LG-002… */
+export function siguienteCodigoProducto(existentes: (string | undefined)[]): string {
+  const n = existentes
+    .map((c) => c?.match(/^LG-(\d+)$/i)?.[1])
+    .filter(Boolean)
+    .map(Number);
+  return `LG-${String((n.length ? Math.max(...n) : 0) + 1).padStart(3, "0")}`;
 }

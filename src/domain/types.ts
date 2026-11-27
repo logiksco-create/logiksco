@@ -43,7 +43,7 @@ export const TIPOS_CATALOGO = {
   ciudad: "Ciudades",
   contenedor: "Contenedores",
   concepto: "Conceptos",
-  producto_finppi: "Productos Finppi",
+  producto_finppi: "Productos",
 } as const;
 export type TipoCatalogo = keyof typeof TIPOS_CATALOGO;
 
@@ -54,7 +54,19 @@ export interface EntradaCatalogo {
   codigo?: string;
   /** Base de LOGIKS (no editable) o propia de la empresa. */
   base: boolean;
-  datos: { pais?: string; bloque?: Bloque; moneda?: Moneda; unidad?: Unidad; paraTerceros?: boolean; iva?: IvaFinppi };
+  datos: {
+    pais?: string;
+    bloque?: Bloque;
+    moneda?: Moneda;
+    unidad?: Unidad;
+    paraTerceros?: boolean;
+    iva?: IvaFinppi;
+    /** Productos: ¿ya existe en Finppi? (si no, el bot lo crea al facturar). */
+    enFinppi?: boolean;
+    origen?: "finppi" | "logiks";
+    tipoFinppi?: string;
+    precio?: string;
+  };
 }
 
 export interface Usuario {
@@ -234,6 +246,18 @@ export interface Cotizacion {
   terminos: string;
   /** Si es un duplicado, id de la cotización de origen (RF-10). */
   origenId?: string;
+  /** Evidencia de la aceptación del cliente (la última). */
+  aceptacion?: {
+    nombre: string;
+    cargo?: string;
+    documento?: string;
+    correo: string;
+    canal: "enlace" | "manual" | "pdf";
+    fecha: string;
+    ip?: string;
+  };
+  /** Cuándo alguien del equipo verificó una aceptación en línea. */
+  aceptacionVerificadaEl?: string;
   /** Condiciones de facturación electrónica (Finppi). */
   facturacion?: DatosFacturacion;
   tokenPublico: string;
@@ -326,7 +350,8 @@ export type TipoAlerta =
   | "eta_proxima"
   | "f170_por_vencer"
   | "corte_facturacion"
-  | "factura_rechazada";
+  | "factura_rechazada"
+  | "aceptacion_por_verificar";
 
 export type Severidad = "alta" | "media" | "baja";
 

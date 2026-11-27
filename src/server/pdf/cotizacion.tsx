@@ -1,5 +1,5 @@
 import "server-only";
-import { Document, Page, Text, View, renderToBuffer } from "@react-pdf/renderer";
+import { Document, Link, Page, Path, Svg, Text, View, renderToBuffer } from "@react-pdf/renderer";
 import type { Cotizacion, Empresa, Tercero } from "@/domain/types";
 import { BLOQUES, TIPOS_SERVICIO, UNIDADES, type Bloque } from "@/domain/types";
 import { convertir, totalesConceptos, totalesPorBloque } from "@/domain/cotizacion";
@@ -216,32 +216,40 @@ function enlaceCorto(url: string) {
   return token.length > 10 ? `${base}/c/${token.slice(0, 8)}…` : sinEsquema;
 }
 
-function Aceptar({ enlace, color, contacto }: { enlace?: string; color: string; contacto?: string }) {
+/**
+ * Bloque de aprobación: botón clicable dentro del PDF + QR, ambos con el
+ * enlace único y firmado de esta versión. Al abrirlo, el cliente confirma con
+ * su nombre, cargo, documento y correo; queda la evidencia y una tarea al
+ * equipo para verificarla.
+ */
+function Aceptar({ enlace, color }: { enlace?: string; color: string }) {
   if (!enlace) {
     return (
       <View style={{ flex: 1, marginRight: 12, borderRadius: 12, borderWidth: 1, borderColor: T.linea, padding: 12 }}>
-        <Text style={{ fontFamily: "Grotesk", fontWeight: 700, fontSize: 11, color: T.tinta }}>¿Seguimos?</Text>
-        <Text style={{ fontSize: 8.5, color: T.suave, marginTop: 3 }}>
-          Confirma tu aceptación respondiendo este correo{contacto ? ` o escribiendo a ${contacto}` : ""}. Reservamos espacio en cuanto la recibamos.
-        </Text>
+        <Text style={{ fontFamily: "Grotesk", fontWeight: 700, fontSize: 11, color: T.tinta }}>Aprobación</Text>
+        <Text style={{ fontSize: 8.5, color: T.suave, marginTop: 3 }}>Pide a tu asesor el enlace seguro para aprobar esta cotización.</Text>
       </View>
     );
   }
-  const pasos = ["Escanea el código", "Revisa el detalle en tu celular", "Acepta y, si hace falta, diligencia tu 170"];
   return (
     <View style={{ flex: 1, marginRight: 12, flexDirection: "row", borderRadius: 12, borderWidth: 1, borderColor: T.linea, padding: 12, alignItems: "center" }}>
-      <QR texto={enlace} tam={64} />
+      <Link src={enlace} style={{ textDecoration: "none" }}>
+        <QR texto={enlace} tam={60} />
+      </Link>
       <View style={{ flex: 1, marginLeft: 12 }}>
-        <Text style={{ fontFamily: "Grotesk", fontWeight: 700, fontSize: 11, color: T.tinta }}>Acepta en línea en un minuto</Text>
-        <View style={{ marginTop: 6 }}>
-          {pasos.map((p, i) => (
-            <View key={p} style={{ flexDirection: "row", alignItems: "center", marginTop: 3 }}>
-              <Text style={{ fontFamily: "Mono", fontWeight: 600, fontSize: 7, color, width: 16 }}>{String(i + 1).padStart(2, "0")}</Text>
-              <Text style={{ fontSize: 8.5, color: T.texto }}>{p}</Text>
-            </View>
-          ))}
-        </View>
-        <Text style={{ fontFamily: "Mono", fontSize: 6.5, color: T.tenue, marginTop: 7 }}>{enlaceCorto(enlace)}</Text>
+        <Text style={{ fontFamily: "Grotesk", fontWeight: 700, fontSize: 11, color: T.tinta }}>¿Todo en orden?</Text>
+        <Link src={enlace} style={{ textDecoration: "none", marginTop: 5 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", alignSelf: "flex-start", backgroundColor: color, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 7 }}>
+            <Text style={{ fontFamily: "Manrope", fontWeight: 700, fontSize: 9.5, color: "#FFFFFF" }}>Aprobar cotización</Text>
+            <Svg width={10} height={10} viewBox="0 0 12 12" style={{ marginLeft: 6 }}>
+              <Path d="M2 6h7.5M6.5 2.5L10 6 6.5 9.5" stroke="#FFFFFF" strokeWidth={1.6} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+            </Svg>
+          </View>
+        </Link>
+        <Text style={{ fontSize: 7.2, lineHeight: 1.4, color: T.suave, marginTop: 6 }}>
+          Enlace único y seguro de esta versión. Queda registro de quién aprueba, cuándo y desde dónde.
+        </Text>
+        <Text style={{ fontFamily: "Mono", fontSize: 6.3, color: T.tenue, marginTop: 4 }}>{enlaceCorto(enlace)}</Text>
       </View>
     </View>
   );
@@ -290,12 +298,12 @@ export function DocumentoCotizacion({
 
         <Detalle q={q} color={m.color} n="01" />
         <View wrap={false} style={{ flexDirection: "row", marginTop: 12 }}>
-          <Aceptar enlace={enlace} color={m.color} contacto={contacto?.correo} />
+          <Aceptar enlace={enlace} color={m.color} />
           <Total q={q} color={m.oscuro} />
         </View>
 
         {q.terminos ? (
-          <View style={{ marginTop: 12 }}>
+          <View wrap={false} style={{ marginTop: 10 }}>
             <Text style={e.etiqueta}>Términos y condiciones</Text>
             <Text style={{ fontSize: 7.5, lineHeight: 1.5, color: T.suave, marginTop: 4 }}>{q.terminos}</Text>
           </View>

@@ -161,3 +161,11 @@ export async function cargarProductosFinppi(
   }
   return { nuevos: filas.length, existentes: productos.length - filas.length - omitidos, omitidos };
 }
+
+/** Marca en el catálogo de LOGIKS que el producto ya existe en Finppi. */
+export async function marcarProductoEnFinppi(empresaId: string, codigo: string) {
+  const { data } = await db.from("catalogos").select("id, datos").eq("empresa_id", empresaId).eq("tipo", "producto_finppi").eq("codigo", codigo).maybeSingle();
+  if (!data) return;
+  const { error } = await db.from("catalogos").update({ datos: { ...(data.datos ?? {}), enFinppi: true } }).eq("id", data.id);
+  revisar(error, "marcar producto");
+}

@@ -1,8 +1,10 @@
 "use client";
 
-import { useActionState, useTransition } from "react";
-import { Check, LoaderCircle, Plus, Save, X } from "lucide-react";
-import { BLOQUES, TIPOS_CATALOGO, type TipoCatalogo } from "@/domain/types";
+import { useActionState, useState, useTransition } from "react";
+import { Check, LoaderCircle, Pencil, Plus, Save, X } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { DialogoProducto } from "@/components/app/crear-rapido";
+import { BLOQUES, TIPOS_CATALOGO, type EntradaCatalogo, type TipoCatalogo } from "@/domain/types";
 import { agregarCatalogo, eliminarCatalogo, guardarHitos, guardarTerminos } from "@/server/acciones/configuracion";
 import { AreaTexto, Boton, Entrada, Selector } from "@/components/ui";
 
@@ -110,5 +112,75 @@ export function FormTerminos({ terminos }: { terminos: string }) {
         </Boton>
       </div>
     </form>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Productos: tabla con código, IVA preestablecido y estado en Finppi    */
+/* ------------------------------------------------------------------ */
+
+export function ListaProductos({ productos, editable }: { productos: EntradaCatalogo[]; editable: boolean }) {
+  const [dialogo, setDialogo] = useState<{ producto?: EntradaCatalogo } | null>(null);
+  const router = useRouter();
+  return (
+    <div className="space-y-3">
+      {editable && (
+        <Boton tamano="sm" onClick={() => setDialogo({})}>
+          <Plus /> Nuevo producto
+        </Boton>
+      )}
+      {productos.length === 0 ? (
+        <p className="text-[13px] text-muted">Aún no hay productos. Créalos aquí o desde una cotización, o tráelos de Finppi.</p>
+      ) : (
+        <div className="overflow-hidden rounded-xl border border-border">
+          <table className="w-full text-[13px]">
+            <thead className="bg-surface-2 text-left text-xs text-subtle">
+              <tr>
+                <th className="px-3 py-2 font-medium">Código</th>
+                <th className="px-3 py-2 font-medium">Producto o servicio</th>
+                <th className="px-3 py-2 font-medium">IVA</th>
+                <th className="hidden px-3 py-2 font-medium sm:table-cell">En Finppi</th>
+                {editable && <th className="w-10" />}
+              </tr>
+            </thead>
+            <tbody>
+              {productos.map((p) => {
+                const enFinppi = p.datos.enFinppi !== false;
+                return (
+                  <tr key={p.id} className="border-t border-border">
+                    <td className="px-3 py-2 font-mono text-xs">{p.codigo}</td>
+                    <td className="px-3 py-2">{p.nombre}</td>
+                    <td className="px-3 py-2">{p.datos.iva ?? <span className="text-subtle">definir</span>}</td>
+                    <td className="hidden px-3 py-2 sm:table-cell">
+                      {enFinppi ? <span className="text-success">Sí</span> : <span className="text-warning">Se crea al facturar</span>}
+                    </td>
+                    {editable && (
+                      <td className="px-2 py-1 text-right">
+                        <button
+                          type="button"
+                          onClick={() => setDialogo({ producto: p })}
+                          className="rounded-md p-1.5 text-subtle hover:bg-surface-2 hover:text-fg"
+                          aria-label={`Editar ${p.nombre}`}
+                        >
+                          <Pencil className="size-3.5" />
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {dialogo && (
+        <DialogoProducto
+          abierto
+          cerrar={() => setDialogo(null)}
+          producto={dialogo.producto}
+          alGuardar={() => router.refresh()}
+        />
+      )}
+    </div>
   );
 }

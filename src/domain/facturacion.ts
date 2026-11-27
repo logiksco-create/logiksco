@@ -32,10 +32,17 @@ export function fechaCorte(diaCorte: number, hoy: string): string {
 export interface PorFacturar {
   cliente: Tercero;
   corte?: string;
+  /** Todos los DO del cliente aún sin facturar (cualquier estado). */
   operaciones: Operacion[];
+  /** Los que se sugieren facturar ya: ya avanzaron (no «abierto») y entran en el corte. */
+  sugeridas: string[];
 }
 
-/** DO pendientes de facturar por cliente, hasta su fecha de corte. */
+/**
+ * DO pendientes de facturar por cliente. Se listan TODOS los no facturados
+ * (algunos operadores facturan al abrir el DO); el corte y el estado solo
+ * deciden cuáles vienen marcados por defecto.
+ */
 export function pendientesPorCliente(
   operaciones: Operacion[],
   facturas: Factura[],
@@ -46,14 +53,11 @@ export function pendientesPorCliente(
   return clientes
     .map((cliente) => {
       const corte = cliente.acuerdo?.diaCorte ? fechaCorte(cliente.acuerdo.diaCorte, hoy) : undefined;
-      const ops = operaciones.filter(
-        (o) =>
-          o.clienteId === cliente.id &&
-          !ya.has(o.id) &&
-          o.estado !== "abierto" &&
-          (!corte || diasEntre(o.abiertoEl, corte) >= 0),
-      );
-      return { cliente, corte, operaciones: ops };
+      const ops = operaciones.filter((o) => o.clienteId === cliente.id && !ya.has(o.id));
+      const sugeridas = ops
+        .filter((o) => o.estado !== "abierto" && (!corte || diasEntre(o.abiertoEl, corte) >= 0))
+        .map((o) => o.id);
+      return { cliente, corte, operaciones: ops, sugeridas };
     })
     .filter((p) => p.operaciones.length > 0);
 }

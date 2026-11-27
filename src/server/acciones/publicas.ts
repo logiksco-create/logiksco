@@ -38,6 +38,7 @@ const esquemaDecision = z.object({
   nombre: z.string().trim().min(3, "Escribe tu nombre completo").max(120),
   cargo: z.string().trim().min(2, "Escribe tu cargo").max(120),
   correo: z.email("Correo inválido"),
+  documento: z.preprocess((v) => (v === "" ? undefined : v), z.string().trim().min(5, "Documento inválido").max(30).optional()),
   motivo: z.string().trim().max(1000).optional(),
   acepto: z.literal("on", { message: "Debes confirmar que aceptas los términos" }).optional(),
 });
@@ -48,6 +49,9 @@ export async function responderCotizacion(t: string, _: unknown, formData: FormD
     const d = esquemaDecision.parse(Object.fromEntries(formData));
     if (d.decision === "aceptada" && !d.acepto) {
       throw new ErrorNegocio("Debes confirmar que aceptas los términos");
+    }
+    if (d.decision === "aceptada" && !d.documento) {
+      throw new ErrorNegocio("Escribe tu número de documento");
     }
     if (d.decision === "rechazada" && !d.motivo) {
       throw new ErrorNegocio("Cuéntanos el motivo del rechazo");

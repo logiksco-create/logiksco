@@ -146,6 +146,21 @@ export function calcularAlertas(e: EntradaAlertas): Alerta[] {
     }
   }
 
+  // Aceptación en línea (enlace o PDF): alguien del equipo debe verificarla.
+  for (const q of e.cotizaciones) {
+    const a = q.aceptacion;
+    if (q.estado !== "aceptada" || !a || a.canal === "manual" || q.aceptacionVerificadaEl) continue;
+    alertas.push({
+      id: `aceptacion-${q.id}`,
+      tipo: "aceptacion_por_verificar",
+      severidad: "media",
+      titulo: `Verifica la aceptación de ${q.consecutivo}`,
+      detalle: `Aceptada ${a.canal === "pdf" ? "desde el PDF" : "en línea"} por ${a.nombre}${a.cargo ? ` (${a.cargo})` : ""}${a.documento ? `, documento ${a.documento}` : ""}, ${a.correo}.`,
+      href: `/app/cotizaciones/${q.id}`,
+      fecha: a.fecha.slice(0, 10),
+    });
+  }
+
   // RF-49: rechazos de Finppi van a Contabilidad con el error.
   for (const f of e.facturas ?? []) {
     const revisar = f.estado === "revision" || f.estado === "estado_desconocido";

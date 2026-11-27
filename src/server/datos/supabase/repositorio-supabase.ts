@@ -17,6 +17,7 @@ import type {
   DatosFiscales,
   EstadoBotFe,
   TrabajoFe,
+  IvaFinppi,
   Presentacion,
   Formulario170,
   Hito,
@@ -34,6 +35,7 @@ import { hoyISO } from "@/domain/fechas";
 import { esImagenValida, rutaArchivo, rutaPertenece, validarArchivo, validarLogo } from "@/domain/archivos";
 import { cotizacionParaCliente, operacionParaCliente } from "@/domain/portal";
 import { correo } from "../../correo";
+import { esTokenFirmado, verificarTokenFirmado } from "../../enlace-firmado";
 import { plantillaCorreo } from "../../correo/plantilla";
 import type {
   CambiosEmpresa,
@@ -143,6 +145,15 @@ const mapCotizacion = (r: Fila): Cotizacion => ({
   terminos: r.terminos,
   origenId: r.origen_id ?? undefined,
   facturacion: r.facturacion ?? undefined,
+  aceptacion: (() => {
+    const a = [...(r.aceptaciones ?? [])]
+      .filter((x: Fila) => x.decision === "aceptada")
+      .sort((x: Fila, y: Fila) => String(y.creado_el).localeCompare(String(x.creado_el)))[0];
+    return a
+      ? { nombre: a.nombre, cargo: a.cargo ?? undefined, documento: a.documento ?? undefined, correo: a.correo, canal: a.canal, fecha: a.creado_el, ip: a.ip ?? undefined }
+      : undefined;
+  })(),
+  aceptacionVerificadaEl: r.aceptacion_verificada_el ?? undefined,
   tokenPublico: "", // solo se conoce al emitir el enlace
   historial: (r.historial ?? []).map((h: Fila) => ({
     fecha: h.creado_el,
@@ -234,7 +245,8 @@ function falla(error: { message: string; code?: string } | null): void {
 }
 
 const SELECT_TERCERO = "*, contactos(*), acuerdos_comerciales(*)";
-const SELECT_COTIZACION = "*, cotizacion_conceptos(*, proveedor:terceros(razon_social))";
+const SELECT_COTIZACION =
+  "*, cotizacion_conceptos(*, proveedor:terceros(razon_social)), aceptaciones(nombre, cargo, correo, documento, canal, ip, creado_el, decision)";
 const SELECT_OPERACION = "*, do_conceptos(*), do_hitos(*)";
 
 const BUCKET = "documentos";
@@ -955,6 +967,18 @@ export class SupabaseRepositorio implements Repositorio {
 
   /* ---------- Facturación electrónica (Finppi) ---------- */
 
+  async verificarAceptacion(cotizacionId: string) {
+    const { data, error } = await this.db
+      .from("cotizaciones")
+      .update({ aceptacion_verificada_el: new Date().toISOString(), aceptacion_verificada_por: this.usuario.id })
+      .eq("id", cotizacionId)
+      .eq("empresa_id", this.empresa.id)
+      .eq("estado", "aceptada")
+      .select("id");
+    falla(error);
+    if (!data?.length) throw new ErrorNegocio("No se pudo marcar la verificación");
+  }
+
   async guardarDatosFiscales(terceroId: string, fiscal: DatosFiscales) {
     const { data, error } = await this.db
       .from("terceros")
@@ -1003,6 +1027,34 @@ export class SupabaseRepositorio implements Repositorio {
   async probarConexionFe() {
     const { error } = await this.db.rpc("fe_probar_conexion", { p_empresa: this.empresa.id });
     falla(error);
+  }
+
+  async guardarProducto(p: { id?: string; nombre: string; codigo: string; iva: IvaFinppi }) {
+    let datos: EntradaCatalogo["datos"] = { iva: p.iva, enFinppi: false, origen: "logiks" };
+    if (p.id) {
+      // Al editar se conserva lo que ya se sabe de Finppi (enFinppi, origen…).
+      const { data: actual } = await this.db.from("catalogos").select("datos").eq("id", p.id).maybeSingle();
+      datos = { ...(actual?.datos ?? {}), iva: p.iva };
+    }
+    const fila = { nombre: p.nombre, codigo: p.codigo, datos };
+    const { data, error } = p.id
+      ? await this.db
+          .from("catalogos")
+          .update(fila)
+          .eq("id", p.id)
+          .eq("empresa_id", this.empresa.id)
+          .eq("tipo", "producto_finppi")
+          .select("*")
+          .single()
+      : await this.db
+          .from("catalogos")
+          .insert({ ...fila, empresa_id: this.empresa.id, tipo: "producto_finppi" })
+          .select("*")
+          .single();
+    if (error?.code === "23505") throw new ErrorNegocio(`Ya existe un producto con el código ${p.codigo} o ese nombre`);
+    if (error?.code === "42501") throw new ErrorNegocio("Tu rol no permite crear productos");
+    falla(error);
+    return { id: data!.id, tipo: "producto_finppi", nombre: data!.nombre, codigo: data!.codigo, base: false, datos: data!.datos } as EntradaCatalogo;
   }
 
   async sincronizarProductosFe() {
@@ -1151,6 +1203,20 @@ export class SupabaseRepositorioPublico implements RepositorioPublico {
   constructor(private readonly db: SupabaseClient) {}
 
   private async porToken(token: string) {
+    // Enlace firmado del PDF: válido para esa versión y hasta su vigencia.
+    if (esTokenFirmado(token)) {
+      const f = verificarTokenFirmado(token);
+      if (!f) return null;
+      const { data, error } = await this.db
+        .from("cotizaciones")
+        .select(SELECT_COTIZACION)
+        .eq("id", f.id)
+        .eq("version", f.version)
+        .gte("vigente_hasta", hoyISO())
+        .maybeSingle();
+      falla(error);
+      return data;
+    }
     const { data, error } = await this.db
       .from("cotizaciones")
       .select(SELECT_COTIZACION)
@@ -1181,6 +1247,11 @@ export class SupabaseRepositorioPublico implements RepositorioPublico {
   }
 
   async marcarVista(token: string) {
+    if (esTokenFirmado(token)) {
+      const fila = await this.porToken(token);
+      if (fila) await this.db.from("cotizaciones").update({ estado: "vista", vista_el: new Date().toISOString() }).eq("id", fila.id).eq("estado", "enviada");
+      return;
+    }
     await this.db
       .from("cotizaciones")
       .update({ estado: "vista", vista_el: new Date().toISOString() })
@@ -1198,10 +1269,11 @@ export class SupabaseRepositorioPublico implements RepositorioPublico {
       empresa_id: fila.empresa_id,
       cotizacion_id: fila.id,
       decision: d.decision,
-      canal: "enlace",
+      canal: esTokenFirmado(token) ? "pdf" : "enlace",
       nombre: d.nombre,
       cargo: d.cargo,
       correo: d.correo,
+      documento: d.documento ?? null,
       motivo: d.motivo,
       ip: d.ip ?? null,
       user_agent: d.userAgent ?? null,

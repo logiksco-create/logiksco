@@ -54,9 +54,14 @@ export function Decision({
         <Campo etiqueta="Cargo">
           <Entrada name="cargo" defaultValue={contacto?.cargo} required autoComplete="organization-title" />
         </Campo>
-        <Campo etiqueta="Correo" className="sm:col-span-2">
+        <Campo etiqueta="Correo">
           <Entrada name="correo" type="email" defaultValue={contacto?.correo} required autoComplete="email" />
         </Campo>
+        {modo === "aceptada" && (
+          <Campo etiqueta="Documento (cédula)">
+            <Entrada name="documento" required inputMode="numeric" autoComplete="off" placeholder="1.036.000.000" />
+          </Campo>
+        )}
       </div>
       {modo === "rechazada" ? (
         <Campo etiqueta="Motivo">
@@ -65,7 +70,7 @@ export function Decision({
       ) : (
         <label className="flex items-start gap-2.5 text-[13px] text-muted">
           <input type="checkbox" name="acepto" required className="mt-0.5 size-4 accent-[var(--brand)]" />
-          Acepto la cotización y sus términos y condiciones. Queda registro de mi nombre, correo, fecha, hora e IP como evidencia.
+          Acepto la cotización y sus términos y condiciones. Queda registro de mi nombre, cargo, documento, correo, fecha, hora e IP como evidencia.
         </label>
       )}
       {estado && !estado.ok && <p className="rounded-lg bg-danger-soft px-3 py-2 text-[13px] text-danger">{estado.error}</p>}

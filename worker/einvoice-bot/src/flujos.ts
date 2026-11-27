@@ -178,6 +178,21 @@ export async function emitir(job: Job) {
 
   try {
     await conSesion(job, async (page) => {
+      // Productos creados en LOGIKS que quizá no están en Finppi: se buscan y,
+      // si faltan, se crean antes de abrir la factura (nunca se duplican).
+      if (p.productosNuevos?.length) {
+        const existentes = new Set((await finppi.leerProductos(page)).map((x) => x.codigo));
+        for (const prod of p.productosNuevos) {
+          if (existentes.has(prod.codigo)) {
+            await db.log(job, "productos", `El producto ${prod.codigo} ya existe en Finppi`);
+          } else {
+            await db.log(job, "productos", `Creando en Finppi el producto ${prod.codigo} - ${prod.nombre} (${prod.iva})…`);
+            await finppi.crearProducto(page, prod);
+            await db.log(job, "productos", `Producto ${prod.codigo} creado en Finppi`);
+          }
+          await db.marcarProductoEnFinppi(job.empresa_id, prod.codigo);
+        }
+      }
       await finppi.irAFacturas(page);
       await finppi.abrirFormularioFactura(page);
       const emp = await verificarEmpresa(job, page);

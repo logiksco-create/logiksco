@@ -9,6 +9,7 @@ export const ROLES_POR_ALERTA: Record<TipoAlerta, Rol[]> = {
   f170_por_vencer: ["cumplimiento", "comercial"],
   corte_facturacion: ["contabilidad"],
   factura_rechazada: ["contabilidad"],
+  aceptacion_por_verificar: ["comercial"],
 };
 
 /** Alertas que le tocan a un usuario según sus roles (el admin ve todas). */

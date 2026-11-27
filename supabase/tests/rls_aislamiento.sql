@@ -233,3 +233,21 @@ do $$ begin
   if (select count(*) from public.fe_jobs where estado = 'corriendo') <> 1 then raise exception 'debería haber 1 trabajo corriendo'; end if;
 end $$;
 \echo 'OK: facturación electrónica protegida'
+
+-- Productos: el comercial crea en su empresa, no en otra; el código no se repite.
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000a';
+insert into public.catalogos (empresa_id, tipo, codigo, nombre, datos) values (:'empresa_a', 'producto_finppi', 'LG-001', 'Agenciamiento', '{"iva":"IVA-19"}');
+\set ON_ERROR_STOP off
+insert into public.catalogos (empresa_id, tipo, codigo, nombre) values (:'empresa_a', 'producto_finppi', 'LG-001', 'Otro'); -- DEBE fallar: código repetido
+insert into public.catalogos (empresa_id, tipo, nombre) values (:'empresa_a', 'puerto', 'Puerto pirata'); -- solo admin… (A es admin: permitido)
+\set ON_ERROR_STOP on
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000b';
+\set ON_ERROR_STOP off
+insert into public.catalogos (empresa_id, tipo, codigo, nombre) values (:'empresa_a', 'producto_finppi', 'X-1', 'Intruso'); -- DEBE fallar
+\set ON_ERROR_STOP on
+reset role;
+do $$ begin
+  if (select count(*) from public.catalogos where tipo = 'producto_finppi') <> 1 then raise exception 'FUGA o duplicado en productos'; end if;
+end $$;
+\echo 'OK: productos por empresa y sin códigos repetidos'

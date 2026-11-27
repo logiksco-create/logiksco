@@ -118,7 +118,7 @@ export async function traerProductosFinppi(): Promise<R> {
       await despertarBot("productos");
       return "El bot está leyendo tus productos de Finppi; aparecerán aquí en un par de minutos.";
     }
-    return "Productos de Finppi cargados al catálogo (simulación del demo)";
+    return "Productos de Finppi traídos al catálogo (simulación del demo)";
   });
 }
 
@@ -245,6 +245,12 @@ export async function emitirFacturaElectronica(
       trmReferencia: f.trmReferencia ?? 1,
     });
     payload.modo = modo;
+    // Productos creados en LOGIKS que aún no están en Finppi: el bot los crea primero.
+    const catalogo = await repo.catalogo("producto_finppi");
+    const usados = new Set(f.lineas.map((l) => l.productoFinppi));
+    payload.productosNuevos = catalogo
+      .filter((e) => e.codigo && usados.has(e.codigo) && e.datos.enFinppi === false)
+      .map((e) => ({ codigo: e.codigo!, nombre: e.nombre, iva: e.datos.iva ?? "IVA-19" }));
     await repo.encolarEmision(facturaId, { payload, dryRun: o.dryRun, enviarAlEmitir: o.enviarAlEmitir });
     if (!modoDemo) await despertarBot(o.dryRun ? "prueba" : modo === "borrador" ? "guardar" : "emitir");
 

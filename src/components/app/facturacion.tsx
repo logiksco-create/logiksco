@@ -22,11 +22,13 @@ function Mensaje({ r }: { r?: { ok: boolean; mensaje?: string; error?: string } 
 export function GenerarPrefactura({
   clienteId,
   operaciones,
+  sugeridas,
 }: {
   clienteId: string;
-  operaciones: { id: string; consecutivo: string; abiertoEl: string; estado: string; venta: string }[];
+  operaciones: { id: string; consecutivo: string; abiertoEl: string; estado: string; venta: string; nota?: string }[];
+  sugeridas: string[];
 }) {
-  const [elegidas, setElegidas] = useState(operaciones.map((o) => o.id));
+  const [elegidas, setElegidas] = useState(sugeridas);
   const [pendiente, iniciar] = useTransition();
   const [r, setR] = useState<{ ok: boolean; error?: string } | null>(null);
   return (
@@ -43,6 +45,7 @@ export function GenerarPrefactura({
               />
               <span className="font-mono font-medium">{o.consecutivo}</span>
               <span className="text-muted">abierto {fecha(o.abiertoEl)} · {o.estado}</span>
+              {o.nota && <span className="rounded-full bg-surface-2 px-2 py-0.5 text-[11px] text-subtle">{o.nota}</span>}
               <span className="ml-auto tabular">{o.venta}</span>
             </label>
           </li>

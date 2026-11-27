@@ -38,7 +38,9 @@ const guardar = () => localStorage.setItem('sim', JSON.stringify(S));
 const app = document.getElementById('app');
 const ir = (ruta) => { location.href = ruta; };
 document.querySelectorAll('[data-ir]').forEach((a) => a.addEventListener('click', (e) => { e.preventDefault(); ir(a.dataset.ir); }));
-const PRODUCTOS = [['SRV-MAN', 'Agenciamiento y manejo de carga', 'IVA-19', 100000], ['SRV-FLT', 'Flete internacional', 'IVA-0', 50000], ['TER-REE', 'Reembolso de gastos a terceros', 'Ninguno', 0]];
+S.productos = S.productos || [['SRV-MAN', 'Agenciamiento y manejo de carga', 'IVA-19', 100000], ['SRV-FLT', 'Flete internacional', 'IVA-0', 50000], ['TER-REE', 'Reembolso de gastos a terceros', 'Ninguno', 0],
+  ...Array.from({ length: 9 }, (_, i) => [`P-${String(i + 3).padStart(3, '0')}`, `Servicio ${i + 3}`, 'IVA-19', 1000 * (i + 3)])];
+const PRODUCTOS = S.productos;
 const PCT = { 'Ninguno': 0, 'IVA-0': 0, 'IVA-5': 5, 'IVA-19': 19 };
 const fmt = (n) => '$ ' + n.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 let selId = 0;
@@ -208,16 +210,33 @@ function panelCliente() {
 /* ------------------------------- Productos ------------------------------- */
 // 12 productos en páginas de 10, con paginación numérica como el resto de Finppi.
 function listadoProductos() {
-  const todos = Array.from({ length: 12 }, (_, i) => i < 3 ? PRODUCTOS[i] : [`P-${String(i).padStart(3, '0')}`, `Servicio ${i}`, 'IVA-19', 1000 * i]);
+  const todos = PRODUCTOS;
   let pagina = 1;
   const pintar = () => {
     const filas = todos.slice((pagina - 1) * 10, pagina * 10);
-    app.innerHTML = `<h2>Productos</h2><button>Crear</button><table><tbody>${filas.map((p, i) => `<tr><td>${i + 1}</td><td>${p[1]}</td><td>${p[0]}</td><td>Servicio</td><td>${fmt(p[3])}</td><td></td><td>…</td></tr>`).join('')}</tbody></table>
+    app.innerHTML = `<h2>Productos</h2><button id="crear">Crear</button><table><tbody>${filas.map((p, i) => `<tr><td>${i + 1}</td><td>${p[1]}</td><td>${p[0]}</td><td>Servicio</td><td>${fmt(p[3])}</td><td></td><td>…</td></tr>`).join('')}</tbody></table>
       <p>${(pagina - 1) * 10 + 1} al ${Math.min(pagina * 10, todos.length)} de ${todos.length}</p>
-      <ul class="pagination"><li><a class="pagination__link">1</a></li><li><a class="pagination__link">2</a></li></ul>`;
+      <ul class="pagination">${Array.from({ length: Math.ceil(todos.length / 10) }, (_, i) => `<li><a class="pagination__link">${i + 1}</a></li>`).join('')}</ul>`;
+    app.querySelector('#crear').onclick = () => ir('/products/edit');
     app.querySelectorAll('.pagination__link').forEach((a) => a.addEventListener('click', () => { pagina = Number(a.textContent); pintar(); }));
   };
   pintar();
+}
+
+function formularioProducto() {
+  app.innerHTML = '';
+  const f = document.createElement('form');
+  const tipo = selector(['Producto', 'Servicio'], null, 'Producto', 'type');
+  const iva = selector(['Ninguno', 'IVA-5', 'IVA-19', 'IVA-0'], null, 'IVA-0', 'vat');
+  f.append(input('name'), input('code'), campo('Tipo de ítem', tipo), campo('IVA', iva), input('prices.0.value', ''));
+  const crear = Object.assign(document.createElement('button'), { type: 'submit', textContent: 'Crear' });
+  f.append(crear);
+  f.onsubmit = (e) => {
+    e.preventDefault();
+    const v = (n) => f.querySelector(`[name="${n}"]`).value;
+    S.productos.push([v('code'), v('name'), iva.valor, Number(v('prices.0.value') || 0)]); guardar(); ir('/products');
+  };
+  app.append(f);
 }
 
 /* ------------------------------- Rutas ------------------------------- */
@@ -225,6 +244,7 @@ const ruta = location.pathname;
 if (!S.sesion || ruta === '/') login();
 else if (ruta === '/income/invoice/edit') formulario();
 else if (ruta === '/products') listadoProductos();
+else if (ruta === '/products/edit') formularioProducto();
 else if (ruta === '/customers') app.innerHTML = `<p>1 al ${S.clientes.length} de ${S.clientes.length}</p>`;
 else listado();
 </script>

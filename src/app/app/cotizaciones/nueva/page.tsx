@@ -49,7 +49,7 @@ export default async function NuevaCotizacion({ searchParams }: PageProps<"/app/
             { bloque: "flete", descripcion: "", moneda: "USD", unidad: "contenedor", cantidad: 1, costoUnitario: 0, ventaUnitaria: 0 },
           ],
           trm: trm.valor,
-          monedaPresentacion: c?.acuerdo?.moneda ?? "COP",
+          monedaPresentacion: c?.acuerdo?.moneda ?? "USD",
           vigenteHasta: d.vigenciaPorDefecto,
           terminos: repo.empresa.terminos || TERMINOS,
         }}

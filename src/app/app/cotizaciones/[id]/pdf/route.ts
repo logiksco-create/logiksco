@@ -1,4 +1,6 @@
 import { contexto } from "@/server/contexto";
+import { env } from "@/lib/env";
+import { tokenFirmado } from "@/server/enlace-firmado";
 import { pdfCotizacion } from "@/server/pdf/cotizacion";
 import { respuestaPdf } from "@/server/pdf/respuesta";
 
@@ -10,7 +12,9 @@ export async function GET(request: Request, { params }: RouteContext<"/app/cotiz
   if (!q) return new Response("No encontrada", { status: 404 });
   const cliente = await repo.tercero(q.clienteId);
   if (!cliente) return new Response("Cliente no encontrado", { status: 404 });
-  const pdf = await pdfCotizacion({ q, empresa: repo.empresa, cliente });
+  // Enlace firmado de aprobación de esta versión (no invalida el del correo).
+  const enlace = `${env.appUrl}/c/${tokenFirmado(q.id, q.version)}`;
+  const pdf = await pdfCotizacion({ q, empresa: repo.empresa, cliente, enlace });
   const descargar = new URL(request.url).searchParams.has("descargar");
   return respuestaPdf(pdf, `${q.consecutivo}-v${q.version}.pdf`, descargar);
 }

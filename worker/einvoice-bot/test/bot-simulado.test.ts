@@ -26,6 +26,7 @@ const h = vi.hoisted(() => {
     nuevosJobs: [] as Record<string, unknown>[],
     clave: "Cl4ve-Secreta",
     productos: [] as { codigo: string; nombre: string }[],
+    marcados: [] as string[],
   };
 });
 
@@ -44,6 +45,7 @@ vi.mock("../src/db.ts", () => ({
   subirArchivo: async (ruta: string, bytes: Uint8Array) => void (h.archivos[ruta] = bytes),
   factura: async (id: string) => ({ id, ...h.facturas[id] }),
   db: { from: () => ({ insert: async (f: Record<string, unknown>) => void h.nuevosJobs.push(f) }) },
+  marcarProductoEnFinppi: async (_e: string, codigo: string) => void h.marcados.push(codigo),
   cargarProductosFinppi: async (_e: string, p: { codigo: string; nombre: string }[]) => {
     h.productos = p;
     return { nuevos: p.length, existentes: 0, omitidos: 0 };
@@ -211,6 +213,26 @@ describe.skipIf(!hayNavegador)("bot contra Finppi simulado", () => {
     expect(h.productos.map((p) => p.codigo)).toContain("P-011");
     expect(h.logs.join("\n")).toContain("12 productos leídos en Finppi");
   }, 60_000);
+
+  it("producto nuevo: lo crea en Finppi antes de la factura y no duplica los existentes", async () => {
+    h.logs.length = 0;
+    h.libro = [];
+    const conNuevo = {
+      ...payload,
+      productosNuevos: [
+        { codigo: "LG-001", nombre: "Servicio de prueba LOGIKS", iva: "IVA-19" },
+        { codigo: "SRV-MAN", nombre: "Agenciamiento y manejo de carga", iva: "IVA-19" },
+      ],
+      items: [{ producto: "LG-001", descripcion: "Servicio nuevo", precio: 100000, cantidad: 1, iva: "IVA-19" }],
+      totales: { subtotal: 100000, iva: 19000, total: 119000, terceros: 0 },
+    };
+    await flujos.emitir(job({ dry_run: true, payload: conNuevo }));
+    const texto = h.logs.join("\n");
+    expect(texto).toContain("Producto LG-001 creado en Finppi");
+    expect(texto).toContain("El producto SRV-MAN ya existe en Finppi");
+    expect(texto).toContain("Totales de Finppi = aprobados");
+    expect(h.marcados).toEqual(["LG-001", "SRV-MAN"]);
+  }, 120_000);
 
   it("cero saltos: si Finppi ofrece un número que no sigue al libro, bloquea", async () => {
     h.libro = [{ numero: "SETT5", prefijo: "SETT", seq: 5, estado: "emitido" }];

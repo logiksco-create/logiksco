@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Download, ExternalLink, Pencil, ShieldAlert, ShieldCheck, TriangleAlert } from "lucide-react";
-import { contexto } from "@/server/contexto";
+import { contexto, tieneRol } from "@/server/contexto";
 import { modoDemo } from "@/lib/env";
 import { estadoEfectivo, tarifasVencidas, totalesConcepto, totalesCotizacion, totalesPorBloque } from "@/domain/cotizacion";
 import { habilitadoParaDO, situacion170 } from "@/domain/cumplimiento";
@@ -11,13 +11,13 @@ import { Encabezado } from "@/components/app/encabezado";
 import { EstadoCotizacionBadge, IconoServicio, Situacion170Badge } from "@/components/estados";
 import {
   AceptacionManual,
-  BotonAbrirDO,
+  BotonAbrirDO, BotonSolicitar170, BotonVerificarAceptacion,
   BotonEnviar,
   DuplicarParaCliente,
 } from "@/components/app/acciones-cotizacion";
 import { Comunicaciones, Historial } from "@/components/app/linea-tiempo";
 import { BotonLink, clasesBoton, Tabla, Tarjeta, TarjetaEncabezado, Td, Th } from "@/components/ui";
-import { cn, dinero, fecha, numero, porcentaje } from "@/lib/formato";
+import { cn, dinero, fecha, fechaHora, numero, porcentaje } from "@/lib/formato";
 
 export default async function DetalleCotizacion({ params }: PageProps<"/app/cotizaciones/[id]">) {
   const { id } = await params;
@@ -93,6 +93,42 @@ export default async function DetalleCotizacion({ params }: PageProps<"/app/coti
 
       <div className="grid gap-6 xl:grid-cols-[1fr_360px]">
         <div className="min-w-0 space-y-6">
+          {/* Evidencia de la aceptación y tarea de verificación */}
+          {q.estado === "aceptada" && q.aceptacion && (
+            <Tarjeta className={cn("p-5", q.aceptacion.canal !== "manual" && !q.aceptacionVerificadaEl && "border-brand/40")}>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="text-[13px]">
+                  <p className="text-sm font-medium">
+                    Aceptada {q.aceptacion.canal === "pdf" ? "desde el PDF" : q.aceptacion.canal === "enlace" ? "en línea" : "(registro manual)"}
+                    {q.aceptacionVerificadaEl ? (
+                      <span className="ml-2 text-xs font-normal text-success">verificada {fechaHora(q.aceptacionVerificadaEl)}</span>
+                    ) : q.aceptacion.canal !== "manual" ? (
+                      <span className="ml-2 text-xs font-normal text-brand-fg">por verificar</span>
+                    ) : null}
+                  </p>
+                  <dl className="mt-2 grid gap-x-6 gap-y-1 sm:grid-cols-2">
+                    {[
+                      ["Nombre", q.aceptacion.nombre],
+                      ["Cargo", q.aceptacion.cargo],
+                      ["Documento", q.aceptacion.documento],
+                      ["Correo", q.aceptacion.correo],
+                      ["Fecha y hora", fechaHora(q.aceptacion.fecha)],
+                      ["IP", q.aceptacion.ip],
+                    ]
+                      .filter(([, v]) => v)
+                      .map(([k, v]) => (
+                        <div key={k} className="flex gap-2">
+                          <dt className="text-subtle">{k}</dt>
+                          <dd className="min-w-0 truncate">{v}</dd>
+                        </div>
+                      ))}
+                  </dl>
+                </div>
+                {q.aceptacion.canal !== "manual" && !q.aceptacionVerificadaEl && tieneRol(repo, "comercial") && <BotonVerificarAceptacion id={q.id} />}
+              </div>
+            </Tarjeta>
+          )}
+
           {/* Siguiente paso */}
           {estado === "aceptada" && (
             <Tarjeta className={cn("p-5", doExistente ? "" : habilitadoParaDO(sit) ? "border-success/30" : "border-warning/40")}>
@@ -128,6 +164,16 @@ export default async function DetalleCotizacion({ params }: PageProps<"/app/coti
                         Ir a Cumplimiento
                       </Link>
                     </p>
+                    {sit.tipo !== "en_tramite" && (
+                      <div className="mt-3">
+                        <BotonSolicitar170 id={q.id} />
+                      </div>
+                    )}
+                    <ol className="mt-4 grid gap-1.5 text-xs text-subtle sm:grid-cols-4">
+                      {["1. Cotización aceptada ✓", "2. Cliente envía su 170", "3. Cumplimiento aprueba", "4. Abres el DO → luego se factura"].map((t) => (
+                        <li key={t} className="rounded-md bg-surface-2 px-2 py-1.5">{t}</li>
+                      ))}
+                    </ol>
                   </div>
                 </div>
               )}

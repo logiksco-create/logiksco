@@ -10,6 +10,7 @@ import {
   PAGE_TITLE,
   PAGINATION_TEXT,
   PRODUCTS_LIST,
+  PRODUCT_FORM,
   REACT_SELECT,
   PAGINATION,
   SELECT_LABELS,
@@ -477,6 +478,33 @@ export async function leerProductos(page: Page): Promise<ProductoFinppi[]> {
     if (!cambio) break;
   }
   return [...vistos.values()];
+}
+
+/**
+ * Crea un producto o servicio en Finppi (/products/edit). Se llama solo si no
+ * existe su código (se buscó antes). Lee de vuelta nombre y código antes de
+ * «Crear» y verifica que aparezca en el listado.
+ */
+export async function crearProducto(page: Page, p: { codigo: string; nombre: string; iva: string }) {
+  await page.goto(PRODUCTS_LIST.url, { waitUntil: "domcontentloaded", timeout: T.medio });
+  await (await existe(page.locator(PRODUCTS_LIST.createBtn), T.medio, "el botón «Crear» de productos")).click();
+  await (await existe(page.locator(PRODUCT_FORM.name), T.medio, "el formulario de producto")).fill(p.nombre);
+  await page.locator(PRODUCT_FORM.code).fill(p.codigo);
+  const L = PRODUCT_FORM.selectLabels;
+  await elegirPorEtiqueta(page, L.type, "Servicio");
+  await elegirPorEtiqueta(page, L.vat, p.iva);
+  const precio = page.locator(PRODUCT_FORM.priceValue(0));
+  if (await precio.count()) await precio.fill("0");
+  // Lectura de vuelta antes del clic definitivo.
+  if ((await page.locator(PRODUCT_FORM.name).inputValue()).trim() !== p.nombre.trim() || (await page.locator(PRODUCT_FORM.code).inputValue()).trim() !== p.codigo) {
+    throw new ErrorBot("VALUES_MISMATCH", `Los datos del producto ${p.codigo} no quedaron como se escribieron`);
+  }
+  await page.locator(PRODUCT_FORM.submit).click();
+  await page.waitForURL((u) => !u.pathname.endsWith("/edit"), { timeout: T.medio }).catch(() => undefined);
+  const lista = await leerProductos(page);
+  if (!lista.some((x) => x.codigo === p.codigo)) {
+    throw new ErrorBot("PLATFORM_VALIDATION_ERROR", `Finppi no muestra el producto ${p.codigo} después de crearlo`);
+  }
 }
 
 /* ------------------------------ Healthcheck ------------------------------ */

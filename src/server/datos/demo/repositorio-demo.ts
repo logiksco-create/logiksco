@@ -14,6 +14,7 @@ import type {
   DatosFiscales,
   EstadoBotFe,
   TrabajoFe,
+  IvaFinppi,
   Presentacion,
   Formulario170,
   Hito,
@@ -50,6 +51,7 @@ import type {
   VistaPublica,
 } from "../repositorio";
 import { ErrorNegocio } from "../errores";
+import { esTokenFirmado, verificarTokenFirmado } from "../../enlace-firmado";
 
 /**
  * Repositorio en memoria. El estado vive en `globalThis` para sobrevivir a la
@@ -469,6 +471,13 @@ export class DemoRepositorio implements Repositorio {
 
   /* ---------------- Facturación electrónica (simulada) ---------------- */
 
+  async verificarAceptacion(cotizacionId: string) {
+    const q = await this.cotizacion(cotizacionId);
+    if (!q || q.estado !== "aceptada") throw new ErrorNegocio("No se pudo marcar la verificación");
+    q.aceptacionVerificadaEl = ahora();
+    q.historial.push({ fecha: ahora(), usuario: this.usuario.nombre, accion: "Aceptación verificada" });
+  }
+
   async guardarDatosFiscales(terceroId: string, fiscal: DatosFiscales) {
     if (!this.usuario.roles.some((r) => r === "comercial" || r === "contabilidad" || r === "admin" || r === "cumplimiento")) {
       throw new ErrorNegocio("Tu rol no permite editar clientes");
@@ -509,6 +518,25 @@ export class DemoRepositorio implements Repositorio {
   async probarConexionFe() {
     if (!estado().cuentaFe?.tieneCredenciales) throw new ErrorNegocio("Primero guarda las credenciales de Finppi");
     this.healthcheckSimulado();
+  }
+
+  async guardarProducto(p: { id?: string; nombre: string; codigo: string; iva: IvaFinppi }) {
+    if (!this.usuario.roles.some((r) => r === "admin" || r === "comercial" || r === "contabilidad")) {
+      throw new ErrorNegocio("Tu rol no permite crear productos");
+    }
+    const s = estado();
+    const otros = s.catalogoPropio.filter((e) => e.tipo === "producto_finppi" && e.id !== p.id);
+    if (otros.some((e) => e.codigo === p.codigo || e.nombre.toLowerCase() === p.nombre.toLowerCase())) {
+      throw new ErrorNegocio(`Ya existe un producto con el código ${p.codigo} o ese nombre`);
+    }
+    const actual = p.id ? s.catalogoPropio.find((e) => e.id === p.id) : undefined;
+    if (actual) {
+      Object.assign(actual, { nombre: p.nombre, codigo: p.codigo, datos: { ...actual.datos, iva: p.iva } });
+      return actual;
+    }
+    const nuevo: EntradaCatalogo = { id: id(), tipo: "producto_finppi", nombre: p.nombre, codigo: p.codigo, base: false, datos: { iva: p.iva, enFinppi: false, origen: "logiks" } };
+    s.catalogoPropio.push(nuevo);
+    return nuevo;
   }
 
   async sincronizarProductosFe() {
@@ -756,7 +784,10 @@ function guardarArchivo(clase: "do" | "170", entidadId: string, a: NuevoArchivo)
 export class DemoRepositorioPublico implements RepositorioPublico {
   async cotizacionPorToken(token: string): Promise<VistaPublica | null> {
     const s = estado();
-    const cotizacion = s.cotizaciones.find((q) => q.tokenPublico === token);
+    const firmado = esTokenFirmado(token) ? verificarTokenFirmado(token) : null;
+    const cotizacion = firmado
+      ? s.cotizaciones.find((q) => q.id === firmado.id && q.version === firmado.version && q.vigenteHasta >= hoyISO())
+      : s.cotizaciones.find((q) => q.tokenPublico === token);
     if (!cotizacion) return null;
     const cliente = s.terceros.find((t) => t.id === cotizacion.clienteId)!;
     return {
@@ -783,12 +814,24 @@ export class DemoRepositorioPublico implements RepositorioPublico {
       throw new ErrorNegocio("Esta cotización ya no admite respuesta");
     }
     q.estado = d.decision;
+    if (d.decision === "aceptada") {
+      q.aceptacion = {
+        nombre: d.nombre,
+        cargo: d.cargo,
+        documento: d.documento,
+        correo: d.correo,
+        canal: esTokenFirmado(token) ? "pdf" : "enlace",
+        fecha: ahora(),
+        ip: d.ip,
+      };
+      q.aceptacionVerificadaEl = undefined;
+    }
     q.historial.push({
       fecha: ahora(),
       usuario: `${d.nombre} (${d.cargo})`,
       accion:
         d.decision === "aceptada"
-          ? `Aceptada en línea por ${d.correo} desde ${d.ip ?? "IP no disponible"}`
+          ? `Aceptada ${esTokenFirmado(token) ? "desde el PDF" : "en línea"} por ${d.correo}${d.documento ? ` (doc. ${d.documento})` : ""} desde ${d.ip ?? "IP no disponible"}`
           : `Rechazada por ${d.correo}: ${d.motivo ?? "sin motivo"}`,
     });
   }

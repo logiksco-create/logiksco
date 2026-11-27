@@ -42,7 +42,7 @@ export default async function Facturacion() {
       <Tarjeta>
         <TarjetaEncabezado
           titulo="Por facturar"
-          descripcion="DO en tránsito, en destino o entregados, abiertos hasta la fecha de corte de cada cliente"
+          descripcion="Todos los DO sin facturar. Vienen marcados los que ya avanzaron y entran en el corte del cliente; puedes marcar cualquier otro."
         />
         {pendientes.length === 0 ? (
           <Vacio icono={<Receipt />} titulo="Nada pendiente por facturar" />
@@ -60,11 +60,13 @@ export default async function Facturacion() {
                 {contable ? (
                   <GenerarPrefactura
                     clienteId={p.cliente.id}
+                    sugeridas={p.sugeridas}
                     operaciones={p.operaciones.map((o) => ({
                       id: o.id,
                       consecutivo: o.consecutivo,
                       abiertoEl: o.abiertoEl,
                       estado: ESTADOS_DO[o.estado].toLowerCase(),
+                      nota: p.sugeridas.includes(o.id) ? undefined : o.estado === "abierto" ? "recién abierto" : "después del corte",
                       venta: dineroCorto(utilidadOperacion(o).cotizada.venta),
                     }))}
                   />

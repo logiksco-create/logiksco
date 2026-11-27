@@ -15,6 +15,7 @@ import type {
   DatosFiscales,
   DatosFacturacion,
   Presentacion,
+  IvaFinppi,
   EstadoBotFe,
   TrabajoFe,
   Formulario170,
@@ -129,12 +130,16 @@ export interface Repositorio {
 
   /* Facturación electrónica con Finppi */
   guardarDatosFiscales(terceroId: string, fiscal: DatosFiscales): Promise<void>;
+  /** Tarea de verificación: alguien del equipo confirma la aceptación en línea. */
+  verificarAceptacion(cotizacionId: string): Promise<void>;
   cuentaFe(): Promise<CuentaFe | null>;
   guardarCredencialesFe(usuario: string, clave: string, versionConsentimiento: string): Promise<void>;
   desconectarFe(): Promise<void>;
   probarConexionFe(): Promise<void>;
   /** Encola la lectura (solo lectura) de los productos de Finppi al catálogo. */
   sincronizarProductosFe(): Promise<void>;
+  /** Crea o edita un producto (nombre, código e IVA preestablecido). */
+  guardarProducto(p: { id?: string; nombre: string; codigo: string; iva: IvaFinppi }): Promise<EntradaCatalogo>;
   guardarTextosFe(t: { resolucion: string; condiciones: string }): Promise<void>;
   /** Monedas que ve el cliente por defecto en facturas en USD. */
   guardarPresentacionFe(p: Presentacion): Promise<void>;
@@ -219,6 +224,8 @@ export interface DecisionCliente {
   nombre: string;
   cargo: string;
   correo: string;
+  /** Cédula o documento de quien responde. */
+  documento?: string;
   motivo?: string;
   ip?: string;
   userAgent?: string;

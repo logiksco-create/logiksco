@@ -28,6 +28,8 @@ import { CompletarDatosFiscales } from "@/components/app/factura-electronica";
 import { tarifasVencidas, totalesConcepto, totalesConceptos, totalesPorBloque } from "@/domain/cotizacion";
 import { guardarCotizacion, type EntradaCotizacion } from "@/server/acciones/app";
 import { AreaTexto, Boton, Campo, Entrada, Selector, Tarjeta } from "@/components/ui";
+import { Combo } from "@/components/ui/combo";
+import { DialogoProducto, DialogoTercero } from "@/components/app/crear-rapido";
 import { cn, dinero, porcentaje } from "@/lib/formato";
 
 type ConceptoEditable = Omit<Concepto, "id"> & { clave: string };
@@ -107,14 +109,24 @@ export function EditorCotizacion({
     inicial.conceptos.map((c) => ({ ...c, clave: clave() })),
   );
 
+  // Lo creado sin salir de la cotización se suma a las listas de inmediato.
+  const [clientesNuevos, setClientesNuevos] = useState<Tercero[]>([]);
+  const [proveedoresNuevos, setProveedoresNuevos] = useState<{ id: string; nombre: string }[]>([]);
+  const [productosNuevos, setProductosNuevos] = useState<{ codigo: string; nombre: string; iva?: IvaFinppi }[]>([]);
+  const todosClientes = [...clientes, ...clientesNuevos.filter((n) => !clientes.some((c) => c.id === n.id))];
+  const todosProveedores = [...proveedores, ...proveedoresNuevos.filter((n) => !proveedores.some((c) => c.id === n.id))];
+  const todosProductos = [...productosFinppi.filter((p) => !productosNuevos.some((n) => n.codigo === p.codigo)), ...productosNuevos];
+  const [dlgTercero, setDlgTercero] = useState<null | { tipo: "cliente" | "proveedor"; nombre: string; alCrear: (t: Tercero) => void }>(null);
+  const [dlgProducto, setDlgProducto] = useState<null | { nombre: string; iva: IvaFinppi; alCrear: (p: { codigo: string; nombre: string; iva?: IvaFinppi }) => void }>(null);
+
   const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => setF((p) => ({ ...p, [k]: v }));
   const setMercancia = (k: keyof typeof f.mercancia, v: unknown) =>
     setF((p) => ({ ...p, mercancia: { ...p.mercancia, [k]: v } }));
 
-  const cliente = clientes.find((c) => c.id === f.clienteId);
+  const cliente = todosClientes.find((c) => c.id === f.clienteId);
 
-  const cambiarCliente = (clienteId: string) => {
-    const c = clientes.find((x) => x.id === clienteId);
+  const cambiarCliente = (clienteId: string, nuevo?: Tercero) => {
+    const c = nuevo ?? todosClientes.find((x) => x.id === clienteId);
     setF((p) => ({
       ...p,
       clienteId,
@@ -207,15 +219,29 @@ export function EditorCotizacion({
           <SeccionTitulo n={1} titulo="Cliente y servicio" />
           <div className="grid gap-4 p-5 sm:grid-cols-2">
             <Campo etiqueta="Cliente o prospecto">
-              <Selector value={f.clienteId} onChange={(e) => cambiarCliente(e.target.value)}>
-                <option value="">Selecciona…</option>
-                {clientes.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.razonSocial}
-                    {c.tipo === "prospecto" ? " (prospecto)" : ""}
-                  </option>
-                ))}
-              </Selector>
+              <Combo
+                ariaLabel="Cliente o prospecto"
+                valor={f.clienteId}
+                placeholder="Busca o crea el cliente…"
+                opciones={todosClientes.map((c) => ({
+                  valor: c.id,
+                  etiqueta: c.razonSocial,
+                  detalle: c.tipo === "prospecto" ? "prospecto" : c.nit,
+                }))}
+                alElegir={(o) => cambiarCliente(o.valor)}
+                crear={{
+                  etiqueta: (t) => (t ? `Crear cliente «${t}»` : "Crear cliente nuevo"),
+                  alCrear: (t) =>
+                    setDlgTercero({
+                      tipo: "cliente",
+                      nombre: t,
+                      alCrear: (nuevo) => {
+                        setClientesNuevos((l) => [...l, nuevo]);
+                        cambiarCliente(nuevo.id, nuevo);
+                      },
+                    }),
+                }}
+              />
             </Campo>
             <Campo etiqueta="Contacto">
               <Selector
@@ -225,7 +251,8 @@ export function EditorCotizacion({
               >
                 {(cliente?.contactos ?? []).map((k) => (
                   <option key={k.id} value={k.id}>
-                    {k.nombre} · {k.cargo}
+                    {k.nombre}
+                    {k.cargo ? ` · ${k.cargo}` : ""}
                   </option>
                 ))}
               </Selector>
@@ -249,15 +276,26 @@ export function EditorCotizacion({
               </Selector>
             </Campo>
             <Campo etiqueta="Origen" ayuda="Puerto, aeropuerto o ciudad">
-              <Entrada value={f.origen} onChange={(e) => set("origen", e.target.value)} placeholder="Ningbo, China" list="lugares" autoComplete="off" />
+              <Combo
+                libre
+                ariaLabel="Origen"
+                valor={f.origen}
+                placeholder="Ningbo, China"
+                opciones={lugares.map((l) => ({ valor: l, etiqueta: l }))}
+                alEscribir={(t) => set("origen", t)}
+                alElegir={(o) => set("origen", o.valor)}
+              />
             </Campo>
             <Campo etiqueta="Destino">
-              <Entrada value={f.destino} onChange={(e) => set("destino", e.target.value)} placeholder="Rionegro, Antioquia" list="lugares" autoComplete="off" />
-              <datalist id="lugares">
-                {lugares.map((l) => (
-                  <option key={l} value={l} />
-                ))}
-              </datalist>
+              <Combo
+                libre
+                ariaLabel="Destino"
+                valor={f.destino}
+                placeholder="Rionegro, Antioquia"
+                opciones={lugares.map((l) => ({ valor: l, etiqueta: l }))}
+                alEscribir={(t) => set("destino", t)}
+                alElegir={(o) => set("destino", o.valor)}
+              />
             </Campo>
           </div>
         </Tarjeta>
@@ -304,13 +342,6 @@ export function EditorCotizacion({
                     </p>
                   )}
                 </div>
-                <datalist id={`conceptos-${b}`}>
-                  {conceptosCatalogo
-                    .filter((x) => !x.bloque || x.bloque === b)
-                    .map((x) => (
-                      <option key={x.nombre} value={x.nombre} />
-                    ))}
-                </datalist>
                 <div className="space-y-3">
                   {conceptos
                     .filter((c) => c.bloque === b)
@@ -326,43 +357,57 @@ export function EditorCotizacion({
                           )}
                         >
                           <div className="grid gap-2.5 sm:grid-cols-12">
-                            <Entrada
-                              className="sm:col-span-7"
-                              value={c.descripcion}
-                              placeholder="Descripción del concepto"
-                              aria-label="Descripción"
-                              list={`conceptos-${b}`}
-                              autoComplete="off"
-                              onChange={(e) => {
-                                const desc = e.target.value;
-                                const cat = conceptosCatalogo.find((x) => x.nombre === desc);
-                                // Al elegir del catálogo en una fila nueva, se traen moneda y unidad.
-                                actualizar(
-                                  c.clave,
-                                  cat && c.costoUnitario === 0 && c.ventaUnitaria === 0
-                                    ? { descripcion: desc, moneda: cat.moneda ?? c.moneda, unidad: cat.unidad ?? c.unidad, paraTerceros: cat.paraTerceros ?? c.paraTerceros }
-                                    : { descripcion: desc },
-                                );
-                              }}
-                            />
-                            <Selector
-                              className="sm:col-span-5"
-                              aria-label="Proveedor"
-                              value={c.proveedorId ?? ""}
-                              onChange={(e) =>
-                                actualizar(c.clave, {
-                                  proveedorId: e.target.value || undefined,
-                                  proveedorNombre: proveedores.find((p) => p.id === e.target.value)?.nombre,
-                                })
-                              }
-                            >
-                              <option value="">Sin proveedor</option>
-                              {proveedores.map((p) => (
-                                <option key={p.id} value={p.id}>
-                                  {p.nombre}
-                                </option>
-                              ))}
-                            </Selector>
+                            <label className="sm:col-span-7">
+                              <span className="mb-1 block text-[11px] text-subtle">Concepto</span>
+                              <Combo
+                                libre
+                                ariaLabel="Descripción"
+                                valor={c.descripcion}
+                                placeholder={`Ej.: ${conceptosCatalogo.find((x) => x.bloque === b)?.nombre ?? "Descripción del concepto"}`}
+                                vacio="Escribe la descripción"
+                                opciones={conceptosCatalogo
+                                  .filter((x) => !x.bloque || x.bloque === b)
+                                  .map((x) => ({ valor: x.nombre, etiqueta: x.nombre, detalle: x.paraTerceros ? "terceros" : x.moneda }))}
+                                alEscribir={(t) => actualizar(c.clave, { descripcion: t })}
+                                alElegir={(o) => {
+                                  const cat = conceptosCatalogo.find((x) => x.nombre === o.valor);
+                                  // Al elegir del catálogo en una fila nueva, se traen moneda, unidad y tipo.
+                                  actualizar(
+                                    c.clave,
+                                    cat && c.costoUnitario === 0 && c.ventaUnitaria === 0
+                                      ? { descripcion: o.valor, moneda: cat.moneda ?? c.moneda, unidad: cat.unidad ?? c.unidad, paraTerceros: cat.paraTerceros ?? c.paraTerceros }
+                                      : { descripcion: o.valor },
+                                  );
+                                }}
+                              />
+                            </label>
+                            <label className="sm:col-span-5">
+                              <span className="mb-1 block text-[11px] text-subtle">Proveedor</span>
+                              <Combo
+                                ariaLabel="Proveedor"
+                                valor={c.proveedorId ?? ""}
+                                placeholder="Sin proveedor"
+                                opciones={[{ valor: "", etiqueta: "Sin proveedor" }, ...todosProveedores.map((p) => ({ valor: p.id, etiqueta: p.nombre }))]}
+                                alElegir={(o) =>
+                                  actualizar(c.clave, {
+                                    proveedorId: o.valor || undefined,
+                                    proveedorNombre: o.valor ? o.etiqueta : undefined,
+                                  })
+                                }
+                                crear={{
+                                  etiqueta: (t) => (t ? `Crear proveedor «${t}»` : "Crear proveedor nuevo"),
+                                  alCrear: (t) =>
+                                    setDlgTercero({
+                                      tipo: "proveedor",
+                                      nombre: t,
+                                      alCrear: (nuevo) => {
+                                        setProveedoresNuevos((l) => [...l, { id: nuevo.id, nombre: nuevo.razonSocial }]);
+                                        actualizar(c.clave, { proveedorId: nuevo.id, proveedorNombre: nuevo.razonSocial });
+                                      },
+                                    }),
+                                }}
+                              />
+                            </label>
                           </div>
                           <div className="mt-2.5 grid grid-cols-2 gap-2.5 sm:grid-cols-3 2xl:grid-cols-[88px_120px_1fr_1fr_1fr_150px]">
                             <label>
@@ -408,27 +453,35 @@ export function EditorCotizacion({
                           </div>
                           <div className="mt-2.5 grid grid-cols-[1fr_110px] gap-2.5 sm:grid-cols-[1fr_130px]">
                             <label>
-                              <span className="mb-1 block text-[11px] text-subtle">Producto en Finppi</span>
-                              <Selector
-                                value={c.productoFinppi ?? ""}
-                                onChange={(e) => {
-                                  const p = productosFinppi.find((x) => x.codigo === e.target.value);
-                                  actualizar(c.clave, {
-                                    productoFinppi: e.target.value || undefined,
-                                    ivaFinppi: p?.iva ?? c.ivaFinppi,
-                                  });
+                              <span className="mb-1 block text-[11px] text-subtle">Producto (para la factura)</span>
+                              <Combo
+                                ariaLabel="Producto"
+                                valor={c.productoFinppi ?? ""}
+                                placeholder="Elige o crea el producto…"
+                                opciones={[
+                                  ...todosProductos.map((p) => ({ valor: p.codigo, etiqueta: p.nombre, detalle: `${p.codigo}${p.iva ? ` · ${p.iva}` : ""}` })),
+                                  ...(c.productoFinppi && !todosProductos.some((p) => p.codigo === c.productoFinppi)
+                                    ? [{ valor: c.productoFinppi, etiqueta: c.productoFinppi }]
+                                    : []),
+                                ]}
+                                alElegir={(o) => {
+                                  const p = todosProductos.find((x) => x.codigo === o.valor);
+                                  // El producto trae su IVA preestablecido; luego se puede cambiar.
+                                  actualizar(c.clave, { productoFinppi: o.valor || undefined, ivaFinppi: p?.iva ?? c.ivaFinppi });
                                 }}
-                              >
-                                <option value="">{productosFinppi.length ? "Elige al facturar…" : "Agrégalos en Catálogos"}</option>
-                                {productosFinppi.map((p) => (
-                                  <option key={p.codigo} value={p.codigo}>
-                                    {p.codigo} - {p.nombre}
-                                  </option>
-                                ))}
-                                {c.productoFinppi && !productosFinppi.some((p) => p.codigo === c.productoFinppi) && (
-                                  <option value={c.productoFinppi}>{c.productoFinppi}</option>
-                                )}
-                              </Selector>
+                                crear={{
+                                  etiqueta: (t) => (t ? `Crear producto «${t}»` : "Crear producto nuevo"),
+                                  alCrear: (t) =>
+                                    setDlgProducto({
+                                      nombre: t || c.descripcion,
+                                      iva: c.paraTerceros ? "Ninguno" : c.ivaFinppi ?? "IVA-19",
+                                      alCrear: (nuevo) => {
+                                        setProductosNuevos((l) => [...l, nuevo]);
+                                        actualizar(c.clave, { productoFinppi: nuevo.codigo, ivaFinppi: nuevo.iva ?? c.ivaFinppi });
+                                      },
+                                    }),
+                                }}
+                              />
                             </label>
                             <label>
                               <span className="mb-1 block text-[11px] text-subtle">IVA</span>
@@ -577,8 +630,36 @@ export function EditorCotizacion({
       <aside className="xl:sticky xl:top-20 xl:self-start">
         <Tarjeta className="overflow-hidden">
           <div className="bg-gradient-to-br from-[#0a0f1f] to-[#1a2550] p-5 text-white">
-            <p className="text-[13px] text-white/60">Total al cliente</p>
-            <p className="mt-1 text-3xl font-semibold tracking-tight tabular">{dinero(totales.venta, mon)}</p>
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-[13px] text-white/60">
+                Total al cliente <span className="font-medium text-white/80">en {mon === "USD" ? "dólares (USD)" : "pesos (COP)"}</span>
+              </p>
+              {/* Moneda en que se presenta la cotización (por defecto USD). */}
+              <div role="radiogroup" aria-label="Moneda de la cotización" className="flex rounded-lg bg-white/10 p-0.5 text-xs font-semibold">
+                {(["USD", "COP"] as const).map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    role="radio"
+                    aria-checked={mon === m}
+                    onClick={() => set("monedaPresentacion", m)}
+                    className={cn("rounded-md px-2.5 py-1 transition-colors", mon === m ? "bg-white text-[#0a0f1f]" : "text-white/70 hover:text-white")}
+                  >
+                    {m}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <p className="mt-2 flex items-baseline gap-2 tabular">
+              <span className="text-sm font-semibold text-white/60">{mon === "USD" ? "US$" : "$"}</span>
+              <span className="text-3xl font-semibold tracking-tight">
+                {totales.venta.toLocaleString(mon === "USD" ? "en-US" : "es-CO", { minimumFractionDigits: mon === "USD" ? 2 : 0, maximumFractionDigits: mon === "USD" ? 2 : 0 })}
+              </span>
+              <span className="text-sm font-semibold text-white/60">{mon}</span>
+            </p>
+            <p className="mt-1 text-xs text-white/50 tabular">
+              ≈ {dinero(mon === "USD" ? totales.venta * (f.trm || 1) : totales.venta / (f.trm || 1), mon === "USD" ? "COP" : "USD")} con TRM {(f.trm || 0).toLocaleString("es-CO")}
+            </p>
             <div className="mt-4 grid grid-cols-2 gap-3 text-[13px]">
               <div className="rounded-lg bg-white/[0.06] p-2.5">
                 <p className="text-white/50">Utilidad</p>
@@ -595,13 +676,7 @@ export function EditorCotizacion({
           </div>
 
           <div className="space-y-4 p-5">
-            <div className="grid grid-cols-2 gap-3">
-              <Campo etiqueta="Moneda">
-                <Selector value={f.monedaPresentacion} onChange={(e) => set("monedaPresentacion", e.target.value as Moneda)}>
-                  <option>COP</option>
-                  <option>USD</option>
-                </Selector>
-              </Campo>
+            <div className="grid gap-3">
               <Campo
                 etiqueta="TRM"
                 ayuda={
@@ -654,6 +729,24 @@ export function EditorCotizacion({
           </div>
         </Tarjeta>
       </aside>
+      {dlgTercero && (
+        <DialogoTercero
+          abierto
+          cerrar={() => setDlgTercero(null)}
+          tipo={dlgTercero.tipo}
+          nombreInicial={dlgTercero.nombre}
+          alCrear={dlgTercero.alCrear}
+        />
+      )}
+      {dlgProducto && (
+        <DialogoProducto
+          abierto
+          cerrar={() => setDlgProducto(null)}
+          nombreInicial={dlgProducto.nombre}
+          ivaInicial={dlgProducto.iva}
+          alGuardar={(p) => dlgProducto.alCrear({ codigo: p.codigo!, nombre: p.nombre, iva: p.datos.iva })}
+        />
+      )}
     </div>
   );
 }

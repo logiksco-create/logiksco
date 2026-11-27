@@ -13,6 +13,7 @@ const B = process.env.BASE_URL ?? 'http://localhost:3000';
 
   // 1. Cliente acepta COT-0004 (Textiles, sin 170)
   await p.goto(B + '/c/demo-q-4-enlace');
+  await p.locator('[name=documento]').fill('1036000000');
   await p.getByLabel(/Acepto la cotización/).check();
   await p.getByRole('button', { name: 'Aceptar cotización' }).click();
   await p.getByText('Conocimiento del cliente · Circular 170').waitFor();
@@ -56,7 +57,7 @@ const B = process.env.BASE_URL ?? 'http://localhost:3000';
   await p.getByRole('button', { name: 'Duplicar' }).click();
   await p.waitForURL(/editar\?duplicada/);
   await p.getByText(/Cotización duplicada de COT/).waitFor();
-  console.log('✓ duplicada; cliente =', await p.getByLabel('Cliente o prospecto').evaluate(s => s.options[s.selectedIndex].text));
+  console.log('✓ duplicada; cliente =', await p.getByRole('combobox', { name: 'Cliente o prospecto' }).inputValue());
   await p.getByRole('button', { name: 'Guardar cambios' }).click();
   await p.waitForURL(/\/app\/cotizaciones\/[^/]+$/);
   paso('duplicado guardado: ' + (await p.locator('h1').innerText()).replace(/\n/g, ' '));
@@ -66,11 +67,16 @@ const B = process.env.BASE_URL ?? 'http://localhost:3000';
   await p.getByText(/enlace seguro de aceptación/i).waitFor(); paso('enviada con enlace');
   // 8. Nueva cotización
   await p.goto(B + '/app/cotizaciones/nueva');
-  await p.getByLabel('Cliente o prospecto').selectOption('t-agro');
-  await p.getByPlaceholder('Ningbo, China').fill('Miami (MIA)');
-  await p.getByPlaceholder('Rionegro, Antioquia').fill('Rionegro (MDE)');
+  const cli = p.getByRole('combobox', { name: 'Cliente o prospecto' });
+  await cli.click(); await cli.fill('Agroindustrias');
+  await p.getByRole('listbox').getByRole('option', { name: /Agroindustrias del Oriente/ }).click();
+  await p.getByRole('combobox', { name: 'Origen' }).fill('Miami (MIA)');
+  await p.keyboard.press('Escape');
+  await p.getByRole('combobox', { name: 'Destino' }).fill('Rionegro (MDE)');
+  await p.keyboard.press('Escape');
   await p.getByPlaceholder('Maquinaria agrícola').fill('Repuestos');
-  await p.getByLabel('Descripción', { exact: true }).last().fill('Flete aéreo MIA → MDE');
+  await p.getByRole('combobox', { name: 'Descripción' }).last().fill('Flete aéreo MIA → MDE');
+  await p.keyboard.press('Escape');
   
   await p.getByRole('button', { name: 'Crear cotización' }).click();
   await p.waitForURL(/\/app\/cotizaciones\/[^/]+$/); paso('cotización nueva creada');

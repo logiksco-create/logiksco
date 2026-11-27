@@ -28,7 +28,9 @@ let pagina;
   // 1. La cotización pide los datos de Finppi.
   await p.goto(B + '/app/cotizaciones/nueva');
   await p.getByRole('heading', { name: 'Facturación electrónica' }).waitFor();
-  await p.getByLabel('Cliente o prospecto').selectOption({ label: 'Agroindustrias del Oriente SAS' });
+  const cli = p.getByRole('combobox', { name: 'Cliente o prospecto' });
+  await cli.click(); await cli.fill('Agroindustrias');
+  await p.getByRole('listbox').getByRole('option', { name: /Agroindustrias del Oriente/ }).click();
   await p.getByText(/Faltan \d+ datos? para Finppi/).waitFor();
   paso('la cotización muestra los datos que faltan para Finppi');
   await p.getByRole('button', { name: 'Completar' }).click();

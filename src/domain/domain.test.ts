@@ -318,13 +318,18 @@ describe("facturación (RF-45, RF-46)", () => {
     expect(totalesFactura(l)).toEqual({ propios: 8_000_000, terceros: 500_000, iva: 1_520_000, total: 10_020_000 });
   });
 
-  it("solo propone DO no facturados, no abiertos y dentro del corte", () => {
+  it("lista todos los DO no facturados y sugiere los avanzados dentro del corte", () => {
     const hoy = "2026-11-26";
-    expect(pendientesPorCliente([op], [], [cliente], hoy)[0].operaciones).toHaveLength(1);
+    const p = pendientesPorCliente([op], [], [cliente], hoy)[0];
+    expect(p.operaciones).toHaveLength(1);
+    expect(p.sugeridas).toEqual(["o1"]);
     const f = { estado: "emitida", operaciones: ["o1"] } as Factura;
     expect(pendientesPorCliente([op], [f], [cliente], hoy)).toHaveLength(0);
-    expect(pendientesPorCliente([{ ...op, estado: "abierto" }], [], [cliente], hoy)).toHaveLength(0);
-    expect(pendientesPorCliente([{ ...op, abiertoEl: "2026-11-26" }], [], [cliente], hoy)).toHaveLength(0);
+    // Abierto o después del corte: aparece, pero no viene marcado.
+    const abierto = pendientesPorCliente([{ ...op, estado: "abierto" }], [], [cliente], hoy)[0];
+    expect(abierto.operaciones).toHaveLength(1);
+    expect(abierto.sugeridas).toEqual([]);
+    expect(pendientesPorCliente([{ ...op, abiertoEl: "2026-11-26" }], [], [cliente], hoy)[0].sugeridas).toEqual([]);
   });
 });
 
