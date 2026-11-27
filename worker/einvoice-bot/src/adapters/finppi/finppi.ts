@@ -269,6 +269,7 @@ export async function elegirCliente(
   opts: { crear: boolean; nombreRegistrado: string | null },
 ): Promise<"existente" | "creado"> {
   const ctrl = await control(page, SELECT_NAMES.client, SELECT_LABELS.client);
+  let elegido = "";
   const intentar = async (texto: string) => {
     await ctrl.click();
     await page.keyboard.press("ControlOrMeta+a").catch(() => undefined);
@@ -291,6 +292,7 @@ export async function elegirCliente(
       await page.keyboard.press("Escape");
       return false;
     }
+    elegido = textos[i];
     await ops.nth(i).click();
     return true;
   };
@@ -324,10 +326,38 @@ export async function elegirCliente(
       );
     }
   }
-  // El formulario autocompleta la identificación: debe coincidir (no se sobrescribe).
-  const id = soloDigitos(await page.locator(FORM.clientId).inputValue({ timeout: T.corto }));
-  if (!id.includes(c.numeroDocumento)) {
-    throw new ErrorBot("VALUES_MISMATCH", `La identificación del cliente elegido en Finppi (${id || "vacía"}) no coincide con ${c.numeroDocumento}`);
+  // Finppi suele autocompletar la identificación; se le da tiempo.
+  const campoId = page.locator(FORM.clientId);
+  let id = "";
+  for (let k = 0; k < 10 && !id; k++) {
+    id = soloDigitos(await campoId.inputValue({ timeout: T.corto }).catch(() => ""));
+    if (!id) await page.waitForTimeout(500);
+  }
+  if (id) {
+    // Si la puso Finppi, debe ser la del cliente (nunca se sobrescribe).
+    if (!id.includes(c.numeroDocumento)) {
+      throw new ErrorBot("VALUES_MISMATCH", `La identificación del cliente elegido en Finppi (${id}) no coincide con ${c.numeroDocumento}`);
+    }
+    return resultado;
+  }
+  // Finppi no la autocompletó. Solo se sigue si el elegido es, sin duda, el cliente
+  // que el listado de Clientes asocia a ese documento (o el que se acaba de crear).
+  const seguro =
+    soloDigitos(elegido).includes(c.numeroDocumento) ||
+    (!!opts.nombreRegistrado && normalizar(elegido) === normalizar(opts.nombreRegistrado)) ||
+    (resultado === "creado" && normalizar(elegido) === normalizar(nombreEnFinppi(c)));
+  if (!seguro) {
+    throw new ErrorBot("VALUES_MISMATCH", `Finppi no mostró la identificación del cliente elegido («${elegido}») y no se pudo confirmar que sea ${c.numeroDocumento}`);
+  }
+  // Se completan los campos vacíos con los datos del cliente (como los autocompletaría Finppi).
+  await campoId.fill(c.numeroDocumento);
+  const dir = page.locator(FORM.clientAddress);
+  if (c.direccion && !(await dir.inputValue().catch(() => "")).trim()) await dir.fill(c.direccion);
+  const tel = page.locator(FORM.clientPhone);
+  const numero = (c.telefono || c.celular || "").replace(/[^0-9]/g, "");
+  if (numero && !(await tel.inputValue().catch(() => "")).trim()) await tel.fill(numero);
+  if (soloDigitos(await campoId.inputValue()) !== c.numeroDocumento) {
+    throw new ErrorBot("VALUES_MISMATCH", "La identificación del cliente no quedó como se escribió");
   }
   return resultado;
 }

@@ -129,7 +129,8 @@ function formulario() {
   const id = input('clientnationalID'), dir = input('clientaddress'), tel = input('clientnumber');
   // Como Finppi: el buscador de la factura muestra y filtra solo por NOMBRE.
   form.append(campo('Cliente', selector(() => S.clientes.map((c) => c.nombre), (o) => {
-    const c = S.clientes.find((x) => x.nombre === o); id.value = c.doc; dir.value = c.dir; tel.value = c.tel;
+    // Como en Finppi real (27-nov): a los clientes recién creados no les autocompleta los datos.
+    const c = S.clientes.find((x) => x.nombre === o); if (c.sinAuto) return; id.value = c.doc; dir.value = c.dir; tel.value = c.tel;
   }, '', 'invoiceClientId')));
   const mas = Object.assign(document.createElement('button'), { type: 'button', id: 'TooltipSearchInvoice-newCliente', textContent: '+' });
   mas.onclick = panelCliente; form.append(mas, id, dir, tel, input('seller'));
@@ -212,7 +213,7 @@ function panelCliente() {
     e.preventDefault();
     const v = (n) => p.querySelector(`[name="${n}"]`).value;
     const nom = p.querySelector('[name="name"]') ? v('name') + ' ' + v('lastname') : v('companyLegalName');
-    S.clientes.push({ doc: v('nationalID'), nombre: nom.trim(), dir: v('locations.0.address.address_line1'), tel: v('contacts[0].phoneNumber.number') }); guardar();
+    S.clientes.push({ sinAuto: true, doc: v('nationalID'), nombre: nom.trim(), dir: v('locations.0.address.address_line1'), tel: v('contacts[0].phoneNumber.number') }); guardar();
     p.innerHTML = 'Cliente creado';
     setTimeout(() => p.remove(), 300);
   };
