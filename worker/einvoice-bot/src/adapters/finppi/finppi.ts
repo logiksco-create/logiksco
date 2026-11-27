@@ -502,14 +502,44 @@ export async function llenarFactura(page: Page, p: PayloadEmision) {
 }
 
 /** Lee los totales del formulario (tras cargar los ítems). NaN = fallo. */
+/**
+ * Lee los totales como los ve una persona: para cada etiqueta visible, el
+ * texto con forma de dinero que está en la MISMA FILA, a su derecha. No
+ * depende de la estructura interna de la página. Script en texto plano (tsx
+ * inyecta «__name» en las funciones y no existe en el navegador).
+ */
+const SCRIPT_TOTALES = (etiquetas: string[]) => `(() => {
+  var etiquetas = ${JSON.stringify(etiquetas)};
+  var visible = function (el) { var r = el.getBoundingClientRect(); var st = getComputedStyle(el); return r.width > 0 && r.height > 0 && st.visibility !== "hidden" && st.display !== "none"; };
+  var propio = function (el) { var t = ""; el.childNodes.forEach(function (n) { if (n.nodeType === 3) t += n.textContent; }); return t.replace(/\\s+/g, " ").trim(); };
+  var todos = Array.prototype.slice.call(document.querySelectorAll("body *")).filter(visible);
+  var dinero = todos.filter(function (el) { var t = (el.innerText || "").trim(); return el.children.length === 0 && /^[-$\\s]*(NaN|[\\d.,]+)$/.test(t) && /\\d|NaN/.test(t); });
+  var r = {};
+  etiquetas.forEach(function (et) {
+    var labs = todos.filter(function (el) { return propio(el) === et || ((el.innerText || "").trim() === et && el.children.length === 0); });
+    var lab = labs[labs.length - 1];
+    if (!lab) return;
+    var a = lab.getBoundingClientRect(), cy = a.top + a.height / 2, mejor = null, dist = 1e9;
+    dinero.forEach(function (el) {
+      var b = el.getBoundingClientRect();
+      if (b.left < a.right - 2 || Math.abs(b.top + b.height / 2 - cy) > Math.max(8, a.height)) return;
+      var d = b.left - a.right;
+      if (d < dist) { dist = d; mejor = el; }
+    });
+    r[et] = mejor ? mejor.innerText.trim() : "";
+  });
+  return r;
+})()`;
+
+/** Último texto leído por etiqueta (para explicar un error de totales). */
+export const ultimaLecturaTotales: Record<string, string> = {};
+
 async function leerTotalesUnaVez(page: Page): Promise<Record<string, number>> {
+  const textos = (await page.evaluate(SCRIPT_TOTALES(TOTALS_LABELS)).catch(() => ({}))) as Record<string, string>;
   const r: Record<string, number> = {};
-  for (const etiqueta of TOTALS_LABELS) {
-    // Solo la etiqueta visible (puede haber copias ocultas, p. ej. en modales).
-    const el = page.getByText(etiqueta, { exact: true }).filter({ visible: true }).last();
-    if (!(await el.count())) continue;
-    const valor = await el.locator("xpath=following::*[normalize-space(text())][1]").innerText().catch(() => "NaN");
-    r[etiqueta] = leerValorFinppi(valor);
+  for (const [k, v] of Object.entries(textos)) {
+    ultimaLecturaTotales[k] = v;
+    r[k] = v ? leerValorFinppi(v) : NaN;
   }
   return r;
 }

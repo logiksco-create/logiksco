@@ -63,6 +63,11 @@ export const SCRIPT_DIAGNOSTICO = `(() => {
       return i.tagName.toLowerCase() + "[name=" + (i.getAttribute("name") || "") + "][id=" + i.id + "][type=" + (i.getAttribute("type") || "") + "][placeholder=" + (i.getAttribute("placeholder") || "") + "]";
     }).slice(0, 120),
     botones: arr("button").map(function (b) { return t(b, 40) + " [type=" + (b.getAttribute("type") || "") + "][id=" + b.id + "]"; }).slice(0, 60),
+    totales: (function () {
+      var l = arr("body *").filter(function (e) { return e.children.length === 0 && t(e, 40) === "Subtotal"; }).pop();
+      var c = l && l.parentElement && l.parentElement.parentElement && l.parentElement.parentElement.parentElement;
+      return html(c, 3000);
+    })(),
     desplegables: arr('[class*="-control"], [class*="select__control"], [class*="Select"]').slice(0, 25).map(function (c) {
       var p2 = c.parentElement && c.parentElement.parentElement;
       return { clase: (c.getAttribute("class") || "").slice(0, 100), texto: t(c, 60), contexto: t(p2 && p2.parentElement, 160), html: html(p2, 700) };
@@ -253,7 +258,11 @@ export async function emitir(job: Job) {
       for (const [nombre, aprobado, leido] of comparar) {
         if (leido === undefined) continue;
         if (!totalesCoinciden(aprobado, leido)) {
-          throw new ErrorBot("VALUES_MISMATCH", `${nombre} en Finppi (${leido}) no coincide con el aprobado (${aprobado})`);
+          const texto = finppi.ultimaLecturaTotales[nombre === "IVA" ? "IVA (+)" : nombre];
+          throw new ErrorBot(
+            "VALUES_MISMATCH",
+            `${nombre} en Finppi (${leido}${texto !== undefined ? `, se leyó «${texto}»` : ""}) no coincide con el aprobado (${aprobado})`,
+          );
         }
       }
       await db.log(job, "totales", `Totales de Finppi = aprobados (${p.totales.total.toLocaleString("es-CO")} COP)`);

@@ -148,7 +148,13 @@ function formulario() {
     for (const f of filas) { const b = Number(f.precio.value) * Number(f.cant.value); sub += b; iva += Math.round(b * PCT[f.iva.valor || 'Ninguno']) / 100; }
     const t = Math.round((sub + iva) * 100) / 100;
     const v = { 'Subtotal': sub, 'Descuento detalle (-)': 0, 'Descuentos globales (-)': 0, 'Subtotal base gravable': sub, 'INC (+)': 0, 'IVA (+)': iva, 'Retención en la Fuente (-)': 0, 'Rete IVA (-)': 0, 'Rete ICA (-)': NaN, 'Total': t };
-    const pintar = (w) => { totales.innerHTML = Object.entries(w).map(([k, x]) => `<div><span>${k}</span> <span>${Number.isNaN(x) ? '$NaN' : fmt(x)}</span></div>`).join(''); };
+    // Columnas separadas y en orden inverso en el DOM (se ven: etiqueta | valor).
+    const pintar = (w) => {
+      const e = Object.entries(w);
+      totales.innerHTML = `<div style="display:flex;flex-direction:row-reverse;justify-content:flex-end;gap:40px">`
+        + `<div>${e.map(([, x]) => `<p style="margin:0;height:24px"><span>${Number.isNaN(x) ? '$NaN' : fmt(x)}</span></p>`).join('')}</div>`
+        + `<div>${e.map(([k]) => `<p style="margin:0;height:24px"><b>${k}</b></p>`).join('')}</div></div>`;
+    };
     // Como Finppi: mientras recalcula muestra «$NaN» un instante.
     pintar({ ...v, 'Subtotal': NaN, 'Total': NaN });
     clearTimeout(form.recalc); form.recalc = setTimeout(() => pintar(v), 1200);
