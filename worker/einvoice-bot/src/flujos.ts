@@ -44,29 +44,26 @@ async function conSesion<T>(job: Job, fn: (page: Page, secretos: string[]) => Pr
  * (etiquetas, desplegables, nombres de campos y botones) y una captura, para
  * corregir selectors.ts sin adivinar. Nunca guarda valores de contraseñas.
  */
+export const SCRIPT_DIAGNOSTICO = `(() => {
+  var t = function (el, n) { return ((el && el.textContent) || "").replace(/\\s+/g, " ").trim().slice(0, n || 120); };
+  var html = function (el, n) { return ((el && el.outerHTML) || "").replace(/value="[^"]*"/g, 'value="…"').replace(/\\s+/g, " ").slice(0, n || 700); };
+  var arr = function (sel) { return Array.prototype.slice.call(document.querySelectorAll(sel)); };
+  return {
+    url: location.pathname,
+    titulo: t(document.querySelector("h1, h2, h3, h4")),
+    etiquetas: arr("label").map(function (l) { return t(l, 60); }).filter(Boolean).slice(0, 80),
+    campos: arr("input, textarea, select").map(function (i) {
+      return i.tagName.toLowerCase() + "[name=" + (i.getAttribute("name") || "") + "][id=" + i.id + "][type=" + (i.getAttribute("type") || "") + "][placeholder=" + (i.getAttribute("placeholder") || "") + "]";
+    }).slice(0, 120),
+    botones: arr("button").map(function (b) { return t(b, 40) + " [type=" + (b.getAttribute("type") || "") + "][id=" + b.id + "]"; }).slice(0, 60),
+    desplegables: arr('[class*="-control"], [class*="select__control"], [class*="Select"]').slice(0, 25).map(function (c) {
+      var p2 = c.parentElement && c.parentElement.parentElement;
+      return { clase: (c.getAttribute("class") || "").slice(0, 100), texto: t(c, 60), contexto: t(p2 && p2.parentElement, 160), html: html(p2, 700) };
+    })
+  };
+})()`;
+
 async function guardarDiagnostico(job: Job, page: Page, secretos: string[]) {
-  const estructura = await page.evaluate(() => {
-    const t = (el: Element | null | undefined, n = 120) => (el?.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, n);
-    const html = (el: Element | null | undefined, n = 700) =>
-      (el?.outerHTML ?? "").replace(/value="[^"]*"/g, 'value="…"').replace(/\s+/g, " ").slice(0, n);
-    return {
-      url: location.pathname,
-      titulo: t(document.querySelector("h1, h2, h3, h4")),
-      etiquetas: Array.from(document.querySelectorAll("label")).map((l) => t(l, 60)).filter(Boolean).slice(0, 80),
-      campos: Array.from(document.querySelectorAll("input, textarea, select"))
-        .map((i) => `${i.tagName.toLowerCase()}[name=${i.getAttribute("name") ?? ""}][id=${i.id}][type=${i.getAttribute("type") ?? ""}][placeholder=${i.getAttribute("placeholder") ?? ""}]`)
-        .slice(0, 120),
-      botones: Array.from(document.querySelectorAll("button")).map((b) => `${t(b, 40)} [type=${b.getAttribute("type") ?? ""}][id=${b.id}]`).slice(0, 60),
-      desplegables: Array.from(document.querySelectorAll('[class*="-control"], [class*="select__control"], [class*="Select"]'))
-        .slice(0, 25)
-        .map((c) => ({
-          clase: (c.getAttribute("class") ?? "").slice(0, 100),
-          texto: t(c, 60),
-          contexto: t(c.parentElement?.parentElement?.parentElement, 160),
-          html: html(c.parentElement?.parentElement, 700),
-        })),
-    };
-  });
   let captura: string | null = null;
   try {
     const png = await page.screenshot({ fullPage: true, type: "png" });
@@ -75,6 +72,9 @@ async function guardarDiagnostico(job: Job, page: Page, secretos: string[]) {
   } catch {
     captura = null;
   }
+  // Script en texto plano: tsx/esbuild inyecta «__name» en las funciones y
+  // ese ayudante no existe dentro del navegador.
+  const estructura = await page.evaluate(SCRIPT_DIAGNOSTICO).catch((e: Error) => ({ error: e.message }));
   const limpio = JSON.parse(enmascarar(JSON.stringify(estructura), secretos));
   await db.actualizarJob(job.id, { resultado: { diagnostico: limpio, captura } });
   await db.log(job, "diagnostico", "Se guardó la estructura de la página de Finppi para corregir el selector", "aviso");
