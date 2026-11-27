@@ -13,7 +13,15 @@ const tono: Record<EstadoFactura, Tono> = {
   rechazada: "peligro",
 };
 
-export function EstadoFacturaBadge({ estado }: { estado: EstadoFactura }) {
+/** `prueba`: el «Guardar» del modo prueba deja un borrador en Finppi; nunca se muestra como emitida. */
+export function EstadoFacturaBadge({ estado, prueba }: { estado: EstadoFactura; prueba?: boolean }) {
+  if (prueba && estado === "emitida") {
+    return (
+      <Insignia tono="alerta" punto>
+        Borrador de prueba
+      </Insignia>
+    );
+  }
   return (
     <Insignia tono={tono[estado]} punto>
       {ESTADOS_FACTURA[estado]}

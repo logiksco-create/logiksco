@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Receipt, ReceiptText } from "lucide-react";
 import { contexto, tieneRol } from "@/server/contexto";
 import { cargarTodo } from "@/server/consultas";
-import { pendientesPorCliente, totalesFactura } from "@/domain/facturacion";
+import { esPrueba, pendientesPorCliente, totalesFactura } from "@/domain/facturacion";
 import { utilidadOperacion } from "@/domain/operacion";
 import { ESTADOS_DO } from "@/domain/types";
 import { Encabezado } from "@/components/app/encabezado";
@@ -101,7 +101,7 @@ export default async function Facturacion() {
                 <tr key={f.id} className="transition-colors hover:bg-surface-2">
                   <Td>
                     <Link href={`/app/facturacion/${f.id}`} className="font-mono text-[13px] font-medium hover:text-brand-fg">
-                      {f.numero ?? `PF-${f.id.slice(0, 6).toUpperCase()}`}
+                      {f.numero ?? (esPrueba(f) && f.numeroEsperado ? f.numeroEsperado : `PF-${f.id.slice(0, 6).toUpperCase()}`)}
                     </Link>
                     <p className="text-xs text-subtle">{fechaHora(f.creadoEl)}</p>
                   </Td>
@@ -111,7 +111,7 @@ export default async function Facturacion() {
                   </Td>
                   <Td className="text-right font-medium tabular whitespace-nowrap">{dinero(totalesFactura(f.lineas).total, f.moneda)}</Td>
                   <Td>
-                    <EstadoFacturaBadge estado={f.estado} />
+                    <EstadoFacturaBadge estado={f.estado} prueba={esPrueba(f)} />
                   </Td>
                 </tr>
               ))}

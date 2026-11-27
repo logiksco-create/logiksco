@@ -5,7 +5,7 @@ import { contexto, tieneRol } from "@/server/contexto";
 import { cargarFlujo, cargarTodo, situacionCliente } from "@/server/consultas";
 import { TarjetaPaso } from "@/components/app/flujo";
 import { estadoEfectivo, totalesCotizacion } from "@/domain/cotizacion";
-import { totalesFactura } from "@/domain/facturacion";
+import { esPrueba, totalesFactura } from "@/domain/facturacion";
 import { Encabezado } from "@/components/app/encabezado";
 import { InvitarPortal } from "@/components/app/invitar-portal";
 import { CompletarDatosFiscales } from "@/components/app/factura-electronica";
@@ -119,9 +119,9 @@ export default async function Cliente({ params }: PageProps<"/app/clientes/[id]"
                 {fs.map((f) => (
                   <li key={f.id}>
                     <Link href={`/app/facturacion/${f.id}`} className="flex items-center gap-3 px-5 py-3 text-[13px] hover:bg-surface-2">
-                      <span className="font-mono font-medium">{f.numero ?? "Prefactura"}</span>
+                      <span className="font-mono font-medium">{f.numero ?? (esPrueba(f) ? f.numeroEsperado ?? "Prueba" : "Prefactura")}</span>
                       <span className="flex-1 tabular">{dinero(totalesFactura(f.lineas).total, f.moneda)}</span>
-                      <EstadoFacturaBadge estado={f.estado} />
+                      <EstadoFacturaBadge estado={f.estado} prueba={esPrueba(f)} />
                     </Link>
                   </li>
                 ))}

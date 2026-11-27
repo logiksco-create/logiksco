@@ -1502,7 +1502,8 @@ export class SupabaseRepositorioPortal implements RepositorioPortal {
       .eq("estado", "emitida")
       .order("creado_el", { ascending: false });
     falla(error);
-    return (data ?? []).map(mapFactura);
+    // Las pruebas (borradores en Finppi) nunca se muestran al cliente.
+    return (data ?? []).map(mapFactura).filter((f) => !(f.simulada && !f.cufe));
   }
 
   async formularios170() {

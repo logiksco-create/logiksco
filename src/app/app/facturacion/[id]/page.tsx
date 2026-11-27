@@ -163,8 +163,8 @@ export default async function DetalleFactura({ params }: PageProps<"/app/factura
         titulo={
           <span className="flex flex-wrap items-center gap-3">
             <span className="font-mono">{f.numero ?? (prueba ? f.numeroEsperado ?? "Prueba" : `Prefactura PF-${f.id.slice(0, 6).toUpperCase()}`)}</span>
-            <EstadoFacturaBadge estado={f.estado} />
-            {f.simulada && <Insignia tono="alerta">{prueba ? "Prueba · borrador en Finppi" : "Simulación"}</Insignia>}
+            <EstadoFacturaBadge estado={f.estado} prueba={prueba} />
+            {f.simulada && !prueba && <Insignia tono="alerta">Simulación</Insignia>}
           </span>
         }
         descripcion={

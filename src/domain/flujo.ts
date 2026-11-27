@@ -279,7 +279,7 @@ export function calcularFlujo(e: EntradaFlujo): PasoFlujo[] {
             : actual
               ? `Sigue: ${actual.nombre}`
               : "Marca la entrega",
-        detalle: `${op.origen} → ${op.destino}${f ? ` · ${f.estado === "emitida" ? `factura ${f.numero ?? "emitida"}` : "prefactura en curso"}` : ""}`,
+        detalle: `${op.origen} → ${op.destino}${f ? ` · ${f.estado === "emitida" && !(f.simulada && !f.cufe) ? `factura ${f.numero ?? "emitida"}` : "prefactura en curso"}` : ""}`,
         roles: ["operaciones"],
         responsableId: op.responsableId,
         desde: op.abiertoEl,
@@ -303,6 +303,21 @@ export function calcularFlujo(e: EntradaFlujo): PasoFlujo[] {
           href: `/app/facturacion#c-${op.clienteId}`,
           desde: entregada,
           limite: LIMITE_DIAS.prefactura,
+        }),
+      );
+    } else if (f.estado === "emitida" && f.simulada && !f.cufe) {
+      // Prueba («Guardar» en Finppi): el DO sigue sin factura real.
+      pasos.push(
+        paso({
+          ...base,
+          id: `do-${op.id}`,
+          etapa: "facturacion",
+          accion: "Prueba guardada: emite la factura real",
+          detalle: `Borrador de prueba ${f.numeroEsperado ?? ""} en Finppi`.trim(),
+          roles: ["contabilidad"],
+          href: `/app/facturacion/${f.id}`,
+          facturaId: f.id,
+          desde: (f.fechaValidacion ?? f.creadoEl).slice(0, 10),
         }),
       );
     } else if (f.estado !== "emitida") {

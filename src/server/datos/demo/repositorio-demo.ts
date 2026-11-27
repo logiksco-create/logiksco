@@ -971,7 +971,7 @@ export class DemoRepositorioPortal implements RepositorioPortal {
   }
 
   async facturas() {
-    return estado().facturas.filter((f) => f.clienteId === this.cliente.id && f.estado === "emitida");
+    return estado().facturas.filter((f) => f.clienteId === this.cliente.id && f.estado === "emitida" && !(f.simulada && !f.cufe));
   }
 
   async formularios170() {

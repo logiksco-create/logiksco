@@ -11,6 +11,11 @@ import { pctIva } from "./einvoice";
 
 export const IVA_PROPIO_SUGERIDO = 19;
 
+/** Factura de prueba: el bot pulsó «Guardar» en Finppi (borrador, sin DIAN ni CUFE). */
+export function esPrueba(f: Pick<Factura, "simulada" | "cufe">): boolean {
+  return !!f.simulada && !f.cufe;
+}
+
 /** DO que ya están en una factura vigente (no rechazada). */
 export function operacionesFacturadas(facturas: Factura[]): Set<string> {
   return new Set(facturas.filter((f) => f.estado !== "rechazada").flatMap((f) => f.operaciones));
