@@ -12,6 +12,10 @@ import {
   PRODUCTS_LIST,
   REACT_SELECT,
   SELECT_LABELS,
+  SELECT_NAMES,
+  ITEM_SELECT_NAMES,
+  SELECT_BY_NAME,
+  LABEL_TAGS,
   TOTALS_LABELS,
   URLS,
 } from "./selectors.ts";
@@ -101,12 +105,21 @@ export async function textoCabecera(page: Page): Promise<string> {
 
 /* --------------------------- react-select --------------------------- */
 
-/** Control de un react-select por la etiqueta visible que lo acompaña. */
+/** Control de un react-select por la etiqueta visible que lo acompaña (respaldo). */
 function controlPorEtiqueta(page: Page, etiqueta: string): Locator {
-  return page
-    .locator(`label:text-is("${etiqueta}"), label:text-is("${etiqueta}*"), div:text-is("${etiqueta}"), span:text-is("${etiqueta}")`)
-    .first()
-    .locator(`xpath=following::*[contains(@class,"-control")][1]`);
+  const etiquetas = LABEL_TAGS.flatMap((tag) => [`${tag}:text-is("${etiqueta}")`, `${tag}:text-is("${etiqueta}*")`]).join(", ");
+  return page.locator(etiquetas).first().locator(`xpath=following::*[contains(@class,"-control")][1]`);
+}
+
+/** Control de un react-select por el name de su input oculto; si no está, por etiqueta. */
+async function control(page: Page, name: string, etiqueta?: string): Promise<Locator> {
+  const porNombre = page.locator(SELECT_BY_NAME(name)).first();
+  if (await porNombre.count()) return porNombre;
+  if (etiqueta) {
+    const porEtiqueta = controlPorEtiqueta(page, etiqueta);
+    if (await porEtiqueta.count()) return porEtiqueta;
+  }
+  throw new ErrorBot("SELECTOR_NOT_FOUND", `No se encontró el desplegable «${etiqueta ?? name}» en Finppi`);
 }
 
 async function opciones(page: Page): Promise<Locator> {
@@ -141,16 +154,19 @@ async function elegir(page: Page, control: Locator, texto: string, opts: { escri
 }
 
 async function elegirPorEtiqueta(page: Page, etiqueta: string, texto: string) {
-  const control = await existe(controlPorEtiqueta(page, etiqueta), T.corto, `el desplegable «${etiqueta}»`);
-  await elegir(page, control, texto);
+  const c = await existe(controlPorEtiqueta(page, etiqueta), T.corto, `el desplegable «${etiqueta}»`);
+  await elegir(page, c, texto);
+}
+
+async function elegirPorNombre(page: Page, name: string, etiqueta: string, texto: string) {
+  await elegir(page, await control(page, name, etiqueta), texto);
 }
 
 /* ------------------------- Consecutivo y cliente ------------------------- */
 
 /** La única opción del desplegable «Número» es el próximo consecutivo (§5A). */
 export async function leerNumeroOfrecido(page: Page): Promise<string> {
-  const control = await existe(controlPorEtiqueta(page, SELECT_LABELS.number), T.corto, "el desplegable «Número»");
-  const ops = await leerOpciones(page, control);
+  const ops = await leerOpciones(page, await control(page, SELECT_NAMES.number, SELECT_LABELS.number));
   if (ops.length !== 1) {
     throw new ErrorBot("CONSECUTIVE_GAP", `Finppi ofrece ${ops.length} opciones de numeración; se esperaba una sola`);
   }
@@ -158,15 +174,16 @@ export async function leerNumeroOfrecido(page: Page): Promise<string> {
 }
 
 export async function elegirNumero(page: Page, numero: string) {
-  const control = await existe(controlPorEtiqueta(page, SELECT_LABELS.number), T.corto, "el desplegable «Número»");
-  await elegir(page, control, numero, { coincide: (t) => t.replace(/\s+/g, "") === numero });
+  await elegir(page, await control(page, SELECT_NAMES.number, SELECT_LABELS.number), numero, {
+    coincide: (t) => t.replace(/\s+/g, "") === numero,
+  });
 }
 
 /** Busca al cliente por documento; si no existe y se autorizó, lo crea con el panel «+». */
 export async function elegirCliente(page: Page, c: PayloadEmision["cliente"], crear: boolean): Promise<"existente" | "creado"> {
-  const control = await existe(controlPorEtiqueta(page, SELECT_LABELS.client), T.corto, "el desplegable «Cliente»");
+  const ctrl = await control(page, SELECT_NAMES.client, SELECT_LABELS.client);
   const intentar = async () => {
-    await control.click();
+    await ctrl.click();
     await page.keyboard.type(c.numeroDocumento, { delay: 40 });
     const ops = await opciones(page);
     const textos = (await ops.allInnerTexts()).map((t) => t.trim());
@@ -249,23 +266,27 @@ async function escribirFecha(page: Page, selector: string, iso: string) {
 }
 
 export async function llenarFactura(page: Page, p: PayloadEmision) {
-  await elegirPorEtiqueta(page, SELECT_LABELS.invoiceType, p.tipoFactura);
-  await elegirPorEtiqueta(page, SELECT_LABELS.currency, p.moneda);
-  await elegirPorEtiqueta(page, SELECT_LABELS.paymentType, p.tipoPago);
+  await elegirPorNombre(page, SELECT_NAMES.invoiceType, SELECT_LABELS.invoiceType, p.tipoFactura);
+  await elegirPorNombre(page, SELECT_NAMES.currency, SELECT_LABELS.currency, p.moneda);
+  await elegirPorNombre(page, SELECT_NAMES.paymentType, SELECT_LABELS.paymentType, p.tipoPago);
   await escribirFecha(page, FORM.date, p.fecha);
   await escribirFecha(page, FORM.expiration, p.vencimiento);
-  await elegirPorEtiqueta(page, SELECT_LABELS.operationType, p.tipoOperacion);
-  await elegirPorEtiqueta(page, SELECT_LABELS.paymentMethod, p.metodoPago);
+  await elegirPorNombre(page, SELECT_NAMES.operationType, SELECT_LABELS.operationType, p.tipoOperacion);
+  await elegirPorNombre(page, SELECT_NAMES.paymentMethod, SELECT_LABELS.paymentMethod, p.metodoPago);
   await page.locator(FORM.orderId).fill(p.referencia);
 
   for (let n = 0; n < p.items.length; n++) {
     const it = p.items[n];
     if (n > 0) await page.getByRole("button", { name: "Añadir", exact: true }).click();
     const fila = await existe(page.locator(FORM.item(n).unitPrice), T.corto, `la fila ${n + 1} de ítems`);
+    // Por name del input oculto; respaldo: orden de columnas en la fila.
     const tr = fila.locator("xpath=ancestor::tr[1]");
-    const selects = tr.locator(REACT_SELECT.control);
-    const idx = (k: (typeof ITEM_SELECT_ORDER)[number]) => ITEM_SELECT_ORDER.indexOf(k);
-    await elegir(page, selects.nth(idx("product")), it.producto, {
+    const nombres = ITEM_SELECT_NAMES(n);
+    const selectItem = async (k: (typeof ITEM_SELECT_ORDER)[number]) => {
+      const porNombre = page.locator(SELECT_BY_NAME(nombres[k])).first();
+      return (await porNombre.count()) ? porNombre : tr.locator(REACT_SELECT.control).nth(ITEM_SELECT_ORDER.indexOf(k));
+    };
+    await elegir(page, await selectItem("product"), it.producto, {
       escribir: it.producto,
       coincide: (t) => esOpcionDeProducto(t, it.producto),
     });
@@ -274,7 +295,7 @@ export async function llenarFactura(page: Page, p: PayloadEmision) {
     await page.locator(FORM.item(n).quantity).fill(String(it.cantidad));
     await page.locator(FORM.item(n).unitPrice).fill(String(it.precio));
     await page.locator(FORM.item(n).discountPct).fill("0");
-    await elegir(page, selects.nth(idx("vat")), it.iva);
+    await elegir(page, await selectItem("vat"), it.iva);
     await pausa();
   }
 }

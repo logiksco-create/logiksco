@@ -44,13 +44,16 @@ const fmt = (n) => '$ ' + n.toLocaleString('es-CO', { minimumFractionDigits: 2, 
 let selId = 0;
 
 /** Desplegable estilo react-select. */
-function selector(opciones, alCambiar, inicial = '') {
+function selector(opciones, alCambiar, inicial = '', nombre = '') {
   const id = ++selId;
-  const caja = document.createElement('div'); caja.className = 'sel';
+  // Como en Finppi real: contenedor react-select con un input oculto con name estable.
+  const caja = document.createElement('div'); caja.className = 'sel react-select css-b62m3t-container';
   const control = document.createElement('div'); control.className = 'css-13cymwt-control'; control.tabIndex = 0;
   const valor = document.createElement('span'); valor.textContent = inicial; caja.valor = inicial;
   const busca = document.createElement('input'); busca.style.width = '60px';
   control.append(valor, busca); caja.append(control);
+  const oculto = document.createElement('input'); oculto.type = 'hidden'; oculto.name = nombre; oculto.value = inicial;
+  if (nombre) caja.append(oculto);
   let menu = null;
   const cerrar = () => { menu?.remove(); menu = null; busca.value = ''; };
   const pintar = () => {
@@ -58,7 +61,7 @@ function selector(opciones, alCambiar, inicial = '') {
     const lista = (typeof opciones === 'function' ? opciones() : opciones).filter((o) => o.toLowerCase().includes(busca.value.toLowerCase()));
     lista.forEach((o, i) => {
       const d = document.createElement('div'); d.id = `react-select-${id}-option-${i}`; d.textContent = o;
-      d.addEventListener('mousedown', (e) => { e.preventDefault(); valor.textContent = o; caja.valor = o; cerrar(); alCambiar?.(o); });
+      d.addEventListener('mousedown', (e) => { e.preventDefault(); valor.textContent = o; caja.valor = o; oculto.value = o; cerrar(); alCambiar?.(o); });
       menu.append(d);
     });
     caja.append(menu);
@@ -71,7 +74,7 @@ function selector(opciones, alCambiar, inicial = '') {
 
 function campo(etiqueta, el) {
   const c = document.createElement('div'); c.className = 'campo';
-  const l = document.createElement('label'); l.textContent = etiqueta; c.append(l, el); return c;
+  const l = document.createElement('span'); l.className = 'form__form-group-label'; l.textContent = etiqueta; c.append(l, el); return c;
 }
 const input = (name, valor = '') => { const i = document.createElement('input'); i.name = name; i.value = valor; return i; };
 
@@ -118,20 +121,20 @@ function formulario() {
   const form = document.createElement('form');
   form.append(Object.assign(document.createElement('h3'), { textContent: 'OIKOR COLOMBIA SAS · NIT 901.456.789-1' }));
   const numero = `${S.prefijo}${S.siguiente}`;
-  form.append(campo('Número*', selector([numero])));
-  form.append(campo('Tipo de factura', selector(['Factura de venta nacional', 'Factura de exportación'], null, 'Factura de venta nacional')));
-  form.append(campo('Moneda', selector(['COP - Peso colombiano', 'USD - Dólar estadounidense'], null, 'COP - Peso colombiano')));
+  form.append(campo('Número', selector([numero], null, '', 'invoiceNumber')));
+  form.append(campo('Tipo de factura', selector(['Factura de venta nacional', 'Factura de exportación'], null, 'Factura de venta nacional', 'national')));
+  form.append(campo('Moneda', selector(['COP - Peso colombiano', 'USD - Dólar estadounidense'], null, 'COP - Peso colombiano', 'currency')));
   const id = input('clientnationalID'), dir = input('clientaddress'), tel = input('clientnumber');
   form.append(campo('Cliente', selector(() => S.clientes.map((c) => `${c.nombre} - ${c.doc}`), (o) => {
     const c = S.clientes.find((x) => o.endsWith(x.doc)); id.value = c.doc; dir.value = c.dir; tel.value = c.tel;
-  })));
+  }, '', 'invoiceClientId')));
   const mas = Object.assign(document.createElement('button'), { type: 'button', id: 'TooltipSearchInvoice-newCliente', textContent: '+' });
   mas.onclick = panelCliente; form.append(mas, id, dir, tel, input('seller'));
   form.append(campo('Fecha', input('date', new Date().toISOString().slice(0, 10))));
-  form.append(campo('Tipo de pago', selector(['Contado', 'Crédito'], null, 'Contado')));
+  form.append(campo('Tipo de pago', selector(['Contado', 'Crédito'], null, 'Contado', 'paymentWay')));
   form.append(campo('Expiración', input('expiration', new Date().toISOString().slice(0, 10))));
-  form.append(campo('Tipo de operación', selector(['Estándar', 'Mandatos', 'Servicios AIU', 'Cambiario', 'Transporte'], null, 'Estándar')));
-  form.append(campo('Método de pago', selector(['Acuerdo mutuo', 'Efectivo', 'Transferencia Crédito Bancario', 'Consignación bancaria'], null, 'Acuerdo mutuo')));
+  form.append(campo('Tipo de operación', selector(['Estándar', 'Mandatos', 'Servicios AIU', 'Cambiario', 'Transporte'], null, 'Estándar', 'invoiceOperationTypeId')));
+  form.append(campo('Método de pago', selector(['Acuerdo mutuo', 'Efectivo', 'Transferencia Crédito Bancario', 'Consignación bancaria'], null, 'Acuerdo mutuo', 'invoicePaymentMethodId')));
   form.append(campo('Número de orden', input('orderID')));
   const tabla = document.createElement('table'); tabla.innerHTML = '<tbody></tbody>'; const tb = tabla.querySelector('tbody');
   const filas = [];
@@ -147,12 +150,12 @@ function formulario() {
   const agregar = () => {
     const n = filas.length; const tr = document.createElement('tr');
     const precio = input(`items.${n}.unitPrice`, '0'), cant = input(`items.${n}.quantity`, '0');
-    const iva = selector(['Ninguno', 'IVA-0', 'IVA-5', 'IVA-19'], recalcular, 'IVA-0');
+    const iva = selector(['Ninguno', 'IVA-0', 'IVA-5', 'IVA-19'], recalcular, 'IVA-0', `items.${n}.vatPercentage`);
     const prod = selector(PRODUCTOS.map((p) => `${p[0]} - ${p[1]}`), (o) => {
       const p = PRODUCTOS.find((x) => o.startsWith(x[0] + ' - ')); precio.value = p[3]; cant.value = '0';
       iva.querySelector('span').textContent = p[2]; iva.valor = p[2]; recalcular();
-    });
-    const celdas = [prod, input(`items.${n}.comment`), precio, cant, selector(['Ninguno'], null, 'Ninguno'), input(`items.${n}.discountPercentage`, '0'), iva, selector(['No aplica'], null, 'No aplica')];
+    }, '', `items.${n}.productServiceID`);
+    const celdas = [prod, input(`items.${n}.comment`), precio, cant, selector(['Ninguno'], null, 'Ninguno', `items.${n}.retentionPercentage`), input(`items.${n}.discountPercentage`, '0'), iva, selector(['No aplica'], null, 'No aplica', `items.${n}.incPercentage`)];
     for (const c of celdas) { const td = document.createElement('td'); td.append(c); tr.append(td); }
     precio.addEventListener('input', recalcular); cant.addEventListener('input', recalcular);
     filas.push({ precio, cant, iva }); tb.append(tr); recalcular();

@@ -3,7 +3,7 @@
 // Si Finppi cambia, se corrige aquí y se sube ADAPTER_VERSION.
 // Los id react-select-N-input CAMBIAN en cada carga: nunca fijarlos.
 
-export const ADAPTER_VERSION = '2026.11.24-2';
+export const ADAPTER_VERSION = '2026.11.27-1';
 
 export const URLS = {
   login: 'https://app.finppi.com/',
@@ -82,6 +82,30 @@ export const SELECT_LABELS = {
   reteIva: 'Rete IVA',
   reteIca: 'Rete ICA',
 };
+// Verificado en vivo (27-nov-2026): cada react-select del formulario trae un
+// <input type="hidden" name="…"> estable. Es la forma preferida de ubicarlos.
+export const SELECT_NAMES = {
+  number: 'invoiceNumber',
+  invoiceType: 'national',
+  currency: 'currency',
+  client: 'invoiceClientId',
+  paymentType: 'paymentWay',
+  operationType: 'invoiceOperationTypeId',
+  paymentMethod: 'invoicePaymentMethodId',
+  reteIva: 'reteIVA',
+  reteIca: 'reteICA',
+} as const;
+export const ITEM_SELECT_NAMES = (n: number) => ({
+  product: `items.${n}.productServiceID`,
+  withholding: `items.${n}.retentionPercentage`,
+  vat: `items.${n}.vatPercentage`,
+  inc: `items.${n}.incPercentage`,
+});
+/** Control del react-select cuyo input oculto tiene ese name. */
+export const SELECT_BY_NAME = (name: string) => `[class*="-container"]:has(> input[name="${name}"]) [class*="-control"]`;
+/** Etiquetas visibles: en Finppi son <span class="form__form-group-label">, no <label>. */
+export const LABEL_TAGS = ['span.form__form-group-label', 'label'];
+
 // Selects dentro de la tabla de ítems (por orden de columna): Producto, Retención, IVA, INC
 export const ITEM_SELECT_ORDER = ['product', 'withholding', 'vat', 'inc'] as const;
 export const REACT_SELECT = {
